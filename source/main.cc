@@ -1,11 +1,19 @@
-#include <fcntl.h>
 #include <iostream>
+
+#include <CLI/CLI.hpp>
+#include <fcntl.h>
 #include <libevdev/libevdev.h>
 #include <libudev.h>
-#include <lua.hpp>  // LuaJIT headers (same as Lua C API)
+#include <lua.hpp>
 #include <unistd.h>
 
+#include "config.h"
+
 int main(int argc, char **argv) {
+  CLI::App app{ "Ælkey Remapper" };
+  app.set_version_flag("-V,--version", std::string("aelkey ") + VERSION);
+  CLI11_PARSE(app, argc, argv);
+
   // --- LuaJIT bootstrap ---
   lua_State *L = luaL_newstate();
   luaL_openlibs(L);
