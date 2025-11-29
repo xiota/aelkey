@@ -147,6 +147,43 @@ struct libevdev_uinput *create_output_device(const OutputDecl &out) {
   return uidev;
 }
 
+// Lua binding: emit({ type=..., code=..., value=... })
+static std::vector<libevdev_uinput *> uinput_devices;
+int lua_emit(lua_State *L) {
+  if (!lua_istable(L, 1)) {
+    luaL_error(L, "emit expects a table");
+    return 0;
+  }
+
+  int type = 0, code = 0, value = 0;
+  lua_getfield(L, 1, "type");
+  if (lua_isnumber(L, -1)) {
+    type = lua_tointeger(L, -1);
+  }
+  lua_pop(L, 1);
+
+  lua_getfield(L, 1, "code");
+  if (lua_isnumber(L, -1)) {
+    code = lua_tointeger(L, -1);
+  }
+  lua_pop(L, 1);
+
+  lua_getfield(L, 1, "value");
+  if (lua_isnumber(L, -1)) {
+    value = lua_tointeger(L, -1);
+  }
+  lua_pop(L, 1);
+
+  if (!uinput_devices.empty()) {
+    libevdev_uinput_write_event(uinput_devices[0], type, code, value);
+    libevdev_uinput_write_event(uinput_devices[0], EV_SYN, SYN_REPORT, 0);
+  } else {
+    std::cerr << "emit() called but no uinput devices available\n";
+  }
+
+  return 0;
+}
+
 int main(int argc, char **argv) {
   CLI::App app{ "Ælkey Remapper" };
   app.set_version_flag("-V,--version", std::string("aelkey ") + VERSION);
@@ -185,6 +222,8 @@ int main(int argc, char **argv) {
   // --- LuaJIT bootstrap ---
   lua_State *L = luaL_newstate();
   luaL_openlibs(L);
+
+  lua_register(L, "emit", lua_emit);
 
   if (!lua_scripts.empty()) {
     const std::string &first_script = lua_scripts.front();
@@ -227,7 +266,6 @@ int main(int argc, char **argv) {
   }
   lua_pop(L, 1);
 
-  std::vector<libevdev_uinput *> uinput_devices;
   for (auto &out : outputs) {
     struct libevdev_uinput *uidev = create_output_device(out);
     if (uidev) {
