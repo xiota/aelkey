@@ -12,6 +12,7 @@
 #include <unistd.h>
 
 #include "config.h"
+#include "util/scoped_timer.h"
 
 struct InputDecl {
   std::string id;
@@ -314,10 +315,12 @@ int main(int argc, char **argv) {
             lua_pushinteger(L, ev.value);
             lua_settable(L, -3);
 
-            if (lua_pcall(L, 1, 0, 0) != 0) {
-              std::cerr << "Lua error: " << lua_tostring(L, -1) << std::endl;
-              lua_pop(L, 1);
-            }
+            PROFILE_CALL("Lua remap", {
+              if (lua_pcall(L, 1, 0, 0) != 0) {
+                std::cerr << "Lua error: " << lua_tostring(L, -1) << std::endl;
+                lua_pop(L, 1);
+              }
+            });
           } else {
             lua_pop(L, 1);  // remove non-function
           }
