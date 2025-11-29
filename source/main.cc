@@ -47,23 +47,17 @@ int main(int argc, char **argv) {
     }
   }
 
-  if (lua_scripts.empty()) {
-    std::cout << "No Lua scripts collected.\n";
-  } else {
-    std::cout << "Collected Lua scripts:\n";
-    for (const auto &script : lua_scripts) {
-      std::cout << "  " << script << '\n';
-    }
-  }
-
   // --- LuaJIT bootstrap ---
   lua_State *L = luaL_newstate();
   luaL_openlibs(L);
 
-  // Run a trivial Lua snippet
-  if (luaL_dostring(L, "print('Hello from LuaJIT!')")) {
-    std::cerr << "Lua error: " << lua_tostring(L, -1) << std::endl;
-    lua_pop(L, 1);
+  if (!lua_scripts.empty()) {
+    const std::string &first_script = lua_scripts.front();
+    std::cout << "Running Lua script: " << first_script << std::endl;
+    if (luaL_dofile(L, first_script.c_str())) {
+      std::cerr << "Lua error: " << lua_tostring(L, -1) << std::endl;
+      lua_pop(L, 1);
+    }
   }
 
   // --- libevdev: open a device ---
