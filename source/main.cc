@@ -28,6 +28,8 @@ struct OutputDecl {
   std::string name;
 };
 
+std::unordered_map<std::string, libevdev_uinput *> uinput_devices;
+
 // Parse one input entry { id=..., kind=..., match={...}, writable=... }
 InputDecl parse_input(lua_State *L, int index) {
   InputDecl decl;
@@ -148,40 +150,62 @@ struct libevdev_uinput *create_output_device(const OutputDecl &out) {
   return uidev;
 }
 
-// Lua binding: emit({ type=..., code=..., value=... })
-static std::vector<libevdev_uinput *> uinput_devices;
+// Lua binding: emit({ device=..., type=..., code=..., value=... })
 int lua_emit(lua_State *L) {
-  if (!lua_istable(L, 1)) {
-    luaL_error(L, "emit expects a table");
-    return 0;
-  }
+  luaL_checktype(L, 1, LUA_TTABLE);
 
+  const char *dev_id = nullptr;
   int type = 0, code = 0, value = 0;
-  lua_getfield(L, 1, "type");
-  if (lua_isnumber(L, -1)) {
-    type = lua_tointeger(L, -1);
+
+  lua_getfield(L, 1, "device");
+  if (lua_isstring(L, -1)) {
+    dev_id = lua_tostring(L, -1);
   }
+  lua_pop(L, 1);
+
+  lua_getfield(L, 1, "type");
+  type = luaL_checkinteger(L, -1);
   lua_pop(L, 1);
 
   lua_getfield(L, 1, "code");
-  if (lua_isnumber(L, -1)) {
-    code = lua_tointeger(L, -1);
-  }
+  code = luaL_checkinteger(L, -1);
   lua_pop(L, 1);
 
   lua_getfield(L, 1, "value");
-  if (lua_isnumber(L, -1)) {
-    value = lua_tointeger(L, -1);
-  }
+  value = luaL_checkinteger(L, -1);
   lua_pop(L, 1);
 
-  if (!uinput_devices.empty()) {
-    libevdev_uinput_write_event(uinput_devices[0], type, code, value);
-    libevdev_uinput_write_event(uinput_devices[0], EV_SYN, SYN_REPORT, 0);
+  if (!dev_id) {
+    if (uinput_devices.size() == 1) {
+      auto it = uinput_devices.begin();
+      libevdev_uinput_write_event(it->second, type, code, value);
+    } else {
+      return luaL_error(L, "emit requires 'device' when multiple output devices are present");
+    }
   } else {
-    std::cerr << "emit() called but no uinput devices available\n";
+    auto it = uinput_devices.find(dev_id);
+    if (it == uinput_devices.end()) {
+      return luaL_error(L, "Unknown device id: %s", dev_id);
+    }
+    libevdev_uinput_write_event(it->second, type, code, value);
   }
+  return 0;
+}
 
+int lua_syn_report(lua_State *L) {
+  const char *dev_id = luaL_optstring(L, 1, nullptr);  // optional device name
+  if (dev_id) {
+    // look up matching uinput device by id
+    auto it = uinput_devices.find(dev_id);
+    if (it != uinput_devices.end()) {
+      libevdev_uinput_write_event(it->second, EV_SYN, SYN_REPORT, 0);
+    }
+  } else {
+    // flush all devices (initial simple policy)
+    for (auto &kv : uinput_devices) {
+      libevdev_uinput_write_event(kv.second, EV_SYN, SYN_REPORT, 0);
+    }
+  }
   return 0;
 }
 
@@ -225,6 +249,7 @@ int main(int argc, char **argv) {
   luaL_openlibs(L);
 
   lua_register(L, "emit", lua_emit);
+  lua_register(L, "syn_report", lua_syn_report);
 
   if (!lua_scripts.empty()) {
     const std::string &first_script = lua_scripts.front();
@@ -268,9 +293,9 @@ int main(int argc, char **argv) {
   lua_pop(L, 1);
 
   for (auto &out : outputs) {
-    struct libevdev_uinput *uidev = create_output_device(out);
+    libevdev_uinput *uidev = create_output_device(out);
     if (uidev) {
-      uinput_devices.push_back(uidev);
+      uinput_devices[out.id] = uidev;
     }
   }
 
@@ -385,7 +410,7 @@ int main(int argc, char **argv) {
     close(fd);
   }
 
-  for (auto *uidev : uinput_devices) {
+  for (auto &[id, uidev] : uinput_devices) {
     libevdev_uinput_destroy(uidev);
   }
 
