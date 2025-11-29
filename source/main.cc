@@ -73,6 +73,35 @@ OutputDecl parse_output(lua_State *L, int index) {
   return decl;
 }
 
+// Try to match one InputDecl against available /dev/input/event* devices
+std::string match_device(const InputDecl &decl) {
+  for (int i = 0;; i++) {
+    std::string devnode = "/dev/input/event" + std::to_string(i);
+    int fd = open(devnode.c_str(), O_RDONLY | O_NONBLOCK);
+    if (fd < 0) {
+      // stop when no more devices
+      break;
+    }
+
+    struct libevdev *dev = nullptr;
+    if (libevdev_new_from_fd(fd, &dev) == 0) {
+      int vendor = libevdev_get_id_vendor(dev);
+      int product = libevdev_get_id_product(dev);
+
+      if (vendor == decl.vendor && product == decl.product) {
+        std::cout << "Matched " << decl.id << " → " << devnode << " (" << libevdev_get_name(dev)
+                  << ")\n";
+        libevdev_free(dev);
+        close(fd);
+        return devnode;  // return the matching path
+      }
+    }
+    libevdev_free(dev);
+    close(fd);
+  }
+  return {};
+}
+
 int main(int argc, char **argv) {
   CLI::App app{ "Ælkey Remapper" };
   app.set_version_flag("-V,--version", std::string("aelkey ") + VERSION);
@@ -153,40 +182,36 @@ int main(int argc, char **argv) {
   }
   lua_pop(L, 1);
 
-  // --- libevdev: open a device ---
-  const char *devnode = "/dev/input/event0";  // adjust to a real device
-  int fd = open(devnode, O_RDONLY | O_NONBLOCK);
-  if (fd < 0) {
-    perror("open");
-    return 1;
-  }
-
+  // --- libevdev: open devices based on Lua metadata ---
+  int fd = -1;
   struct libevdev *dev = nullptr;
-  if (libevdev_new_from_fd(fd, &dev) < 0) {
-    std::cerr << "Failed to init libevdev" << std::endl;
-    return 1;
-  }
 
-  std::cout << "Input device name: " << libevdev_get_name(dev) << std::endl;
-
-  // Read one event (nonblocking)
-  struct input_event ev;
-  int rc = libevdev_next_event(dev, LIBEVDEV_READ_FLAG_NORMAL, &ev);
-  if (rc == 0) {
-    std::cout << "Event type=" << ev.type << " code=" << ev.code << " value=" << ev.value
-              << std::endl;
-  }
-
-  std::cout << "=== Parsed Inputs ===\n";
   for (auto &in : inputs) {
-    std::cout << "id=" << in.id << " kind=" << in.kind << " vendor=" << in.vendor
-              << " product=" << in.product << " writable=" << (in.writable ? "true" : "false")
-              << "\n";
-  }
+    std::string devnode = match_device(in);
+    if (!devnode.empty()) {
+      fd = open(devnode.c_str(), O_RDONLY | O_NONBLOCK);
+      if (fd < 0) {
+        perror("open");
+        continue;
+      }
+      if (libevdev_new_from_fd(fd, &dev) < 0) {
+        std::cerr << "Failed to init libevdev for " << devnode << std::endl;
+        close(fd);
+        continue;
+      }
+      std::cout << "Input device name: " << libevdev_get_name(dev) << std::endl;
 
-  std::cout << "=== Parsed Outputs ===\n";
-  for (auto &out : outputs) {
-    std::cout << "id=" << out.id << " type=" << out.type << " name=" << out.name << "\n";
+      // Read one event (nonblocking demo)
+      struct input_event ev;
+      int rc = libevdev_next_event(dev, LIBEVDEV_READ_FLAG_NORMAL, &ev);
+      if (rc == 0) {
+        std::cout << "Event type=" << ev.type << " code=" << ev.code << " value=" << ev.value
+                  << std::endl;
+      }
+
+      // For now, just handle the first match
+      break;
+    }
   }
 
   // --- libudev: monitor hotplug ---
@@ -215,9 +240,14 @@ int main(int argc, char **argv) {
   // Cleanup
   udev_monitor_unref(mon);
   udev_unref(udev);
-  libevdev_free(dev);
-  close(fd);
   lua_close(L);
+
+  if (dev) {
+    libevdev_free(dev);
+  }
+  if (fd >= 0) {
+    close(fd);
+  }
 
   return 0;
 }
