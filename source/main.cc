@@ -5,6 +5,7 @@
 
 #include <CLI/CLI.hpp>
 #include <fcntl.h>
+#include <libevdev/libevdev-uinput.h>
 #include <libevdev/libevdev.h>
 #include <libudev.h>
 #include <lua.hpp>
@@ -102,6 +103,50 @@ std::string match_device(const InputDecl &decl) {
   return {};
 }
 
+struct libevdev_uinput *create_output_device(const OutputDecl &out) {
+  struct libevdev *dev = libevdev_new();
+  libevdev_set_name(dev, out.name.c_str());
+
+  if (out.type == "keyboard") {
+    libevdev_enable_event_type(dev, EV_KEY);
+    // Enable a few demo keys; expand later
+    libevdev_enable_event_code(dev, EV_KEY, KEY_A, nullptr);
+    libevdev_enable_event_code(dev, EV_KEY, KEY_B, nullptr);
+    libevdev_enable_event_code(dev, EV_KEY, KEY_C, nullptr);
+  } else if (out.type == "mouse") {
+    libevdev_enable_event_type(dev, EV_KEY);
+    libevdev_enable_event_code(dev, EV_KEY, BTN_LEFT, nullptr);
+    libevdev_enable_event_code(dev, EV_KEY, BTN_RIGHT, nullptr);
+    libevdev_enable_event_code(dev, EV_KEY, BTN_MIDDLE, nullptr);
+    libevdev_enable_event_code(dev, EV_KEY, BTN_SIDE, nullptr);
+    libevdev_enable_event_code(dev, EV_KEY, BTN_EXTRA, nullptr);
+    libevdev_enable_event_code(dev, EV_KEY, BTN_FORWARD, nullptr);
+    libevdev_enable_event_code(dev, EV_KEY, BTN_BACK, nullptr);
+
+    libevdev_enable_event_type(dev, EV_REL);
+    libevdev_enable_event_code(dev, EV_REL, REL_X, nullptr);
+    libevdev_enable_event_code(dev, EV_REL, REL_Y, nullptr);
+    libevdev_enable_event_code(dev, EV_REL, REL_WHEEL, nullptr);
+    libevdev_enable_event_code(dev, EV_REL, REL_HWHEEL, nullptr);
+    libevdev_enable_event_code(dev, EV_REL, REL_WHEEL_HI_RES, nullptr);
+    libevdev_enable_event_code(dev, EV_REL, REL_HWHEEL_HI_RES, nullptr);
+  }
+
+  struct libevdev_uinput *uidev = nullptr;
+  int err = libevdev_uinput_create_from_device(dev, LIBEVDEV_UINPUT_OPEN_MANAGED, &uidev);
+  if (err != 0) {
+    std::cerr << "Failed to create uinput device: " << out.name << std::endl;
+    libevdev_free(dev);
+    return nullptr;
+  }
+
+  std::cout << "Created uinput device: " << out.name << " at "
+            << libevdev_uinput_get_devnode(uidev) << std::endl;
+
+  libevdev_free(dev);  // description no longer needed
+  return uidev;
+}
+
 int main(int argc, char **argv) {
   CLI::App app{ "Ælkey Remapper" };
   app.set_version_flag("-V,--version", std::string("aelkey ") + VERSION);
@@ -181,6 +226,14 @@ int main(int argc, char **argv) {
     }
   }
   lua_pop(L, 1);
+
+  std::vector<libevdev_uinput *> uinput_devices;
+  for (auto &out : outputs) {
+    struct libevdev_uinput *uidev = create_output_device(out);
+    if (uidev) {
+      uinput_devices.push_back(uidev);
+    }
+  }
 
   // --- libevdev: open devices based on Lua metadata ---
   int fd = -1;
@@ -268,6 +321,10 @@ int main(int argc, char **argv) {
   }
   if (fd >= 0) {
     close(fd);
+  }
+
+  for (auto *uidev : uinput_devices) {
+    libevdev_uinput_destroy(uidev);
   }
 
   return 0;
