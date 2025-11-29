@@ -9,6 +9,7 @@
 #include <libevdev/libevdev.h>
 #include <libudev.h>
 #include <lua.hpp>
+#include <sys/epoll.h>
 #include <unistd.h>
 
 #include "config.h"
@@ -299,9 +300,20 @@ int main(int argc, char **argv) {
     }
   }
 
+  // --- create epoll instance ---
+  int epfd = epoll_create1(0);
+  if (epfd < 0) {
+    perror("epoll_create1");
+    return 1;
+  }
+
   // --- libevdev: open devices based on Lua metadata ---
   int fd = -1;
   struct libevdev *dev = nullptr;
+
+  // Map fds to their InputDecl/libevdev and keep per‑device frame
+  std::unordered_map<int, std::pair<InputDecl, libevdev *>> input_map;
+  std::unordered_map<int, std::vector<struct input_event>> frames;
 
   for (auto &in : inputs) {
     std::string devnode = match_device(in);
@@ -318,44 +330,84 @@ int main(int argc, char **argv) {
       }
       std::cout << "Input device name: " << libevdev_get_name(dev) << std::endl;
 
-      // Continuous event loop (frame-based)
-      std::vector<struct input_event> frame;
+      input_map[fd] = { in, dev };
+      frames[fd] = {};
 
-      while (true) {
+      // Register input fd with epoll
+      struct epoll_event evreg;
+      evreg.events = EPOLLIN;
+      evreg.data.fd = fd;
+      epoll_ctl(epfd, EPOLL_CTL_ADD, fd, &evreg);
+    }
+  }
+
+  // --- libudev: monitor hotplug ---
+  struct udev *udev = udev_new();
+  struct udev_monitor *mon = udev_monitor_new_from_netlink(udev, "udev");
+  udev_monitor_filter_add_match_subsystem_devtype(mon, "input", nullptr);
+  udev_monitor_enable_receiving(mon);
+  int mon_fd = udev_monitor_get_fd(mon);
+
+  // Register udev fd with epoll
+  struct epoll_event evreg;
+  evreg.events = EPOLLIN;
+  evreg.data.fd = mon_fd;
+  epoll_ctl(epfd, EPOLL_CTL_ADD, mon_fd, &evreg);
+
+  // Unified epoll loop
+  struct epoll_event events[16];
+  while (true) {
+    int n = epoll_wait(epfd, events, 16, -1);
+    if (n < 0) {
+      if (errno == EINTR) {
+        continue;
+      }
+      perror("epoll_wait");
+      break;
+    }
+    for (int i = 0; i < n; i++) {
+      int fd_ready = events[i].data.fd;
+      if (fd_ready == mon_fd) {
+        struct udev_device *dev_event = udev_monitor_receive_device(mon);
+        if (dev_event) {
+          std::cout << "Udev event: " << udev_device_get_action(dev_event) << " "
+                    << udev_device_get_devnode(dev_event) << std::endl;
+          udev_device_unref(dev_event);
+        }
+      } else {
+        // Input device event
+        auto &[in, idev] = input_map[fd_ready];
         struct input_event ev;
-        int rc = libevdev_next_event(dev, LIBEVDEV_READ_FLAG_NORMAL, &ev);
-
-        if (rc == LIBEVDEV_READ_STATUS_SUCCESS) {
+        auto &frame = frames[fd_ready];  // reuse per‑device frame
+        while (libevdev_next_event(idev, LIBEVDEV_READ_FLAG_NORMAL, &ev) ==
+               LIBEVDEV_READ_STATUS_SUCCESS) {
           frame.push_back(ev);
-
           if (ev.type == EV_SYN && ev.code == SYN_REPORT) {
-            // End of frame → deliver to Lua
             lua_getglobal(L, "remap");
             if (lua_isfunction(L, -1)) {
-              lua_newtable(L);  // events array
-              for (size_t i = 0; i < frame.size(); ++i) {
-                lua_pushinteger(L, (int)i + 1);  // Lua arrays are 1-based
+              lua_newtable(L);
+              for (size_t j = 0; j < frame.size(); ++j) {
+                lua_pushinteger(L, (int)j + 1);
                 lua_newtable(L);
 
                 lua_pushstring(L, "device");
-                lua_pushstring(L, in.id.c_str());  // the InputDecl id
+                lua_pushstring(L, in.id.c_str());
                 lua_settable(L, -3);
 
                 lua_pushstring(L, "type");
-                lua_pushinteger(L, frame[i].type);
+                lua_pushinteger(L, frame[j].type);
                 lua_settable(L, -3);
 
                 lua_pushstring(L, "code");
-                lua_pushinteger(L, frame[i].code);
+                lua_pushinteger(L, frame[j].code);
                 lua_settable(L, -3);
 
                 lua_pushstring(L, "value");
-                lua_pushinteger(L, frame[i].value);
+                lua_pushinteger(L, frame[j].value);
                 lua_settable(L, -3);
 
-                lua_settable(L, -3);  // events[i] = {...}
+                lua_settable(L, -3);
               }
-
               PROFILE_CALL("Lua remap", {
                 if (lua_pcall(L, 1, 0, 0) != 0) {
                   std::cerr << "Lua error: " << lua_tostring(L, -1) << std::endl;
@@ -365,36 +417,10 @@ int main(int argc, char **argv) {
             } else {
               lua_pop(L, 1);
             }
-
-            frame.clear();  // reset for next frame
+            frame.clear();
           }
-        } else if (rc == -EAGAIN) {
-          // no events right now
         }
       }
-    }
-  }
-
-  // --- libudev: monitor hotplug ---
-  struct udev *udev = udev_new();
-  struct udev_monitor *mon = udev_monitor_new_from_netlink(udev, "udev");
-  udev_monitor_filter_add_match_subsystem_devtype(mon, "input", nullptr);
-  udev_monitor_enable_receiving(mon);
-
-  int mon_fd = udev_monitor_get_fd(mon);
-  std::cout << "Listening for udev events..." << std::endl;
-
-  // Poll once for demo
-  fd_set fds;
-  FD_ZERO(&fds);
-  FD_SET(mon_fd, &fds);
-  struct timeval tv = { 5, 0 };  // 5s timeout
-  if (select(mon_fd + 1, &fds, nullptr, nullptr, &tv) > 0) {
-    struct udev_device *dev_event = udev_monitor_receive_device(mon);
-    if (dev_event) {
-      std::cout << "Udev event: " << udev_device_get_action(dev_event) << " "
-                << udev_device_get_devnode(dev_event) << std::endl;
-      udev_device_unref(dev_event);
     }
   }
 
