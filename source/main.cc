@@ -12,36 +12,65 @@
 
 #include "config.h"
 
-// Recursive dump of a Lua table at the top of the stack
-void dump_table_recursive(lua_State *L, int indent = 2) {
-  lua_pushnil(L);  // first key
-  while (lua_next(L, -2)) {
-    // Handle key type
-    std::string key;
-    if (lua_type(L, -2) == LUA_TSTRING) {
-      key = lua_tostring(L, -2);
-    } else if (lua_type(L, -2) == LUA_TNUMBER) {
-      key = std::to_string(lua_tointeger(L, -2));
-    } else {
-      key = "(unknown key)";
-    }
+struct InputDecl {
+  std::string id;
+  std::string kind;
+  int vendor = 0;
+  int product = 0;
+  bool writable = false;
+};
 
-    if (lua_istable(L, -1)) {
-      std::cout << std::string(indent, ' ') << key << " = {\n";
-      dump_table_recursive(L, indent + 2);
-      std::cout << std::string(indent, ' ') << "}\n";
-    } else if (lua_isstring(L, -1)) {
-      std::cout << std::string(indent, ' ') << key << " = " << lua_tostring(L, -1) << "\n";
-    } else if (lua_isnumber(L, -1)) {
-      std::cout << std::string(indent, ' ') << key << " = " << lua_tonumber(L, -1) << "\n";
-    } else if (lua_isboolean(L, -1)) {
-      std::cout << std::string(indent, ' ') << key << " = "
-                << (lua_toboolean(L, -1) ? "true" : "false") << "\n";
-    } else {
-      std::cout << std::string(indent, ' ') << key << " = (unsupported type)\n";
+struct OutputDecl {
+  std::string id;
+  std::string type;
+  std::string name;
+};
+
+// Parse one input entry { id=..., kind=..., match={...}, writable=... }
+InputDecl parse_input(lua_State *L, int index) {
+  InputDecl decl;
+  lua_pushnil(L);
+  while (lua_next(L, index)) {
+    std::string key = lua_tostring(L, -2);
+    if (key == "id" && lua_isstring(L, -1)) {
+      decl.id = lua_tostring(L, -1);
+    } else if (key == "kind" && lua_isstring(L, -1)) {
+      decl.kind = lua_tostring(L, -1);
+    } else if (key == "writable" && lua_isboolean(L, -1)) {
+      decl.writable = lua_toboolean(L, -1);
+    } else if (key == "match" && lua_istable(L, -1)) {
+      lua_pushnil(L);
+      while (lua_next(L, -2)) {
+        std::string mkey = lua_tostring(L, -2);
+        if (mkey == "vendor" && lua_isnumber(L, -1)) {
+          decl.vendor = (int)lua_tointeger(L, -1);
+        } else if (mkey == "product" && lua_isnumber(L, -1)) {
+          decl.product = (int)lua_tointeger(L, -1);
+        }
+        lua_pop(L, 1);
+      }
     }
-    lua_pop(L, 1);  // pop value, keep key
+    lua_pop(L, 1);
   }
+  return decl;
+}
+
+// Parse one output entry { id=..., type=..., name=... }
+OutputDecl parse_output(lua_State *L, int index) {
+  OutputDecl decl;
+  lua_pushnil(L);
+  while (lua_next(L, index)) {
+    std::string key = lua_tostring(L, -2);
+    if (key == "id" && lua_isstring(L, -1)) {
+      decl.id = lua_tostring(L, -1);
+    } else if (key == "type" && lua_isstring(L, -1)) {
+      decl.type = lua_tostring(L, -1);
+    } else if (key == "name" && lua_isstring(L, -1)) {
+      decl.name = lua_tostring(L, -1);
+    }
+    lua_pop(L, 1);
+  }
+  return decl;
 }
 
 int main(int argc, char **argv) {
@@ -93,21 +122,36 @@ int main(int argc, char **argv) {
   }
 
   // --- Metadata parsing ---
-  auto dump_global_table = [&](const char *global_name) {
-    lua_getglobal(L, global_name);
-    if (!lua_istable(L, -1)) {
-      std::cout << global_name << " is not defined or not a table\n";
+  std::vector<InputDecl> inputs;
+  std::vector<OutputDecl> outputs;
+
+  // Parse inputs
+  lua_getglobal(L, "inputs");
+  if (lua_istable(L, -1)) {
+    int len = lua_objlen(L, -1);
+    for (int i = 1; i <= len; i++) {
+      lua_rawgeti(L, -1, i);
+      if (lua_istable(L, -1)) {
+        inputs.push_back(parse_input(L, lua_gettop(L)));
+      }
       lua_pop(L, 1);
-      return;
     }
+  }
+  lua_pop(L, 1);
 
-    std::cout << "=== " << global_name << " ===\n";
-    dump_table_recursive(L);
-    lua_pop(L, 1);  // pop global table
-  };
-
-  dump_global_table("inputs");
-  dump_global_table("output_devices");
+  // Parse outputs
+  lua_getglobal(L, "output_devices");
+  if (lua_istable(L, -1)) {
+    int len = lua_objlen(L, -1);
+    for (int i = 1; i <= len; i++) {
+      lua_rawgeti(L, -1, i);
+      if (lua_istable(L, -1)) {
+        outputs.push_back(parse_output(L, lua_gettop(L)));
+      }
+      lua_pop(L, 1);
+    }
+  }
+  lua_pop(L, 1);
 
   // --- libevdev: open a device ---
   const char *devnode = "/dev/input/event0";  // adjust to a real device
@@ -131,6 +175,18 @@ int main(int argc, char **argv) {
   if (rc == 0) {
     std::cout << "Event type=" << ev.type << " code=" << ev.code << " value=" << ev.value
               << std::endl;
+  }
+
+  std::cout << "=== Parsed Inputs ===\n";
+  for (auto &in : inputs) {
+    std::cout << "id=" << in.id << " kind=" << in.kind << " vendor=" << in.vendor
+              << " product=" << in.product << " writable=" << (in.writable ? "true" : "false")
+              << "\n";
+  }
+
+  std::cout << "=== Parsed Outputs ===\n";
+  for (auto &out : outputs) {
+    std::cout << "id=" << out.id << " type=" << out.type << " name=" << out.name << "\n";
   }
 
   // --- libudev: monitor hotplug ---
