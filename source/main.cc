@@ -293,37 +293,54 @@ int main(int argc, char **argv) {
       }
       std::cout << "Input device name: " << libevdev_get_name(dev) << std::endl;
 
-      // Continuous event loop (demo)
+      // Continuous event loop (frame-based)
+      std::vector<struct input_event> frame;
+
       while (true) {
         struct input_event ev;
         int rc = libevdev_next_event(dev, LIBEVDEV_READ_FLAG_NORMAL, &ev);
 
-        if (rc == 0) {
-          // Push the remap function
-          lua_getglobal(L, "remap");
-          if (lua_isfunction(L, -1)) {
-            lua_newtable(L);
-            lua_pushstring(L, "type");
-            lua_pushinteger(L, ev.type);
-            lua_settable(L, -3);
+        if (rc == LIBEVDEV_READ_STATUS_SUCCESS) {
+          frame.push_back(ev);
 
-            lua_pushstring(L, "code");
-            lua_pushinteger(L, ev.code);
-            lua_settable(L, -3);
+          if (ev.type == EV_SYN && ev.code == SYN_REPORT) {
+            // End of frame → deliver to Lua
+            lua_getglobal(L, "remap");
+            if (lua_isfunction(L, -1)) {
+              lua_newtable(L);  // events array
+              for (size_t i = 0; i < frame.size(); ++i) {
+                lua_pushinteger(L, (int)i + 1);  // Lua arrays are 1-based
+                lua_newtable(L);
 
-            lua_pushstring(L, "value");
-            lua_pushinteger(L, ev.value);
-            lua_settable(L, -3);
+                lua_pushstring(L, "type");
+                lua_pushinteger(L, frame[i].type);
+                lua_settable(L, -3);
 
-            PROFILE_CALL("Lua remap", {
-              if (lua_pcall(L, 1, 0, 0) != 0) {
-                std::cerr << "Lua error: " << lua_tostring(L, -1) << std::endl;
-                lua_pop(L, 1);
+                lua_pushstring(L, "code");
+                lua_pushinteger(L, frame[i].code);
+                lua_settable(L, -3);
+
+                lua_pushstring(L, "value");
+                lua_pushinteger(L, frame[i].value);
+                lua_settable(L, -3);
+
+                lua_settable(L, -3);  // events[i] = {...}
               }
-            });
-          } else {
-            lua_pop(L, 1);  // remove non-function
+
+              PROFILE_CALL("Lua remap", {
+                if (lua_pcall(L, 1, 0, 0) != 0) {
+                  std::cerr << "Lua error: " << lua_tostring(L, -1) << std::endl;
+                  lua_pop(L, 1);
+                }
+              });
+            } else {
+              lua_pop(L, 1);
+            }
+
+            frame.clear();  // reset for next frame
           }
+        } else if (rc == -EAGAIN) {
+          // no events right now
         }
       }
     }
