@@ -60,6 +60,41 @@ int main(int argc, char **argv) {
     }
   }
 
+  // --- Metadata parsing ---
+  auto dump_table = [&](const char *global_name) {
+    lua_getglobal(L, global_name);  // push global onto stack
+    if (!lua_istable(L, -1)) {
+      std::cout << global_name << " is not defined or not a table\n";
+      lua_pop(L, 1);
+      return;
+    }
+
+    std::cout << "=== " << global_name << " ===\n";
+
+    // Iterate array part of the table
+    lua_pushnil(L);  // first key
+    while (lua_next(L, -2)) {
+      if (lua_istable(L, -1)) {
+        // Each entry is itself a table
+        lua_pushnil(L);
+        while (lua_next(L, -2)) {
+          const char *key = lua_tostring(L, -2);
+          const char *val = lua_tostring(L, -1);
+          if (key && val) {
+            std::cout << "  " << key << " = " << val << "\n";
+          }
+          lua_pop(L, 1);  // pop value, keep key
+        }
+      }
+      lua_pop(L, 1);  // pop entry
+    }
+
+    lua_pop(L, 1);  // pop global table
+  };
+
+  dump_table("inputs");
+  dump_table("output_devices");
+
   // --- libevdev: open a device ---
   const char *devnode = "/dev/input/event0";  // adjust to a real device
   int fd = open(devnode, O_RDONLY | O_NONBLOCK);
