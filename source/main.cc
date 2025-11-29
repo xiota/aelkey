@@ -10,6 +10,7 @@
 #include <libudev.h>
 #include <lua.hpp>
 #include <sys/epoll.h>
+#include <sys/timerfd.h>
 #include <unistd.h>
 
 #include "config.h"
@@ -30,6 +31,9 @@ struct OutputDecl {
 };
 
 std::unordered_map<std::string, libevdev_uinput *> uinput_devices;
+
+static int tfd = -1;
+static int epfd = -1;
 
 // Parse one input entry { id=..., kind=..., match={...}, writable=... }
 InputDecl parse_input(lua_State *L, int index) {
@@ -210,6 +214,37 @@ int lua_syn_report(lua_State *L) {
   return 0;
 }
 
+int lua_tick(lua_State *L) {
+  int ms = luaL_checkinteger(L, 1);
+
+  if (tfd != -1) {
+    close(tfd);
+  }
+
+  tfd = timerfd_create(CLOCK_MONOTONIC, TFD_NONBLOCK);
+  if (tfd < 0) {
+    perror("timerfd_create");
+    return 0;
+  }
+
+  struct itimerspec spec{};
+  spec.it_interval.tv_sec = ms / 1000;
+  spec.it_interval.tv_nsec = (ms % 1000) * 1000000;
+  spec.it_value = spec.it_interval;
+
+  if (timerfd_settime(tfd, 0, &spec, nullptr) < 0) {
+    perror("timerfd_settime");
+    return 0;
+  }
+
+  struct epoll_event ev{};
+  ev.events = EPOLLIN;
+  ev.data.fd = tfd;
+  epoll_ctl(epfd, EPOLL_CTL_ADD, tfd, &ev);
+
+  return 0;
+}
+
 int main(int argc, char **argv) {
   CLI::App app{ "Ælkey Remapper" };
   app.set_version_flag("-V,--version", std::string("aelkey ") + VERSION);
@@ -251,6 +286,7 @@ int main(int argc, char **argv) {
 
   lua_register(L, "emit", lua_emit);
   lua_register(L, "syn_report", lua_syn_report);
+  lua_register(L, "tick", lua_tick);
 
   if (!lua_scripts.empty()) {
     const std::string &first_script = lua_scripts.front();
@@ -301,7 +337,7 @@ int main(int argc, char **argv) {
   }
 
   // --- create epoll instance ---
-  int epfd = epoll_create1(0);
+  epfd = epoll_create1(0);
   if (epfd < 0) {
     perror("epoll_create1");
     return 1;
@@ -373,6 +409,41 @@ int main(int argc, char **argv) {
           std::cout << "Udev event: " << udev_device_get_action(dev_event) << " "
                     << udev_device_get_devnode(dev_event) << std::endl;
           udev_device_unref(dev_event);
+        }
+      } else if (fd_ready == tfd) {
+        uint64_t expirations;
+        read(tfd, &expirations, sizeof(expirations));
+
+        lua_getglobal(L, "remap");
+        if (lua_isfunction(L, -1)) {
+          lua_newtable(L);
+          lua_pushinteger(L, 1);
+          lua_newtable(L);
+
+          lua_pushstring(L, "device");
+          lua_pushstring(L, "tick");
+          lua_settable(L, -3);
+
+          lua_pushstring(L, "type");
+          lua_pushinteger(L, 0);
+          lua_settable(L, -3);
+
+          lua_pushstring(L, "code");
+          lua_pushinteger(L, 0);
+          lua_settable(L, -3);
+
+          lua_pushstring(L, "value");
+          lua_pushinteger(L, (int)expirations);
+          lua_settable(L, -3);
+
+          lua_settable(L, -3);
+
+          if (lua_pcall(L, 1, 0, 0) != 0) {
+            std::cerr << "Lua error: " << lua_tostring(L, -1) << std::endl;
+            lua_pop(L, 1);
+          }
+        } else {
+          lua_pop(L, 1);
         }
       } else {
         // Input device event
