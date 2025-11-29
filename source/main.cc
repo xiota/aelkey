@@ -312,6 +312,10 @@ int main(int argc, char **argv) {
                 lua_pushinteger(L, (int)i + 1);  // Lua arrays are 1-based
                 lua_newtable(L);
 
+                lua_pushstring(L, "device");
+                lua_pushstring(L, in.id.c_str());  // the InputDecl id
+                lua_settable(L, -3);
+
                 lua_pushstring(L, "type");
                 lua_pushinteger(L, frame[i].type);
                 lua_settable(L, -3);
