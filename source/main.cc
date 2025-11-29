@@ -1,4 +1,7 @@
+#include <filesystem>
 #include <iostream>
+#include <string>
+#include <vector>
 
 #include <CLI/CLI.hpp>
 #include <fcntl.h>
@@ -12,7 +15,46 @@
 int main(int argc, char **argv) {
   CLI::App app{ "Ælkey Remapper" };
   app.set_version_flag("-V,--version", std::string("aelkey ") + VERSION);
+
+  // Accept multiple files/folders as positional arguments
+  std::vector<std::string> paths;
+  app.add_option("paths", paths, "Lua script files or directories")
+      ->expected(-1);  // unlimited arguments
+
   CLI11_PARSE(app, argc, argv);
+
+  // --- Collect Lua scripts ---
+  std::vector<std::string> lua_scripts;
+
+  if (paths.empty()) {
+    paths.push_back("/etc/aelkey");
+  }
+
+  auto is_lua_file = [](const std::filesystem::path &p) {
+    return std::filesystem::is_regular_file(p) && p.extension() == ".lua";
+  };
+
+  for (const auto &p : paths) {
+    std::filesystem::path path(p);
+    if (is_lua_file(path)) {
+      lua_scripts.push_back(path.string());
+    } else if (std::filesystem::is_directory(path)) {
+      for (const auto &entry : std::filesystem::directory_iterator(path)) {
+        if (is_lua_file(entry.path())) {
+          lua_scripts.push_back(entry.path().string());
+        }
+      }
+    }
+  }
+
+  if (lua_scripts.empty()) {
+    std::cout << "No Lua scripts collected.\n";
+  } else {
+    std::cout << "Collected Lua scripts:\n";
+    for (const auto &script : lua_scripts) {
+      std::cout << "  " << script << '\n';
+    }
+  }
 
   // --- LuaJIT bootstrap ---
   lua_State *L = luaL_newstate();
