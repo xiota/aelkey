@@ -12,6 +12,38 @@
 
 #include "config.h"
 
+// Recursive dump of a Lua table at the top of the stack
+void dump_table_recursive(lua_State *L, int indent = 2) {
+  lua_pushnil(L);  // first key
+  while (lua_next(L, -2)) {
+    // Handle key type
+    std::string key;
+    if (lua_type(L, -2) == LUA_TSTRING) {
+      key = lua_tostring(L, -2);
+    } else if (lua_type(L, -2) == LUA_TNUMBER) {
+      key = std::to_string(lua_tointeger(L, -2));
+    } else {
+      key = "(unknown key)";
+    }
+
+    if (lua_istable(L, -1)) {
+      std::cout << std::string(indent, ' ') << key << " = {\n";
+      dump_table_recursive(L, indent + 2);
+      std::cout << std::string(indent, ' ') << "}\n";
+    } else if (lua_isstring(L, -1)) {
+      std::cout << std::string(indent, ' ') << key << " = " << lua_tostring(L, -1) << "\n";
+    } else if (lua_isnumber(L, -1)) {
+      std::cout << std::string(indent, ' ') << key << " = " << lua_tonumber(L, -1) << "\n";
+    } else if (lua_isboolean(L, -1)) {
+      std::cout << std::string(indent, ' ') << key << " = "
+                << (lua_toboolean(L, -1) ? "true" : "false") << "\n";
+    } else {
+      std::cout << std::string(indent, ' ') << key << " = (unsupported type)\n";
+    }
+    lua_pop(L, 1);  // pop value, keep key
+  }
+}
+
 int main(int argc, char **argv) {
   CLI::App app{ "Ælkey Remapper" };
   app.set_version_flag("-V,--version", std::string("aelkey ") + VERSION);
@@ -61,8 +93,8 @@ int main(int argc, char **argv) {
   }
 
   // --- Metadata parsing ---
-  auto dump_table = [&](const char *global_name) {
-    lua_getglobal(L, global_name);  // push global onto stack
+  auto dump_global_table = [&](const char *global_name) {
+    lua_getglobal(L, global_name);
     if (!lua_istable(L, -1)) {
       std::cout << global_name << " is not defined or not a table\n";
       lua_pop(L, 1);
@@ -70,30 +102,12 @@ int main(int argc, char **argv) {
     }
 
     std::cout << "=== " << global_name << " ===\n";
-
-    // Iterate array part of the table
-    lua_pushnil(L);  // first key
-    while (lua_next(L, -2)) {
-      if (lua_istable(L, -1)) {
-        // Each entry is itself a table
-        lua_pushnil(L);
-        while (lua_next(L, -2)) {
-          const char *key = lua_tostring(L, -2);
-          const char *val = lua_tostring(L, -1);
-          if (key && val) {
-            std::cout << "  " << key << " = " << val << "\n";
-          }
-          lua_pop(L, 1);  // pop value, keep key
-        }
-      }
-      lua_pop(L, 1);  // pop entry
-    }
-
+    dump_table_recursive(L);
     lua_pop(L, 1);  // pop global table
   };
 
-  dump_table("inputs");
-  dump_table("output_devices");
+  dump_global_table("inputs");
+  dump_global_table("output_devices");
 
   // --- libevdev: open a device ---
   const char *devnode = "/dev/input/event0";  // adjust to a real device
