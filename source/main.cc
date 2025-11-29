@@ -201,16 +201,26 @@ int main(int argc, char **argv) {
       }
       std::cout << "Input device name: " << libevdev_get_name(dev) << std::endl;
 
-      // Read one event (nonblocking demo)
-      struct input_event ev;
-      int rc = libevdev_next_event(dev, LIBEVDEV_READ_FLAG_NORMAL, &ev);
-      if (rc == 0) {
-        std::cout << "Event type=" << ev.type << " code=" << ev.code << " value=" << ev.value
-                  << std::endl;
-      }
+      // Continuous event loop (demo)
+      while (true) {
+        struct input_event ev;
+        int rc = libevdev_next_event(dev, LIBEVDEV_READ_FLAG_NORMAL, &ev);
 
-      // For now, just handle the first match
-      break;
+        if (rc == 0) {
+          std::cout << "Event type=" << ev.type << " code=" << ev.code << " value=" << ev.value
+                    << std::endl;
+        } else if (rc == -EAGAIN) {
+          // No event available right now, sleep briefly
+          usleep(5000);
+        } else if (rc == LIBEVDEV_READ_STATUS_SYNC) {
+          // Sync event: device lost sync, handle if needed
+          std::cout << "Sync event received\n";
+        } else if (rc < 0) {
+          // Error or device disconnected
+          std::cerr << "Error reading events, rc=" << rc << std::endl;
+          break;
+        }
+      }
     }
   }
 
