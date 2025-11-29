@@ -207,18 +207,29 @@ int main(int argc, char **argv) {
         int rc = libevdev_next_event(dev, LIBEVDEV_READ_FLAG_NORMAL, &ev);
 
         if (rc == 0) {
-          std::cout << "Event type=" << ev.type << " code=" << ev.code << " value=" << ev.value
-                    << std::endl;
-        } else if (rc == -EAGAIN) {
-          // No event available right now, sleep briefly
-          usleep(5000);
-        } else if (rc == LIBEVDEV_READ_STATUS_SYNC) {
-          // Sync event: device lost sync, handle if needed
-          std::cout << "Sync event received\n";
-        } else if (rc < 0) {
-          // Error or device disconnected
-          std::cerr << "Error reading events, rc=" << rc << std::endl;
-          break;
+          // Push the remap function
+          lua_getglobal(L, "remap");
+          if (lua_isfunction(L, -1)) {
+            lua_newtable(L);
+            lua_pushstring(L, "type");
+            lua_pushinteger(L, ev.type);
+            lua_settable(L, -3);
+
+            lua_pushstring(L, "code");
+            lua_pushinteger(L, ev.code);
+            lua_settable(L, -3);
+
+            lua_pushstring(L, "value");
+            lua_pushinteger(L, ev.value);
+            lua_settable(L, -3);
+
+            if (lua_pcall(L, 1, 0, 0) != 0) {
+              std::cerr << "Lua error: " << lua_tostring(L, -1) << std::endl;
+              lua_pop(L, 1);
+            }
+          } else {
+            lua_pop(L, 1);  // remove non-function
+          }
         }
       }
     }
