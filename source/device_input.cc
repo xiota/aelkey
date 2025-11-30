@@ -63,6 +63,8 @@ InputDecl parse_input(lua_State *L, int index) {
         }
         lua_pop(L, 1);
       }
+    } else if (key == "callback" && lua_isstring(L, -1)) {
+      decl.callback = lua_tostring(L, -1);
     }
 
     lua_pop(L, 1);
@@ -143,16 +145,18 @@ std::string match_device(const InputDecl &decl) {
 int attach_device(
     const std::string &devnode,
     const InputDecl &in,
-    std::unordered_map<int, std::pair<InputDecl, libevdev *>> &input_map,
+    std::unordered_map<int, InputCtx> &input_map,
     std::unordered_map<int, std::vector<struct input_event>> &frames,
     int epfd
 ) {
+  // Open the device node
   int fd = open(devnode.c_str(), O_RDONLY | O_NONBLOCK);
   if (fd < 0) {
     perror("open");
     return -1;
   }
 
+  // Initialize libevdev
   struct libevdev *idev = nullptr;
   if (libevdev_new_from_fd(fd, &idev) < 0) {
     std::cerr << "Failed to init libevdev for " << devnode << std::endl;
@@ -171,7 +175,11 @@ int attach_device(
     }
   }
 
-  input_map[fd] = { in, idev };
+  // Populate InputCtx
+  InputCtx ctx;
+  ctx.decl = in;
+  ctx.idev = idev;
+  input_map[fd] = ctx;
   frames[fd] = {};
 
   struct epoll_event evreg{};
