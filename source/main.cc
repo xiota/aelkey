@@ -14,6 +14,7 @@
 #include <unistd.h>
 
 #include "config.h"
+#include "device_output.h"
 #include "globals.h"
 #include "lua_bindings.h"
 #include "util/scoped_timer.h"
@@ -29,12 +30,6 @@ struct InputDecl {
   std::string uniq;
   bool writable = false;
   bool grab = false;
-};
-
-struct OutputDecl {
-  std::string id;
-  std::string type;
-  std::string name;
 };
 
 std::unordered_map<std::string, libevdev_uinput *> uinput_devices;
@@ -158,50 +153,6 @@ std::string match_device(const InputDecl &decl) {
     close(fd);
   }
   return {};
-}
-
-struct libevdev_uinput *create_output_device(const OutputDecl &out) {
-  struct libevdev *dev = libevdev_new();
-  libevdev_set_name(dev, out.name.c_str());
-
-  if (out.type == "keyboard") {
-    libevdev_enable_event_type(dev, EV_KEY);
-    // Enable a few demo keys; expand later
-    libevdev_enable_event_code(dev, EV_KEY, KEY_A, nullptr);
-    libevdev_enable_event_code(dev, EV_KEY, KEY_B, nullptr);
-    libevdev_enable_event_code(dev, EV_KEY, KEY_C, nullptr);
-  } else if (out.type == "mouse") {
-    libevdev_enable_event_type(dev, EV_KEY);
-    libevdev_enable_event_code(dev, EV_KEY, BTN_LEFT, nullptr);
-    libevdev_enable_event_code(dev, EV_KEY, BTN_RIGHT, nullptr);
-    libevdev_enable_event_code(dev, EV_KEY, BTN_MIDDLE, nullptr);
-    libevdev_enable_event_code(dev, EV_KEY, BTN_SIDE, nullptr);
-    libevdev_enable_event_code(dev, EV_KEY, BTN_EXTRA, nullptr);
-    libevdev_enable_event_code(dev, EV_KEY, BTN_FORWARD, nullptr);
-    libevdev_enable_event_code(dev, EV_KEY, BTN_BACK, nullptr);
-
-    libevdev_enable_event_type(dev, EV_REL);
-    libevdev_enable_event_code(dev, EV_REL, REL_X, nullptr);
-    libevdev_enable_event_code(dev, EV_REL, REL_Y, nullptr);
-    libevdev_enable_event_code(dev, EV_REL, REL_WHEEL, nullptr);
-    libevdev_enable_event_code(dev, EV_REL, REL_HWHEEL, nullptr);
-    libevdev_enable_event_code(dev, EV_REL, REL_WHEEL_HI_RES, nullptr);
-    libevdev_enable_event_code(dev, EV_REL, REL_HWHEEL_HI_RES, nullptr);
-  }
-
-  struct libevdev_uinput *uidev = nullptr;
-  int err = libevdev_uinput_create_from_device(dev, LIBEVDEV_UINPUT_OPEN_MANAGED, &uidev);
-  if (err != 0) {
-    std::cerr << "Failed to create uinput device: " << out.name << std::endl;
-    libevdev_free(dev);
-    return nullptr;
-  }
-
-  std::cout << "Created uinput device: " << out.name << " at "
-            << libevdev_uinput_get_devnode(uidev) << std::endl;
-
-  libevdev_free(dev);  // description no longer needed
-  return uidev;
 }
 
 // Attach a device using the same metadata (InputDecl) rules.
