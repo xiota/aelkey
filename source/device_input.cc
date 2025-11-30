@@ -6,7 +6,9 @@
 #include <fcntl.h>
 #include <libevdev/libevdev-uinput.h>
 #include <libevdev/libevdev.h>
+#include <linux/hidraw.h>
 #include <sys/epoll.h>
+#include <sys/ioctl.h>
 #include <unistd.h>
 
 InputDecl parse_input(lua_State *L, int index) {
@@ -90,56 +92,97 @@ OutputDecl parse_output(lua_State *L, int index) {
 }
 
 std::string match_device(const InputDecl &decl) {
-  for (int i = 0;; i++) {
-    std::string devnode = "/dev/input/event" + std::to_string(i);
-    int fd = open(devnode.c_str(), O_RDONLY | O_NONBLOCK);
-    if (fd < 0) {
-      break;
-    }
-
-    struct libevdev *dev = nullptr;
-    if (libevdev_new_from_fd(fd, &dev) == 0) {
-      bool match = true;
-
-      if (decl.bus && libevdev_get_id_bustype(dev) != decl.bus) {
-        match = false;
-      }
-      if (decl.vendor && libevdev_get_id_vendor(dev) != decl.vendor) {
-        match = false;
-      }
-      if (decl.product && libevdev_get_id_product(dev) != decl.product) {
-        match = false;
-      }
-      if (!decl.name.empty() && decl.name != (libevdev_get_name(dev) ?: "")) {
-        match = false;
-      }
-      if (!decl.phys.empty() && decl.phys != (libevdev_get_phys(dev) ?: "")) {
-        match = false;
-      }
-      if (!decl.uniq.empty() && decl.uniq != (libevdev_get_uniq(dev) ?: "")) {
-        match = false;
+  if (decl.kind == "hidraw") {
+    for (int i = 0;; i++) {
+      std::string devnode = "/dev/hidraw" + std::to_string(i);
+      int fd = open(devnode.c_str(), O_RDONLY | O_NONBLOCK);
+      if (fd < 0) {
+        break;
       }
 
-      // Capability check: all must be present
-      for (auto &[type, code] : decl.capabilities) {
-        if (!libevdev_has_event_code(dev, type, code)) {
+      struct hidraw_devinfo info;
+      if (ioctl(fd, HIDIOCGRAWINFO, &info) == 0) {
+        bool match = true;
+        if (decl.bus && static_cast<int>(info.bustype) != decl.bus) {
           match = false;
-          break;
+        }
+        if (decl.vendor && static_cast<int>(info.vendor) != decl.vendor) {
+          match = false;
+        }
+        if (decl.product && static_cast<int>(info.product) != decl.product) {
+          match = false;
+        }
+
+        if (!decl.name.empty()) {
+          char name[256];
+          if (ioctl(fd, HIDIOCGRAWNAME(sizeof(name)), name) >= 0) {
+            if (decl.name != std::string(name)) {
+              match = false;
+            }
+          }
+        }
+
+        if (match) {
+          std::cout << "Matched " << decl.id << " → " << devnode << std::endl;
+          close(fd);
+          return devnode;
         }
       }
-
-      if (match) {
-        std::cout << "Matched " << decl.id << " → " << devnode << " ("
-                  << (libevdev_get_name(dev) ?: "") << ")\n";
-        libevdev_free(dev);
-        close(fd);
-        return devnode;
-      }
+      close(fd);
     }
-    libevdev_free(dev);
-    close(fd);
+    return {};
+  } else {
+    for (int i = 0;; i++) {
+      std::string devnode = "/dev/input/event" + std::to_string(i);
+      int fd = open(devnode.c_str(), O_RDONLY | O_NONBLOCK);
+      if (fd < 0) {
+        break;
+      }
+
+      struct libevdev *dev = nullptr;
+      if (libevdev_new_from_fd(fd, &dev) == 0) {
+        bool match = true;
+
+        if (decl.bus && libevdev_get_id_bustype(dev) != decl.bus) {
+          match = false;
+        }
+        if (decl.vendor && libevdev_get_id_vendor(dev) != decl.vendor) {
+          match = false;
+        }
+        if (decl.product && libevdev_get_id_product(dev) != decl.product) {
+          match = false;
+        }
+        if (!decl.name.empty() && decl.name != (libevdev_get_name(dev) ?: "")) {
+          match = false;
+        }
+        if (!decl.phys.empty() && decl.phys != (libevdev_get_phys(dev) ?: "")) {
+          match = false;
+        }
+        if (!decl.uniq.empty() && decl.uniq != (libevdev_get_uniq(dev) ?: "")) {
+          match = false;
+        }
+
+        // Capability check: all must be present
+        for (auto &[type, code] : decl.capabilities) {
+          if (!libevdev_has_event_code(dev, type, code)) {
+            match = false;
+            break;
+          }
+        }
+
+        if (match) {
+          std::cout << "Matched " << decl.id << " → " << devnode << " ("
+                    << (libevdev_get_name(dev) ?: "") << ")\n";
+          libevdev_free(dev);
+          close(fd);
+          return devnode;
+        }
+      }
+      libevdev_free(dev);
+      close(fd);
+    }
+    return {};
   }
-  return {};
 }
 
 int attach_device(
@@ -156,39 +199,45 @@ int attach_device(
     return -1;
   }
 
-  // Initialize libevdev
-  struct libevdev *idev = nullptr;
-  if (libevdev_new_from_fd(fd, &idev) < 0) {
-    std::cerr << "Failed to init libevdev for " << devnode << std::endl;
-    close(fd);
-    return -1;
-  }
+  InputCtx ctx;
+  ctx.decl = in;
 
-  std::cout << "Attached input device: " << libevdev_get_name(idev) << std::endl;
+  if (in.kind == "hidraw") {
+    // hidraw: no libevdev init
+    std::cout << "Attached hidraw: " << devnode << std::endl;
+  } else {
+    // default: evdev
+    struct libevdev *idev = nullptr;
+    if (libevdev_new_from_fd(fd, &idev) < 0) {
+      std::cerr << "Failed to init libevdev for " << devnode << std::endl;
+      close(fd);
+      return -1;
+    }
+    ctx.idev = idev;
+    frames[fd] = {};
+    std::cout << "Attached evdev: " << libevdev_get_name(idev) << std::endl;
 
-  if (in.grab) {
-    int rc = libevdev_grab(idev, LIBEVDEV_GRAB);
-    if (rc < 0) {
-      std::cerr << "Failed to grab device " << devnode << ": " << strerror(-rc) << std::endl;
-    } else {
-      std::cout << "Grabbed device exclusively: " << devnode << std::endl;
+    if (in.grab) {
+      int rc = libevdev_grab(idev, LIBEVDEV_GRAB);
+      if (rc < 0) {
+        std::cerr << "Failed to grab device " << devnode << ": " << strerror(-rc) << std::endl;
+      } else {
+        std::cout << "Grabbed device exclusively: " << devnode << std::endl;
+      }
     }
   }
 
-  // Populate InputCtx
-  InputCtx ctx;
-  ctx.decl = in;
-  ctx.idev = idev;
   input_map[fd] = ctx;
-  frames[fd] = {};
 
   struct epoll_event evreg{};
   evreg.events = EPOLLIN;
   evreg.data.fd = fd;
   if (epoll_ctl(epfd, EPOLL_CTL_ADD, fd, &evreg) < 0) {
     perror("epoll_ctl EPOLL_CTL_ADD");
-    libevdev_grab(idev, LIBEVDEV_UNGRAB);
-    libevdev_free(idev);
+    if (ctx.idev) {
+      libevdev_grab(ctx.idev, LIBEVDEV_UNGRAB);
+      libevdev_free(ctx.idev);
+    }
     input_map.erase(fd);
     frames.erase(fd);
     close(fd);

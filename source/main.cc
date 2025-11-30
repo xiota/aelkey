@@ -131,7 +131,11 @@ int main(int argc, char **argv) {
   for (auto &in : inputs) {
     std::string devnode = match_device(in);
     if (!devnode.empty()) {
-      // Attach using the same path used for reconnects
+      // skip if already attached
+      if (devnode_to_fd.find(devnode) != devnode_to_fd.end()) {
+        std::cout << "Device already attached: " << devnode << std::endl;
+        continue;
+      }
       int newfd = attach_device(devnode, in, input_map, frames, epfd);
       if (newfd >= 0) {
         devnode_to_fd[devnode] = newfd;
@@ -145,6 +149,7 @@ int main(int argc, char **argv) {
   struct udev *udev = udev_new();
   struct udev_monitor *mon = udev_monitor_new_from_netlink(udev, "udev");
   udev_monitor_filter_add_match_subsystem_devtype(mon, "input", nullptr);
+  udev_monitor_filter_add_match_subsystem_devtype(mon, "hidraw", nullptr);
   udev_monitor_enable_receiving(mon);
   int mon_fd = udev_monitor_get_fd(mon);
 
@@ -209,6 +214,11 @@ int main(int argc, char **argv) {
           } else if (action == "add") {
             // Reattach using the same matching logic as startup
             if (!devnode.empty()) {
+              // skip if already attached
+              if (devnode_to_fd.find(devnode) != devnode_to_fd.end()) {
+                std::cout << "Device already attached: " << devnode << std::endl;
+                continue;
+              }
               for (auto &decl : inputs) {
                 std::string candidate = match_device(decl);
                 if (candidate == devnode) {
@@ -294,68 +304,95 @@ int main(int argc, char **argv) {
         }
         auto &ctx = it->second;
 
-        // Guard against null libevdev* in case of a race
-        if (!ctx.idev) {
-          continue;
-        }
+        if (ctx.decl.kind == "hidraw") {
+          uint8_t buf[64];
+          ssize_t r = read(fd_ready, buf, sizeof(buf));
+          if (r > 0 && !ctx.decl.callback.empty()) {
+            lua_getglobal(L, ctx.decl.callback.c_str());
+            if (lua_isfunction(L, -1)) {
+              lua_newtable(L);
+              lua_pushstring(L, "device");
+              lua_pushstring(L, ctx.decl.id.c_str());
+              lua_settable(L, -3);
 
-        struct input_event ev;
-        auto fit = frames.find(fd_ready);
-        if (fit == frames.end()) {
-          continue;
-        }
-        auto &frame = fit->second;  // reuse per‑device frame
-        while (libevdev_next_event(ctx.idev, LIBEVDEV_READ_FLAG_NORMAL, &ev) ==
-               LIBEVDEV_READ_STATUS_SUCCESS) {
-          frame.push_back(ev);
-          if (ev.type == EV_SYN && ev.code == SYN_REPORT) {
-            if (!ctx.decl.callback.empty()) {
-              lua_getglobal(L, ctx.decl.callback.c_str());
-              if (lua_isfunction(L, -1)) {
-                lua_newtable(L);
-                for (size_t j = 0; j < frame.size(); ++j) {
-                  const auto &fev = frame[j];
-                  lua_pushinteger(L, (int)j + 1);
-                  lua_newtable(L);
+              lua_pushstring(L, "report");
+              lua_pushlstring(L, (const char *)buf, r);
+              lua_settable(L, -3);
 
-                  lua_pushstring(L, "device");
-                  lua_pushstring(L, ctx.decl.id.c_str());
-                  lua_settable(L, -3);
-
-                  lua_pushstring(L, "type");
-                  lua_pushinteger(L, fev.type);
-                  lua_settable(L, -3);
-
-                  lua_pushstring(L, "type_name");
-                  lua_pushstring(L, libevdev_event_type_get_name(fev.type));
-                  lua_settable(L, -3);
-
-                  lua_pushstring(L, "code");
-                  lua_pushinteger(L, fev.code);
-                  lua_settable(L, -3);
-
-                  lua_pushstring(L, "code_name");
-                  lua_pushstring(L, libevdev_event_code_get_name(fev.type, fev.code));
-                  lua_settable(L, -3);
-
-                  lua_pushstring(L, "value");
-                  lua_pushinteger(L, fev.value);
-                  lua_settable(L, -3);
-
-                  lua_settable(L, -3);
+              PROFILE_CALL("Lua hidraw", {
+                if (lua_pcall(L, 1, 0, 0) != LUA_OK) {
+                  std::cerr << "Lua hidraw callback error: " << lua_tostring(L, -1)
+                            << std::endl;
+                  lua_pop(L, 1);
                 }
-                PROFILE_CALL("Lua remap", {
-                  if (lua_pcall(L, 1, 0, 0) != 0) {
-                    std::cerr << "Lua callback error (" << ctx.decl.id
-                              << "): " << lua_tostring(L, -1) << std::endl;
-                    lua_pop(L, 1);
-                  }
-                });
-              } else {
-                lua_pop(L, 1);
-              }
+              });
+            } else {
+              lua_pop(L, 1);
             }
-            frame.clear();
+          }
+        } else {
+          // default: evdev
+          if (!ctx.idev) {
+            continue;
+          }
+          struct input_event ev;
+          auto fit = frames.find(fd_ready);
+          if (fit == frames.end()) {
+            continue;
+          }
+          auto &frame = fit->second;
+          while (libevdev_next_event(ctx.idev, LIBEVDEV_READ_FLAG_NORMAL, &ev) ==
+                 LIBEVDEV_READ_STATUS_SUCCESS) {
+            frame.push_back(ev);
+            if (ev.type == EV_SYN && ev.code == SYN_REPORT) {
+              if (!ctx.decl.callback.empty()) {
+                lua_getglobal(L, ctx.decl.callback.c_str());
+                if (lua_isfunction(L, -1)) {
+                  lua_newtable(L);
+                  for (size_t j = 0; j < frame.size(); ++j) {
+                    const auto &fev = frame[j];
+                    lua_pushinteger(L, (int)j + 1);
+                    lua_newtable(L);
+
+                    lua_pushstring(L, "device");
+                    lua_pushstring(L, ctx.decl.id.c_str());
+                    lua_settable(L, -3);
+
+                    lua_pushstring(L, "type");
+                    lua_pushinteger(L, fev.type);
+                    lua_settable(L, -3);
+
+                    lua_pushstring(L, "type_name");
+                    lua_pushstring(L, libevdev_event_type_get_name(fev.type));
+                    lua_settable(L, -3);
+
+                    lua_pushstring(L, "code");
+                    lua_pushinteger(L, fev.code);
+                    lua_settable(L, -3);
+
+                    lua_pushstring(L, "code_name");
+                    lua_pushstring(L, libevdev_event_code_get_name(fev.type, fev.code));
+                    lua_settable(L, -3);
+
+                    lua_pushstring(L, "value");
+                    lua_pushinteger(L, fev.value);
+                    lua_settable(L, -3);
+
+                    lua_settable(L, -3);
+                  }
+                  PROFILE_CALL("Lua evdev", {
+                    if (lua_pcall(L, 1, 0, 0) != 0) {
+                      std::cerr << "Lua callback error (" << ctx.decl.id
+                                << "): " << lua_tostring(L, -1) << std::endl;
+                      lua_pop(L, 1);
+                    }
+                  });
+                } else {
+                  lua_pop(L, 1);
+                }
+              }
+              frame.clear();
+            }
           }
         }
       }
