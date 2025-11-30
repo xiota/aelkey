@@ -97,50 +97,55 @@ int lua_syn_report(lua_State *L) {
 int lua_tick(lua_State *L) {
   int ms = luaL_checkinteger(L, 1);
 
-  // disable
-  if (ms == 0) {
-    if (tfd != -1) {
-      epoll_remove_fd(tfd);
-      close(tfd);
-      tfd = -1;
+  // Case: tick(0) with no callback → stop all
+  if (ms == 0 && lua_gettop(L) < 2) {
+    for (auto &[fd, cb] : tick_callbacks) {
+      epoll_remove_fd(fd);
+      close(fd);
+      if (cb.is_function && cb.ref != LUA_NOREF) {
+        luaL_unref(L, LUA_REGISTRYINDEX, cb.ref);
+      }
     }
-    if (tick_cb.is_function && tick_cb.ref != LUA_NOREF) {
-      luaL_unref(L, LUA_REGISTRYINDEX, tick_cb.ref);
-    }
-    tick_cb = TickCallback{};  // reset
+    tick_callbacks.clear();
     return 0;
   }
 
-  // clear previous
-  if (tick_cb.is_function && tick_cb.ref != LUA_NOREF) {
-    luaL_unref(L, LUA_REGISTRYINDEX, tick_cb.ref);
-  }
-  tick_cb = TickCallback{};
-
-  // parse callback
-  if (lua_gettop(L) < 2) {
-    return luaL_error(L, "tick requires callback argument");
-  }
+  // Parse callback
+  TickCallback cb{};
   if (lua_isstring(L, 2)) {
-    tick_cb.name = lua_tostring(L, 2);
-    tick_cb.is_function = false;
+    cb.name = lua_tostring(L, 2);
+    cb.is_function = false;
   } else if (lua_isfunction(L, 2)) {
     lua_pushvalue(L, 2);
-    tick_cb.ref = luaL_ref(L, LUA_REGISTRYINDEX);
-    tick_cb.is_function = true;
+    cb.ref = luaL_ref(L, LUA_REGISTRYINDEX);
+    cb.is_function = true;
   } else {
     return luaL_error(L, "tick callback must be string or function");
   }
 
-  // Recreate timerfd cleanly
-  if (tfd != -1) {
-    epoll_remove_fd(tfd);
-    close(tfd);
-    tfd = -1;
+  if (ms == 0) {
+    // Stop just this callback
+    for (auto it = tick_callbacks.begin(); it != tick_callbacks.end();) {
+      auto &existing = it->second;
+      bool match = (cb.is_function && existing.is_function && existing.ref == cb.ref) ||
+                   (!cb.is_function && !existing.is_function && existing.name == cb.name);
+      if (match) {
+        int fd = it->first;
+        epoll_remove_fd(fd);
+        close(fd);
+        if (existing.is_function && existing.ref != LUA_NOREF) {
+          luaL_unref(L, LUA_REGISTRYINDEX, existing.ref);
+        }
+        it = tick_callbacks.erase(it);
+      } else {
+        ++it;
+      }
+    }
+    return 0;
   }
-
-  tfd = timerfd_create(CLOCK_MONOTONIC, TFD_NONBLOCK);
-  if (tfd < 0) {
+  // ms > 0 → create new timerfd
+  int fd = timerfd_create(CLOCK_MONOTONIC, TFD_NONBLOCK);
+  if (fd < 0) {
     perror("timerfd_create");
     return 0;
   }
@@ -149,24 +154,22 @@ int lua_tick(lua_State *L) {
   spec.it_interval.tv_sec = ms / 1000;
   spec.it_interval.tv_nsec = (ms % 1000) * 1000000;
   spec.it_value = spec.it_interval;
-
-  if (timerfd_settime(tfd, 0, &spec, nullptr) < 0) {
+  if (timerfd_settime(fd, 0, &spec, nullptr) < 0) {
     perror("timerfd_settime");
-    close(tfd);
-    tfd = -1;
+    close(fd);
     return 0;
   }
 
   struct epoll_event ev{};
   ev.events = EPOLLIN;
-  ev.data.fd = tfd;
-  if (epoll_ctl(epfd, EPOLL_CTL_ADD, tfd, &ev) < 0) {
+  ev.data.fd = fd;
+  if (epoll_ctl(epfd, EPOLL_CTL_ADD, fd, &ev) < 0) {
     perror("epoll_ctl EPOLL_CTL_ADD (tick)");
-    close(tfd);
-    tfd = -1;
+    close(fd);
     return 0;
   }
 
+  tick_callbacks[fd] = cb;
   return 0;
 }
 
