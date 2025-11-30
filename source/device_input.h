@@ -20,6 +20,7 @@ struct InputDecl {
   std::string uniq;
   bool writable = false;
   bool grab = false;
+  std::vector<std::pair<int, int>> capabilities;
 };
 
 InputDecl parse_input(lua_State *L, int index);

@@ -14,6 +14,7 @@ InputDecl parse_input(lua_State *L, int index) {
   lua_pushnil(L);
   while (lua_next(L, index)) {
     std::string key = lua_tostring(L, -2);
+
     if (key == "id" && lua_isstring(L, -1)) {
       decl.id = lua_tostring(L, -1);
     } else if (key == "kind" && lua_isstring(L, -1)) {
@@ -22,33 +23,48 @@ InputDecl parse_input(lua_State *L, int index) {
       decl.writable = lua_toboolean(L, -1);
     } else if (key == "grab" && lua_isboolean(L, -1)) {
       decl.grab = lua_toboolean(L, -1);
-    } else if (key == "match" && lua_istable(L, -1)) {
-      lua_pushnil(L);
-      while (lua_next(L, -2)) {
-        std::string mkey = lua_tostring(L, -2);
-        if (mkey == "vendor" && lua_isnumber(L, -1)) {
-          decl.vendor = (int)lua_tointeger(L, -1);
-        } else if (mkey == "product" && lua_isnumber(L, -1)) {
-          decl.product = (int)lua_tointeger(L, -1);
-        } else if (mkey == "bus" && lua_isstring(L, -1)) {
-          std::string busstr = lua_tostring(L, -1);
-          if (busstr == "usb") {
-            decl.bus = BUS_USB;
-          } else if (busstr == "bluetooth") {
-            decl.bus = BUS_BLUETOOTH;
-          } else if (busstr == "pci") {
-            decl.bus = BUS_PCI;
+    } else if (key == "vendor" && lua_isnumber(L, -1)) {
+      decl.vendor = (int)lua_tointeger(L, -1);
+    } else if (key == "product" && lua_isnumber(L, -1)) {
+      decl.product = (int)lua_tointeger(L, -1);
+    } else if (key == "bus" && lua_isstring(L, -1)) {
+      std::string busstr = lua_tostring(L, -1);
+      if (busstr == "usb") {
+        decl.bus = BUS_USB;
+      } else if (busstr == "bluetooth") {
+        decl.bus = BUS_BLUETOOTH;
+      } else if (busstr == "pci") {
+        decl.bus = BUS_PCI;
+      }
+    } else if (key == "name" && lua_isstring(L, -1)) {
+      decl.name = lua_tostring(L, -1);
+    } else if (key == "phys" && lua_isstring(L, -1)) {
+      decl.phys = lua_tostring(L, -1);
+    } else if (key == "uniq" && lua_isstring(L, -1)) {
+      decl.uniq = lua_tostring(L, -1);
+    } else if (key == "capabilities" && lua_istable(L, -1)) {
+      int len = lua_objlen(L, -1);
+      for (int i = 1; i <= len; i++) {
+        lua_rawgeti(L, -1, i);
+        if (lua_istable(L, -1)) {
+          lua_getfield(L, -1, "type");
+          std::string type = lua_tostring(L, -1);
+          lua_pop(L, 1);
+
+          lua_getfield(L, -1, "code");
+          std::string code = lua_tostring(L, -1);
+          lua_pop(L, 1);
+
+          int type_id = libevdev_event_type_from_name(type.c_str());
+          int code_id = libevdev_event_code_from_name(type_id, code.c_str());
+          if (type_id >= 0 && code_id >= 0) {
+            decl.capabilities.emplace_back(type_id, code_id);
           }
-        } else if (mkey == "name" && lua_isstring(L, -1)) {
-          decl.name = lua_tostring(L, -1);
-        } else if (mkey == "phys" && lua_isstring(L, -1)) {
-          decl.phys = lua_tostring(L, -1);
-        } else if (mkey == "uniq" && lua_isstring(L, -1)) {
-          decl.uniq = lua_tostring(L, -1);
         }
         lua_pop(L, 1);
       }
     }
+
     lua_pop(L, 1);
   }
   return decl;
@@ -81,36 +97,38 @@ std::string match_device(const InputDecl &decl) {
 
     struct libevdev *dev = nullptr;
     if (libevdev_new_from_fd(fd, &dev) == 0) {
-      int bus = libevdev_get_id_bustype(dev);
-      int vendor = libevdev_get_id_vendor(dev);
-      int product = libevdev_get_id_product(dev);
-      const char *name = libevdev_get_name(dev);
-      const char *phys = libevdev_get_phys(dev);
-      const char *uniq = libevdev_get_uniq(dev);
-
       bool match = true;
-      if (decl.bus && bus != decl.bus) {
+
+      if (decl.bus && libevdev_get_id_bustype(dev) != decl.bus) {
         match = false;
       }
-      if (decl.vendor && vendor != decl.vendor) {
+      if (decl.vendor && libevdev_get_id_vendor(dev) != decl.vendor) {
         match = false;
       }
-      if (decl.product && product != decl.product) {
+      if (decl.product && libevdev_get_id_product(dev) != decl.product) {
         match = false;
       }
-      if (!decl.name.empty() && decl.name != (name ? name : "")) {
+      if (!decl.name.empty() && decl.name != (libevdev_get_name(dev) ?: "")) {
         match = false;
       }
-      if (!decl.phys.empty() && decl.phys != (phys ? phys : "")) {
+      if (!decl.phys.empty() && decl.phys != (libevdev_get_phys(dev) ?: "")) {
         match = false;
       }
-      if (!decl.uniq.empty() && decl.uniq != (uniq ? uniq : "")) {
+      if (!decl.uniq.empty() && decl.uniq != (libevdev_get_uniq(dev) ?: "")) {
         match = false;
+      }
+
+      // Capability check: all must be present
+      for (auto &[type, code] : decl.capabilities) {
+        if (!libevdev_has_event_code(dev, type, code)) {
+          match = false;
+          break;
+        }
       }
 
       if (match) {
-        std::cout << "Matched " << decl.id << " → " << devnode << " (" << (name ? name : "")
-                  << ")\n";
+        std::cout << "Matched " << decl.id << " → " << devnode << " ("
+                  << (libevdev_get_name(dev) ?: "") << ")\n";
         libevdev_free(dev);
         close(fd);
         return devnode;
