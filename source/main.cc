@@ -472,8 +472,16 @@ int main(int argc, char **argv) {
           lua_pushinteger(L, 0);
           lua_settable(L, -3);
 
+          lua_pushstring(L, "type_name");
+          lua_pushstring(L, "tick");
+          lua_settable(L, -3);
+
           lua_pushstring(L, "code");
           lua_pushinteger(L, 0);
+          lua_settable(L, -3);
+
+          lua_pushstring(L, "code_name");
+          lua_pushstring(L, "tick");
           lua_settable(L, -3);
 
           lua_pushstring(L, "value");
@@ -563,8 +571,16 @@ int main(int argc, char **argv) {
                 lua_pushinteger(L, frame[j].type);
                 lua_settable(L, -3);
 
+                lua_pushstring(L, "type_name");
+                lua_pushstring(L, libevdev_event_type_get_name(frame[j].type));
+                lua_settable(L, -3);
+
                 lua_pushstring(L, "code");
                 lua_pushinteger(L, frame[j].code);
+                lua_settable(L, -3);
+
+                lua_pushstring(L, "code_name");
+                lua_pushstring(L, libevdev_event_code_get_name(frame[j].type, frame[j].code));
                 lua_settable(L, -3);
 
                 lua_pushstring(L, "value");

@@ -25,12 +25,24 @@ int lua_emit(lua_State *L) {
   }
   lua_pop(L, 1);
 
+  // TYPE
   lua_getfield(L, 1, "type");
-  type = luaL_checkinteger(L, -1);
+  if (lua_isnumber(L, -1)) {
+    type = lua_tointeger(L, -1);
+  } else if (lua_isstring(L, -1)) {
+    const char *tname = lua_tostring(L, -1);
+    type = libevdev_event_type_from_name(tname);
+  }
   lua_pop(L, 1);
 
+  // CODE
   lua_getfield(L, 1, "code");
-  code = luaL_checkinteger(L, -1);
+  if (lua_isnumber(L, -1)) {
+    code = lua_tointeger(L, -1);
+  } else if (lua_isstring(L, -1)) {
+    const char *cname = lua_tostring(L, -1);
+    code = libevdev_event_code_from_name(type, cname);
+  }
   lua_pop(L, 1);
 
   lua_getfield(L, 1, "value");
