@@ -14,6 +14,8 @@
 #include <unistd.h>
 
 #include "config.h"
+#include "globals.h"
+#include "lua_bindings.h"
 #include "util/scoped_timer.h"
 
 struct InputDecl {
@@ -37,8 +39,9 @@ struct OutputDecl {
 
 std::unordered_map<std::string, libevdev_uinput *> uinput_devices;
 
-static int tfd = -1;
-static int epfd = -1;
+// globals
+int tfd = -1;
+int epfd = -1;
 
 // Parse one input entry { id=..., kind=..., match={...}, writable=... }
 InputDecl parse_input(lua_State *L, int index) {
@@ -201,96 +204,6 @@ struct libevdev_uinput *create_output_device(const OutputDecl &out) {
   return uidev;
 }
 
-// Lua binding: emit({ device=..., type=..., code=..., value=... })
-int lua_emit(lua_State *L) {
-  luaL_checktype(L, 1, LUA_TTABLE);
-
-  const char *dev_id = nullptr;
-  int type = 0, code = 0, value = 0;
-
-  lua_getfield(L, 1, "device");
-  if (lua_isstring(L, -1)) {
-    dev_id = lua_tostring(L, -1);
-  }
-  lua_pop(L, 1);
-
-  lua_getfield(L, 1, "type");
-  type = luaL_checkinteger(L, -1);
-  lua_pop(L, 1);
-
-  lua_getfield(L, 1, "code");
-  code = luaL_checkinteger(L, -1);
-  lua_pop(L, 1);
-
-  lua_getfield(L, 1, "value");
-  value = luaL_checkinteger(L, -1);
-  lua_pop(L, 1);
-
-  if (!dev_id) {
-    if (uinput_devices.size() == 1) {
-      auto it = uinput_devices.begin();
-      libevdev_uinput_write_event(it->second, type, code, value);
-    } else {
-      return luaL_error(L, "emit requires 'device' when multiple output devices are present");
-    }
-  } else {
-    auto it = uinput_devices.find(dev_id);
-    if (it == uinput_devices.end()) {
-      return luaL_error(L, "Unknown device id: %s", dev_id);
-    }
-    libevdev_uinput_write_event(it->second, type, code, value);
-  }
-  return 0;
-}
-
-int lua_syn_report(lua_State *L) {
-  const char *dev_id = luaL_optstring(L, 1, nullptr);  // optional device name
-  if (dev_id) {
-    // look up matching uinput device by id
-    auto it = uinput_devices.find(dev_id);
-    if (it != uinput_devices.end()) {
-      libevdev_uinput_write_event(it->second, EV_SYN, SYN_REPORT, 0);
-    }
-  } else {
-    // flush all devices (initial simple policy)
-    for (auto &kv : uinput_devices) {
-      libevdev_uinput_write_event(kv.second, EV_SYN, SYN_REPORT, 0);
-    }
-  }
-  return 0;
-}
-
-int lua_tick(lua_State *L) {
-  int ms = luaL_checkinteger(L, 1);
-
-  if (tfd != -1) {
-    close(tfd);
-  }
-
-  tfd = timerfd_create(CLOCK_MONOTONIC, TFD_NONBLOCK);
-  if (tfd < 0) {
-    perror("timerfd_create");
-    return 0;
-  }
-
-  struct itimerspec spec{};
-  spec.it_interval.tv_sec = ms / 1000;
-  spec.it_interval.tv_nsec = (ms % 1000) * 1000000;
-  spec.it_value = spec.it_interval;
-
-  if (timerfd_settime(tfd, 0, &spec, nullptr) < 0) {
-    perror("timerfd_settime");
-    return 0;
-  }
-
-  struct epoll_event ev{};
-  ev.events = EPOLLIN;
-  ev.data.fd = tfd;
-  epoll_ctl(epfd, EPOLL_CTL_ADD, tfd, &ev);
-
-  return 0;
-}
-
 // Attach a device using the same metadata (InputDecl) rules.
 // Returns the opened fd on success, or -1 on failure.
 int attach_device(
@@ -381,10 +294,7 @@ int main(int argc, char **argv) {
   // --- LuaJIT bootstrap ---
   lua_State *L = luaL_newstate();
   luaL_openlibs(L);
-
-  lua_register(L, "emit", lua_emit);
-  lua_register(L, "syn_report", lua_syn_report);
-  lua_register(L, "tick", lua_tick);
+  register_lua_bindings(L);
 
   if (!lua_scripts.empty()) {
     const std::string &first_script = lua_scripts.front();

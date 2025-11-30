@@ -23,6 +23,7 @@ configure_file(
 
 # source
 src_files = files(
+  'source/lua_bindings.cc',
   'source/main.cc',
 )
 
