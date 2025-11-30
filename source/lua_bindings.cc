@@ -11,7 +11,16 @@
 
 #include "globals.h"
 
-extern std::unordered_map<std::string, libevdev_uinput *> uinput_devices;
+// globals
+int tick_payload_ref = LUA_NOREF;
+
+static void epoll_remove_fd(int fd) {
+  if (fd >= 0) {
+    if (epoll_ctl(epfd, EPOLL_CTL_DEL, fd, nullptr) < 0) {
+      perror("epoll_ctl EPOLL_CTL_DEL (tick)");
+    }
+  }
+}
 
 int lua_emit(lua_State *L) {
   luaL_checktype(L, 1, LUA_TTABLE);
@@ -88,6 +97,37 @@ int lua_tick(lua_State *L) {
     close(tfd);
   }
 
+  // disable
+  if (ms == 0) {
+    if (tfd != -1) {
+      epoll_remove_fd(tfd);
+      close(tfd);
+      tfd = -1;
+    }
+    if (tick_payload_ref != LUA_NOREF) {
+      luaL_unref(L, LUA_REGISTRYINDEX, tick_payload_ref);
+      tick_payload_ref = LUA_NOREF;
+    }
+    return 0;
+  }
+
+  // Optional payload (any Lua value). Store by registry ref.
+  if (tick_payload_ref != LUA_NOREF) {
+    luaL_unref(L, LUA_REGISTRYINDEX, tick_payload_ref);
+    tick_payload_ref = LUA_NOREF;
+  }
+  if (lua_gettop(L) >= 2) {
+    lua_pushvalue(L, 2);  // copy payload
+    tick_payload_ref = luaL_ref(L, LUA_REGISTRYINDEX);
+  }
+
+  // Recreate timerfd cleanly
+  if (tfd != -1) {
+    epoll_remove_fd(tfd);
+    close(tfd);
+    tfd = -1;
+  }
+
   tfd = timerfd_create(CLOCK_MONOTONIC, TFD_NONBLOCK);
   if (tfd < 0) {
     perror("timerfd_create");
@@ -101,13 +141,20 @@ int lua_tick(lua_State *L) {
 
   if (timerfd_settime(tfd, 0, &spec, nullptr) < 0) {
     perror("timerfd_settime");
+    close(tfd);
+    tfd = -1;
     return 0;
   }
 
   struct epoll_event ev{};
   ev.events = EPOLLIN;
   ev.data.fd = tfd;
-  epoll_ctl(epfd, EPOLL_CTL_ADD, tfd, &ev);
+  if (epoll_ctl(epfd, EPOLL_CTL_ADD, tfd, &ev) < 0) {
+    perror("epoll_ctl EPOLL_CTL_ADD (tick)");
+    close(tfd);
+    tfd = -1;
+    return 0;
+  }
 
   return 0;
 }
