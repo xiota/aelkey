@@ -229,37 +229,26 @@ int main(int argc, char **argv) {
         continue;
       } else if (tfd >= 0 && fd_ready == tfd) {
         uint64_t expirations = 0;
-        (void)read(tfd, &expirations, sizeof(expirations));
-
-        // Call Lua tock(event)
-        lua_getglobal(L, "tock");
-        if (lua_isfunction(L, -1)) {
-          lua_newtable(L);
-
-          // source: user timer (you can add "fusion" etc. from other triggers)
-          lua_pushstring(L, "source");
-          lua_pushstring(L, "user");
-          lua_settable(L, -3);
-
-          // number of expirations since last read
-          lua_pushstring(L, "value");
-          lua_pushinteger(L, (int)expirations);
-          lua_settable(L, -3);
-
-          // optional payload provided by tick(ms, data)
-          extern int tick_payload_ref;
-          if (tick_payload_ref != LUA_NOREF) {
-            lua_pushstring(L, "payload");
-            lua_rawgeti(L, LUA_REGISTRYINDEX, tick_payload_ref);
-            lua_settable(L, -3);
+        if (read(tfd, &expirations, sizeof(expirations)) > 0) {
+          if (tick_cb.is_function && tick_cb.ref != LUA_NOREF) {
+            lua_rawgeti(L, LUA_REGISTRYINDEX, tick_cb.ref);
+            lua_pushinteger(L, (lua_Integer)expirations);
+            if (lua_pcall(L, 1, 0, 0) != LUA_OK) {
+              std::cerr << "Lua tick callback error: " << lua_tostring(L, -1) << std::endl;
+              lua_pop(L, 1);
+            }
+          } else if (!tick_cb.name.empty()) {
+            lua_getglobal(L, tick_cb.name.c_str());
+            if (lua_isfunction(L, -1)) {
+              lua_pushinteger(L, (lua_Integer)expirations);
+              if (lua_pcall(L, 1, 0, 0) != LUA_OK) {
+                std::cerr << "Lua tick callback error: " << lua_tostring(L, -1) << std::endl;
+                lua_pop(L, 1);
+              }
+            } else {
+              lua_pop(L, 1);  // not a function
+            }
           }
-
-          if (lua_pcall(L, 1, 0, 0) != LUA_OK) {
-            std::cerr << "Lua error: " << lua_tostring(L, -1) << std::endl;
-            lua_pop(L, 1);
-          }
-        } else {
-          lua_pop(L, 1);
         }
       } else {
         // Input device event

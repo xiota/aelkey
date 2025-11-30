@@ -12,7 +12,11 @@
 #include "globals.h"
 
 // globals
-int tick_payload_ref = LUA_NOREF;
+int tick_cb_ref = LUA_NOREF;
+std::string tick_cb_name;
+bool tick_cb_is_function = false;
+
+TickCallback tick_cb;
 
 static void epoll_remove_fd(int fd) {
   if (fd >= 0) {
@@ -93,10 +97,6 @@ int lua_syn_report(lua_State *L) {
 int lua_tick(lua_State *L) {
   int ms = luaL_checkinteger(L, 1);
 
-  if (tfd != -1) {
-    close(tfd);
-  }
-
   // disable
   if (ms == 0) {
     if (tfd != -1) {
@@ -104,21 +104,32 @@ int lua_tick(lua_State *L) {
       close(tfd);
       tfd = -1;
     }
-    if (tick_payload_ref != LUA_NOREF) {
-      luaL_unref(L, LUA_REGISTRYINDEX, tick_payload_ref);
-      tick_payload_ref = LUA_NOREF;
+    if (tick_cb.is_function && tick_cb.ref != LUA_NOREF) {
+      luaL_unref(L, LUA_REGISTRYINDEX, tick_cb.ref);
     }
+    tick_cb = TickCallback{};  // reset
     return 0;
   }
 
-  // Optional payload (any Lua value). Store by registry ref.
-  if (tick_payload_ref != LUA_NOREF) {
-    luaL_unref(L, LUA_REGISTRYINDEX, tick_payload_ref);
-    tick_payload_ref = LUA_NOREF;
+  // clear previous
+  if (tick_cb.is_function && tick_cb.ref != LUA_NOREF) {
+    luaL_unref(L, LUA_REGISTRYINDEX, tick_cb.ref);
   }
-  if (lua_gettop(L) >= 2) {
-    lua_pushvalue(L, 2);  // copy payload
-    tick_payload_ref = luaL_ref(L, LUA_REGISTRYINDEX);
+  tick_cb = TickCallback{};
+
+  // parse callback
+  if (lua_gettop(L) < 2) {
+    return luaL_error(L, "tick requires callback argument");
+  }
+  if (lua_isstring(L, 2)) {
+    tick_cb.name = lua_tostring(L, 2);
+    tick_cb.is_function = false;
+  } else if (lua_isfunction(L, 2)) {
+    lua_pushvalue(L, 2);
+    tick_cb.ref = luaL_ref(L, LUA_REGISTRYINDEX);
+    tick_cb.is_function = true;
+  } else {
+    return luaL_error(L, "tick callback must be string or function");
   }
 
   // Recreate timerfd cleanly

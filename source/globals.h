@@ -5,8 +5,11 @@
 
 #include <libevdev/libevdev-uinput.h>
 
+#include "lua_bindings.h"
+
+extern TickCallback tick_cb;
+
 extern int tfd;
 extern int epfd;
-extern int tick_payload_ref;
 
 extern std::unordered_map<std::string, libevdev_uinput *> uinput_devices;
