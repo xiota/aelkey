@@ -163,4 +163,18 @@ void register_lua_bindings(lua_State *L) {
   lua_register(L, "emit", lua_emit);
   lua_register(L, "syn_report", lua_syn_report);
   lua_register(L, "tick", lua_tick);
+
+  const char *dump_events_code = R"(
+function dump_events(events)
+  for _, ev in ipairs(events) do
+    print(string.format("device=%s type=%s code=%s value=%d",
+                        tostring(ev.device),
+                        tostring(ev.type_name),
+                        tostring(ev.code_name),
+                        tonumber(ev.value or -1)))
+  end
+end
+)";
+
+  luaL_dostring(L, dump_events_code);
 }
