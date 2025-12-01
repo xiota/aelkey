@@ -21,7 +21,9 @@ struct InputDecl {
   bool writable = false;
   bool grab = false;
   std::vector<std::pair<int, int>> capabilities;
-  std::string callback;
+
+  std::string callback_events;  // HID input events
+  std::string callback_state;   // lifecycle events
 };
 
 struct InputCtx {

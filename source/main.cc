@@ -196,10 +196,23 @@ int main(int argc, char **argv) {
                 if (epoll_ctl(epfd, EPOLL_CTL_DEL, dfd, nullptr) < 0) {
                   perror("epoll_ctl EPOLL_CTL_DEL");
                 }
-                // Free libevdev and close fd
+                // Lookup once, notify, then cleanup
                 auto im = input_map.find(dfd);
                 if (im != input_map.end()) {
                   auto &ctx = im->second;
+                  if (!ctx.decl.callback_state.empty()) {
+                    lua_getglobal(L, ctx.decl.callback_state.c_str());
+                    if (lua_isfunction(L, -1)) {
+                      lua_pushstring(L, "disconnect");
+                      if (lua_pcall(L, 1, 0, 0) != LUA_OK) {
+                        std::cerr << "Lua state_callback error: " << lua_tostring(L, -1)
+                                  << std::endl;
+                        lua_pop(L, 1);
+                      }
+                    } else {
+                      lua_pop(L, 1);
+                    }
+                  }
                   if (ctx.idev) {
                     libevdev_grab(ctx.idev, LIBEVDEV_UNGRAB);
                     libevdev_free(ctx.idev);
@@ -225,6 +238,20 @@ int main(int argc, char **argv) {
                   int newfd = attach_device(devnode, decl, input_map, frames, epfd);
                   if (newfd >= 0) {
                     devnode_to_fd[devnode] = newfd;
+                    // Notify Lua state_callback (reconnect)
+                    if (!decl.callback_state.empty()) {
+                      lua_getglobal(L, decl.callback_state.c_str());
+                      if (lua_isfunction(L, -1)) {
+                        lua_pushstring(L, "reconnect");
+                        if (lua_pcall(L, 1, 0, 0) != LUA_OK) {
+                          std::cerr << "Lua state_callback error: " << lua_tostring(L, -1)
+                                    << std::endl;
+                          lua_pop(L, 1);
+                        }
+                      } else {
+                        lua_pop(L, 1);
+                      }
+                    }
                   } else {
                     std::cerr << "Failed to reattach input: " << decl.id << " (" << devnode
                               << ")" << std::endl;
@@ -277,27 +304,47 @@ int main(int argc, char **argv) {
             (events[i].events & (EPOLLHUP | EPOLLERR)) == 0) {
           continue;
         }
+
         if ((events[i].events & (EPOLLHUP | EPOLLERR)) != 0) {
+          // Reverse lookup devnode for this fd.
           auto it_fd = devnode_to_fd.begin();
-          // Find devnode for this fd (reverse lookup).
           for (; it_fd != devnode_to_fd.end(); ++it_fd) {
             if (it_fd->second == fd_ready) {
               break;
             }
           }
-          // Remove from epoll and maps safely.
+
+          // Remove from epoll first.
           if (epoll_ctl(epfd, EPOLL_CTL_DEL, fd_ready, nullptr) < 0) {
             perror("epoll_ctl EPOLL_CTL_DEL (HUP/ERR)");
           }
-          auto im = input_map.find(fd_ready);
-          if (im != input_map.end()) {
-            auto &ctx = im->second;
+
+          // Cleanup input_map and notify state_callback.
+          auto input_it = input_map.find(fd_ready);
+          if (input_it != input_map.end()) {
+            auto &ctx = input_it->second;
+
+            // Notify Lua state_callback (disconnect on HUP/ERR)
+            if (!ctx.decl.callback_state.empty()) {
+              lua_getglobal(L, ctx.decl.callback_state.c_str());
+              if (lua_isfunction(L, -1)) {
+                lua_pushstring(L, "disconnect");
+                if (lua_pcall(L, 1, 0, 0) != LUA_OK) {
+                  std::cerr << "Lua state_callback error: " << lua_tostring(L, -1) << std::endl;
+                  lua_pop(L, 1);
+                }
+              } else {
+                lua_pop(L, 1);
+              }
+            }
+
             if (ctx.idev) {
               libevdev_grab(ctx.idev, LIBEVDEV_UNGRAB);
               libevdev_free(ctx.idev);
             }
-            input_map.erase(im);
+            input_map.erase(input_it);
           }
+
           frames.erase(fd_ready);
           close(fd_ready);
           if (it_fd != devnode_to_fd.end()) {
@@ -306,6 +353,7 @@ int main(int argc, char **argv) {
           continue;
         }
 
+        // Normal input path
         auto it_map = input_map.find(fd_ready);
         if (it_map == input_map.end()) {
           // fd was removed; ignore spurious events
@@ -316,8 +364,8 @@ int main(int argc, char **argv) {
         if (ctx.decl.kind == "hidraw") {
           uint8_t buf[64];
           ssize_t r = read(fd_ready, buf, sizeof(buf));
-          if (r > 0 && !ctx.decl.callback.empty()) {
-            lua_getglobal(L, ctx.decl.callback.c_str());
+          if (r > 0 && !ctx.decl.callback_events.empty()) {
+            lua_getglobal(L, ctx.decl.callback_events.c_str());
             if (lua_isfunction(L, -1)) {
               lua_newtable(L);
               lua_pushstring(L, "device");
@@ -350,12 +398,13 @@ int main(int argc, char **argv) {
             continue;
           }
           auto &frame = fit->second;
+
           while (libevdev_next_event(ctx.idev, LIBEVDEV_READ_FLAG_NORMAL, &ev) ==
                  LIBEVDEV_READ_STATUS_SUCCESS) {
             frame.push_back(ev);
             if (ev.type == EV_SYN && ev.code == SYN_REPORT) {
-              if (!ctx.decl.callback.empty()) {
-                lua_getglobal(L, ctx.decl.callback.c_str());
+              if (!ctx.decl.callback_events.empty()) {
+                lua_getglobal(L, ctx.decl.callback_events.c_str());
                 if (lua_isfunction(L, -1)) {
                   lua_newtable(L);
                   for (size_t j = 0; j < frame.size(); ++j) {

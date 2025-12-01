@@ -65,8 +65,10 @@ InputDecl parse_input(lua_State *L, int index) {
         }
         lua_pop(L, 1);
       }
-    } else if (key == "callback" && lua_isstring(L, -1)) {
-      decl.callback = lua_tostring(L, -1);
+    } else if (key == "callback_events" && lua_isstring(L, -1)) {
+      decl.callback_events = lua_tostring(L, -1);
+    } else if (key == "callback_state" && lua_isstring(L, -1)) {
+      decl.callback_state = lua_tostring(L, -1);
     }
 
     lua_pop(L, 1);
