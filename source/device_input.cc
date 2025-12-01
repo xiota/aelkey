@@ -4,6 +4,7 @@
 #include <iostream>
 
 #include <fcntl.h>
+#include <glob.h>
 #include <libevdev/libevdev-uinput.h>
 #include <libevdev/libevdev.h>
 #include <linux/hidraw.h>
@@ -95,94 +96,104 @@ OutputDecl parse_output(lua_State *L, int index) {
 
 std::string match_device(const InputDecl &decl) {
   if (decl.kind == "hidraw") {
-    for (int i = 0;; i++) {
-      std::string devnode = "/dev/hidraw" + std::to_string(i);
-      int fd = open(devnode.c_str(), O_RDONLY | O_NONBLOCK);
-      if (fd < 0) {
-        break;
-      }
-
-      struct hidraw_devinfo info;
-      if (ioctl(fd, HIDIOCGRAWINFO, &info) == 0) {
-        bool match = true;
-        if (decl.bus && static_cast<int>(info.bustype) != decl.bus) {
-          match = false;
-        }
-        if (decl.vendor && static_cast<int>(info.vendor) != decl.vendor) {
-          match = false;
-        }
-        if (decl.product && static_cast<int>(info.product) != decl.product) {
-          match = false;
+    glob_t g;
+    if (glob("/dev/hidraw*", 0, nullptr, &g) == 0) {
+      for (size_t i = 0; i < g.gl_pathc; i++) {
+        std::string devnode = g.gl_pathv[i];
+        int fd = open(devnode.c_str(), O_RDONLY | O_NONBLOCK);
+        if (fd < 0) {
+          continue;
         }
 
-        if (!decl.name.empty()) {
-          char name[256];
-          if (ioctl(fd, HIDIOCGRAWNAME(sizeof(name)), name) >= 0) {
-            if (decl.name != std::string(name)) {
+        struct hidraw_devinfo info;
+        if (ioctl(fd, HIDIOCGRAWINFO, &info) == 0) {
+          bool match = true;
+          if (decl.bus && static_cast<int>(info.bustype) != decl.bus) {
+            match = false;
+          }
+          if (decl.vendor && static_cast<int>(info.vendor) != decl.vendor) {
+            match = false;
+          }
+          if (decl.product && static_cast<int>(info.product) != decl.product) {
+            match = false;
+          }
+
+          if (!decl.name.empty()) {
+            char name[256] = { 0 };
+            if (ioctl(fd, HIDIOCGRAWNAME(sizeof(name) - 1), name) >= 0) {
+              if (decl.name != std::string(name)) {
+                match = false;
+              }
+            } else {
               match = false;
             }
           }
-        }
 
-        if (match) {
-          std::cout << "Matched " << decl.id << " → " << devnode << std::endl;
-          close(fd);
-          return devnode;
-        }
-      }
-      close(fd);
-    }
-    return {};
-  } else {
-    for (int i = 0;; i++) {
-      std::string devnode = "/dev/input/event" + std::to_string(i);
-      int fd = open(devnode.c_str(), O_RDONLY | O_NONBLOCK);
-      if (fd < 0) {
-        break;
-      }
-
-      struct libevdev *dev = nullptr;
-      if (libevdev_new_from_fd(fd, &dev) == 0) {
-        bool match = true;
-
-        if (decl.bus && libevdev_get_id_bustype(dev) != decl.bus) {
-          match = false;
-        }
-        if (decl.vendor && libevdev_get_id_vendor(dev) != decl.vendor) {
-          match = false;
-        }
-        if (decl.product && libevdev_get_id_product(dev) != decl.product) {
-          match = false;
-        }
-        if (!decl.name.empty() && decl.name != (libevdev_get_name(dev) ?: "")) {
-          match = false;
-        }
-        if (!decl.phys.empty() && decl.phys != (libevdev_get_phys(dev) ?: "")) {
-          match = false;
-        }
-        if (!decl.uniq.empty() && decl.uniq != (libevdev_get_uniq(dev) ?: "")) {
-          match = false;
-        }
-
-        // Capability check: all must be present
-        for (auto &[type, code] : decl.capabilities) {
-          if (!libevdev_has_event_code(dev, type, code)) {
-            match = false;
-            break;
+          if (match) {
+            std::cout << "Matched " << decl.id << " → " << devnode << std::endl;
+            close(fd);
+            globfree(&g);
+            return devnode;
           }
         }
-
-        if (match) {
-          std::cout << "Matched " << decl.id << " → " << devnode << " ("
-                    << (libevdev_get_name(dev) ?: "") << ")\n";
-          libevdev_free(dev);
-          close(fd);
-          return devnode;
-        }
+        close(fd);
       }
-      libevdev_free(dev);
-      close(fd);
     }
+    globfree(&g);
+    return {};
+  } else {
+    glob_t g;
+    if (glob("/dev/input/event*", 0, nullptr, &g) == 0) {
+      for (size_t i = 0; i < g.gl_pathc; i++) {
+        std::string devnode = g.gl_pathv[i];
+        int fd = open(devnode.c_str(), O_RDONLY | O_NONBLOCK);
+        if (fd < 0) {
+          continue;
+        }
+
+        struct libevdev *dev = nullptr;
+        if (libevdev_new_from_fd(fd, &dev) == 0) {
+          bool match = true;
+          if (decl.bus && libevdev_get_id_bustype(dev) != decl.bus) {
+            match = false;
+          }
+          if (decl.vendor && libevdev_get_id_vendor(dev) != decl.vendor) {
+            match = false;
+          }
+          if (decl.product && libevdev_get_id_product(dev) != decl.product) {
+            match = false;
+          }
+          if (!decl.name.empty() && decl.name != (libevdev_get_name(dev) ?: "")) {
+            match = false;
+          }
+          if (!decl.phys.empty() && decl.phys != (libevdev_get_phys(dev) ?: "")) {
+            match = false;
+          }
+          if (!decl.uniq.empty() && decl.uniq != (libevdev_get_uniq(dev) ?: "")) {
+            match = false;
+          }
+
+          for (auto &[type, code] : decl.capabilities) {
+            if (!libevdev_has_event_code(dev, type, code)) {
+              match = false;
+              break;
+            }
+          }
+
+          if (match) {
+            std::cout << "Matched " << decl.id << " → " << devnode << " ("
+                      << (libevdev_get_name(dev) ?: "") << ")\n";
+            libevdev_free(dev);
+            close(fd);
+            globfree(&g);
+            return devnode;
+          }
+        }
+        libevdev_free(dev);
+        close(fd);
+      }
+    }
+    globfree(&g);
     return {};
   }
 }
