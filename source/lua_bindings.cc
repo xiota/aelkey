@@ -143,7 +143,33 @@ int lua_tick(lua_State *L) {
     }
     return 0;
   }
-  // ms > 0 → create new timerfd
+
+  // ms > 0 → stop any existing timer for this callback, then create new timerfd
+  for (auto it = tick_callbacks.begin(); it != tick_callbacks.end();) {
+    auto &existing = it->second;
+    bool match = false;
+    if (cb.is_function && existing.is_function) {
+      lua_rawgeti(L, LUA_REGISTRYINDEX, existing.ref);
+      lua_rawgeti(L, LUA_REGISTRYINDEX, cb.ref);
+      match = lua_rawequal(L, -1, -2);
+      lua_pop(L, 2);
+    } else if (!cb.is_function && !existing.is_function) {
+      match = (existing.name == cb.name);
+    }
+    if (match) {
+      int fd = it->first;
+      epoll_remove_fd(fd);
+      close(fd);
+      if (existing.is_function && existing.ref != LUA_NOREF) {
+        luaL_unref(L, LUA_REGISTRYINDEX, existing.ref);
+      }
+      it = tick_callbacks.erase(it);
+    } else {
+      ++it;
+    }
+  }
+
+  // if we created a temporary ref for cb, keep it for the new timer
   int fd = timerfd_create(CLOCK_MONOTONIC, TFD_NONBLOCK);
   if (fd < 0) {
     perror("timerfd_create");

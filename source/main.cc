@@ -270,139 +270,137 @@ int main(int argc, char **argv) {
           continue;  // handled tick
         }
 
-        {
-          // Input device event
-          // If the kernel signaled a hangup or error, proactively cleanup this fd.
-          // Also skip processing if the fd isn't EPOLLIN (defensive).
-          if ((events[i].events & EPOLLIN) == 0 &&
-              (events[i].events & (EPOLLHUP | EPOLLERR)) == 0) {
-            continue;
+        // Input device event
+        // If the kernel signaled a hangup or error, proactively cleanup this fd.
+        // Also skip processing if the fd isn't EPOLLIN (defensive).
+        if ((events[i].events & EPOLLIN) == 0 &&
+            (events[i].events & (EPOLLHUP | EPOLLERR)) == 0) {
+          continue;
+        }
+        if ((events[i].events & (EPOLLHUP | EPOLLERR)) != 0) {
+          auto it_fd = devnode_to_fd.begin();
+          // Find devnode for this fd (reverse lookup).
+          for (; it_fd != devnode_to_fd.end(); ++it_fd) {
+            if (it_fd->second == fd_ready) {
+              break;
+            }
           }
-          if ((events[i].events & (EPOLLHUP | EPOLLERR)) != 0) {
-            auto it_fd = devnode_to_fd.begin();
-            // Find devnode for this fd (reverse lookup).
-            for (; it_fd != devnode_to_fd.end(); ++it_fd) {
-              if (it_fd->second == fd_ready) {
-                break;
-              }
-            }
-            // Remove from epoll and maps safely.
-            if (epoll_ctl(epfd, EPOLL_CTL_DEL, fd_ready, nullptr) < 0) {
-              perror("epoll_ctl EPOLL_CTL_DEL (HUP/ERR)");
-            }
-            auto im = input_map.find(fd_ready);
-            if (im != input_map.end()) {
-              auto &ctx = im->second;
-              if (ctx.idev) {
-                libevdev_grab(ctx.idev, LIBEVDEV_UNGRAB);
-                libevdev_free(ctx.idev);
-              }
-              input_map.erase(im);
-            }
-            frames.erase(fd_ready);
-            close(fd_ready);
-            if (it_fd != devnode_to_fd.end()) {
-              devnode_to_fd.erase(it_fd);
-            }
-            continue;
+          // Remove from epoll and maps safely.
+          if (epoll_ctl(epfd, EPOLL_CTL_DEL, fd_ready, nullptr) < 0) {
+            perror("epoll_ctl EPOLL_CTL_DEL (HUP/ERR)");
           }
-
-          auto it_map = input_map.find(fd_ready);
-          if (it_map == input_map.end()) {
-            // fd was removed; ignore spurious events
-            continue;
+          auto im = input_map.find(fd_ready);
+          if (im != input_map.end()) {
+            auto &ctx = im->second;
+            if (ctx.idev) {
+              libevdev_grab(ctx.idev, LIBEVDEV_UNGRAB);
+              libevdev_free(ctx.idev);
+            }
+            input_map.erase(im);
           }
-          auto &ctx = it_map->second;
+          frames.erase(fd_ready);
+          close(fd_ready);
+          if (it_fd != devnode_to_fd.end()) {
+            devnode_to_fd.erase(it_fd);
+          }
+          continue;
+        }
 
-          if (ctx.decl.kind == "hidraw") {
-            uint8_t buf[64];
-            ssize_t r = read(fd_ready, buf, sizeof(buf));
-            if (r > 0 && !ctx.decl.callback.empty()) {
-              lua_getglobal(L, ctx.decl.callback.c_str());
-              if (lua_isfunction(L, -1)) {
-                lua_newtable(L);
-                lua_pushstring(L, "device");
-                lua_pushstring(L, ctx.decl.id.c_str());
-                lua_settable(L, -3);
+        auto it_map = input_map.find(fd_ready);
+        if (it_map == input_map.end()) {
+          // fd was removed; ignore spurious events
+          continue;
+        }
+        auto &ctx = it_map->second;
 
-                lua_pushstring(L, "report");
-                lua_pushlstring(L, (const char *)buf, r);
-                lua_settable(L, -3);
+        if (ctx.decl.kind == "hidraw") {
+          uint8_t buf[64];
+          ssize_t r = read(fd_ready, buf, sizeof(buf));
+          if (r > 0 && !ctx.decl.callback.empty()) {
+            lua_getglobal(L, ctx.decl.callback.c_str());
+            if (lua_isfunction(L, -1)) {
+              lua_newtable(L);
+              lua_pushstring(L, "device");
+              lua_pushstring(L, ctx.decl.id.c_str());
+              lua_settable(L, -3);
 
-                PROFILE_CALL("Lua hidraw", {
-                  if (lua_pcall(L, 1, 0, 0) != LUA_OK) {
-                    std::cerr << "Lua hidraw callback error: " << lua_tostring(L, -1)
-                              << std::endl;
-                    lua_pop(L, 1);
-                  }
-                });
-              } else {
-                lua_pop(L, 1);
-              }
-            }
-          } else {
-            // default: evdev
-            if (!ctx.idev) {
-              continue;
-            }
-            struct input_event ev;
-            auto fit = frames.find(fd_ready);
-            if (fit == frames.end()) {
-              continue;
-            }
-            auto &frame = fit->second;
-            while (libevdev_next_event(ctx.idev, LIBEVDEV_READ_FLAG_NORMAL, &ev) ==
-                   LIBEVDEV_READ_STATUS_SUCCESS) {
-              frame.push_back(ev);
-              if (ev.type == EV_SYN && ev.code == SYN_REPORT) {
-                if (!ctx.decl.callback.empty()) {
-                  lua_getglobal(L, ctx.decl.callback.c_str());
-                  if (lua_isfunction(L, -1)) {
-                    lua_newtable(L);
-                    for (size_t j = 0; j < frame.size(); ++j) {
-                      const auto &fev = frame[j];
-                      lua_pushinteger(L, (int)j + 1);
-                      lua_newtable(L);
+              lua_pushstring(L, "report");
+              lua_pushlstring(L, (const char *)buf, r);
+              lua_settable(L, -3);
 
-                      lua_pushstring(L, "device");
-                      lua_pushstring(L, ctx.decl.id.c_str());
-                      lua_settable(L, -3);
-
-                      lua_pushstring(L, "type");
-                      lua_pushinteger(L, fev.type);
-                      lua_settable(L, -3);
-
-                      lua_pushstring(L, "type_name");
-                      lua_pushstring(L, libevdev_event_type_get_name(fev.type));
-                      lua_settable(L, -3);
-
-                      lua_pushstring(L, "code");
-                      lua_pushinteger(L, fev.code);
-                      lua_settable(L, -3);
-
-                      lua_pushstring(L, "code_name");
-                      lua_pushstring(L, libevdev_event_code_get_name(fev.type, fev.code));
-                      lua_settable(L, -3);
-
-                      lua_pushstring(L, "value");
-                      lua_pushinteger(L, fev.value);
-                      lua_settable(L, -3);
-
-                      lua_settable(L, -3);
-                    }
-                    PROFILE_CALL("Lua evdev", {
-                      if (lua_pcall(L, 1, 0, 0) != 0) {
-                        std::cerr << "Lua callback error (" << ctx.decl.id
-                                  << "): " << lua_tostring(L, -1) << std::endl;
-                        lua_pop(L, 1);
-                      }
-                    });
-                  } else {
-                    lua_pop(L, 1);
-                  }
+              PROFILE_CALL("Lua hidraw", {
+                if (lua_pcall(L, 1, 0, 0) != LUA_OK) {
+                  std::cerr << "Lua hidraw callback error: " << lua_tostring(L, -1)
+                            << std::endl;
+                  lua_pop(L, 1);
                 }
-                frame.clear();
+              });
+            } else {
+              lua_pop(L, 1);
+            }
+          }
+        } else {
+          // default: evdev
+          if (!ctx.idev) {
+            continue;
+          }
+          struct input_event ev;
+          auto fit = frames.find(fd_ready);
+          if (fit == frames.end()) {
+            continue;
+          }
+          auto &frame = fit->second;
+          while (libevdev_next_event(ctx.idev, LIBEVDEV_READ_FLAG_NORMAL, &ev) ==
+                 LIBEVDEV_READ_STATUS_SUCCESS) {
+            frame.push_back(ev);
+            if (ev.type == EV_SYN && ev.code == SYN_REPORT) {
+              if (!ctx.decl.callback.empty()) {
+                lua_getglobal(L, ctx.decl.callback.c_str());
+                if (lua_isfunction(L, -1)) {
+                  lua_newtable(L);
+                  for (size_t j = 0; j < frame.size(); ++j) {
+                    const auto &fev = frame[j];
+                    lua_pushinteger(L, (int)j + 1);
+                    lua_newtable(L);
+
+                    lua_pushstring(L, "device");
+                    lua_pushstring(L, ctx.decl.id.c_str());
+                    lua_settable(L, -3);
+
+                    lua_pushstring(L, "type");
+                    lua_pushinteger(L, fev.type);
+                    lua_settable(L, -3);
+
+                    lua_pushstring(L, "type_name");
+                    lua_pushstring(L, libevdev_event_type_get_name(fev.type));
+                    lua_settable(L, -3);
+
+                    lua_pushstring(L, "code");
+                    lua_pushinteger(L, fev.code);
+                    lua_settable(L, -3);
+
+                    lua_pushstring(L, "code_name");
+                    lua_pushstring(L, libevdev_event_code_get_name(fev.type, fev.code));
+                    lua_settable(L, -3);
+
+                    lua_pushstring(L, "value");
+                    lua_pushinteger(L, fev.value);
+                    lua_settable(L, -3);
+
+                    lua_settable(L, -3);
+                  }
+                  PROFILE_CALL("Lua evdev", {
+                    if (lua_pcall(L, 1, 0, 0) != 0) {
+                      std::cerr << "Lua callback error (" << ctx.decl.id
+                                << "): " << lua_tostring(L, -1) << std::endl;
+                      lua_pop(L, 1);
+                    }
+                  });
+                } else {
+                  lua_pop(L, 1);
+                }
               }
+              frame.clear();
             }
           }
         }
