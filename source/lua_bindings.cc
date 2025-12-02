@@ -1,5 +1,6 @@
 #include "lua_bindings.h"
 
+#include <filesystem>
 #include <iostream>
 #include <string>
 #include <unordered_map>
@@ -211,12 +212,33 @@ int lua_tick(lua_State *L) {
   return 0;
 }
 
+void set_script_path(lua_State *L, const std::filesystem::path &script) {
+  std::filesystem::path abs_script = std::filesystem::absolute(script);
+  std::string parent = abs_script.parent_path().string();
+
+  std::string new_entry = parent + "/?.lua;" + parent + "/?/init.lua;";
+
+  lua_getglobal(L, "package");
+  lua_getfield(L, -1, "path");
+  const char *oldpath = lua_tostring(L, -1);
+  std::string path = oldpath ? oldpath : "";
+
+  path = new_entry + path;
+
+  lua_pop(L, 1);
+  lua_pushstring(L, path.c_str());
+  lua_setfield(L, -2, "path");
+  lua_pop(L, 1);
+}
+
 void register_lua_bindings(lua_State *L) {
   lua_register(L, "emit", lua_emit);
   lua_register(L, "syn_report", lua_syn_report);
   lua_register(L, "tick", lua_tick);
 
   const char *custom_code = R"(
+package.path = package.path:gsub("^%./%?%.lua;", "")
+
 function dump_events(events)
   for _, ev in ipairs(events) do
     print(string.format(

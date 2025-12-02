@@ -38,7 +38,7 @@ int main(int argc, char **argv) {
   CLI11_PARSE(app, argc, argv);
 
   // --- Collect Lua scripts ---
-  std::vector<std::string> lua_scripts;
+  std::vector<std::filesystem::path> lua_scripts;
 
   if (paths.empty()) {
     paths.push_back("/etc/aelkey");
@@ -51,11 +51,11 @@ int main(int argc, char **argv) {
   for (const auto &p : paths) {
     std::filesystem::path path(p);
     if (is_lua_file(path)) {
-      lua_scripts.push_back(path.string());
+      lua_scripts.push_back(path);
     } else if (std::filesystem::is_directory(path)) {
       for (const auto &entry : std::filesystem::directory_iterator(path)) {
         if (is_lua_file(entry.path())) {
-          lua_scripts.push_back(entry.path().string());
+          lua_scripts.push_back(entry.path());
         }
       }
     }
@@ -67,9 +67,12 @@ int main(int argc, char **argv) {
   register_lua_bindings(L);
 
   if (!lua_scripts.empty()) {
-    const std::string &first_script = lua_scripts.front();
+    const std::filesystem::path &first_script = lua_scripts.front();
     std::cout << "Running Lua script: " << first_script << std::endl;
-    if (luaL_dofile(L, first_script.c_str())) {
+
+    set_script_path(L, first_script);
+
+    if (luaL_dofile(L, first_script.string().c_str())) {
       std::cerr << "Lua error: " << lua_tostring(L, -1) << std::endl;
       lua_pop(L, 1);
     }
