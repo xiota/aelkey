@@ -216,17 +216,29 @@ void register_lua_bindings(lua_State *L) {
   lua_register(L, "syn_report", lua_syn_report);
   lua_register(L, "tick", lua_tick);
 
-  const char *dump_events_code = R"(
+  const char *custom_code = R"(
 function dump_events(events)
   for _, ev in ipairs(events) do
-    print(string.format("device=%s type=%s code=%s value=%d",
-                        tostring(ev.device),
-                        tostring(ev.type_name),
-                        tostring(ev.code_name),
-                        tonumber(ev.value or -1)))
+    print(string.format(
+      "device=%s type=%s code=%s value=%d",
+      tostring(ev.device),
+      tostring(ev.type_name),
+      tostring(ev.code_name),
+      tonumber(ev.value or -1)
+    ))
   end
+end
+
+function dump_raw(ev)
+  local data = ev.report
+  local len = #data
+  io.write(string.format("hidraw report (%d bytes):", len))
+  for i = 1, len do
+    io.write(string.format(" %02X", string.byte(data, i)))
+  end
+  io.write("\n")
 end
 )";
 
-  luaL_dostring(L, dump_events_code);
+  luaL_dostring(L, custom_code);
 }
