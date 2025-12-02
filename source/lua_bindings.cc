@@ -127,8 +127,16 @@ int lua_tick(lua_State *L) {
     // Stop just this callback
     for (auto it = tick_callbacks.begin(); it != tick_callbacks.end();) {
       auto &existing = it->second;
-      bool match = (cb.is_function && existing.is_function && existing.ref == cb.ref) ||
-                   (!cb.is_function && !existing.is_function && existing.name == cb.name);
+      bool match = false;
+      if (cb.is_function && existing.is_function) {
+        // Compare actual function values, not registry reference IDs
+        lua_rawgeti(L, LUA_REGISTRYINDEX, existing.ref);
+        lua_rawgeti(L, LUA_REGISTRYINDEX, cb.ref);
+        match = lua_rawequal(L, -1, -2);
+        lua_pop(L, 2);
+      } else if (!cb.is_function && !existing.is_function) {
+        match = (existing.name == cb.name);
+      }
       if (match) {
         int fd = it->first;
         epoll_remove_fd(fd);
@@ -140,6 +148,10 @@ int lua_tick(lua_State *L) {
       } else {
         ++it;
       }
+    }
+    // Unref the temporary cancel reference to avoid leaking
+    if (cb.is_function && cb.ref != LUA_NOREF) {
+      luaL_unref(L, LUA_REGISTRYINDEX, cb.ref);
     }
     return 0;
   }
