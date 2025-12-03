@@ -23,8 +23,8 @@ InputDecl parse_input(lua_State *L, int index) {
 
     if (key == "id" && lua_isstring(L, -1)) {
       decl.id = lua_tostring(L, -1);
-    } else if (key == "kind" && lua_isstring(L, -1)) {
-      decl.kind = lua_tostring(L, -1);
+    } else if (key == "type" && lua_isstring(L, -1)) {
+      decl.type = lua_tostring(L, -1);
     } else if (key == "writable" && lua_isboolean(L, -1)) {
       decl.writable = lua_toboolean(L, -1);
     } else if (key == "grab" && lua_isboolean(L, -1)) {
@@ -98,7 +98,7 @@ OutputDecl parse_output(lua_State *L, int index) {
 }
 
 std::string match_device(const InputDecl &decl) {
-  if (decl.kind == "hidraw") {
+  if (decl.type == "hidraw") {
     glob_t g;
     if (glob("/dev/hidraw*", 0, nullptr, &g) == 0) {
       for (size_t i = 0; i < g.gl_pathc; i++) {
@@ -218,7 +218,7 @@ int attach_device(
   InputCtx ctx;
   ctx.decl = in;
 
-  if (in.kind == "hidraw") {
+  if (in.type == "hidraw") {
     // hidraw: no libevdev init
     std::cout << "Attached hidraw: " << devnode << std::endl;
   } else {

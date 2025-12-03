@@ -443,7 +443,7 @@ int lua_run(lua_State *L) {
       }
 
       InputCtx &ctx = it->second;
-      if (ctx.decl.kind == "hidraw") {
+      if (ctx.decl.type == "hidraw") {
         dispatch_hidraw(L, fd_ready, ctx);
       } else {
         dispatch_evdev(L, fd_ready, ctx);

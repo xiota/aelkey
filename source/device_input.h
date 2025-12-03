@@ -11,7 +11,7 @@
 
 struct InputDecl {
   std::string id;
-  std::string kind;
+  std::string type;
   int vendor = 0;
   int product = 0;
   int bus = 0;
