@@ -3,6 +3,7 @@
 #include <string>
 
 #include <libevdev/libevdev-uinput.h>
+#include <lua.hpp>
 
 struct OutputDecl {
   std::string id;
@@ -11,3 +12,4 @@ struct OutputDecl {
 };
 
 libevdev_uinput *create_output_device(const OutputDecl &out);
+void parse_outputs_from_lua(lua_State *L);

@@ -7,7 +7,6 @@ project(
 )
 
 # depends
-cli11_dep = dependency('CLI11')
 libevdev_dep = dependency('libevdev')
 libudev_dep  = dependency('libudev')
 luajit_dep   = dependency('luajit')
@@ -23,21 +22,22 @@ configure_file(
 
 # source
 src_files = files(
+  'source/aelkey.cc',
+  'source/aelkey_state.cc',
   'source/device_input.cc',
   'source/device_output.cc',
   'source/lua_bindings.cc',
-  'source/main.cc',
 )
 
-executable(
-  'aelkey',
+shared_library(
+  meson.project_name(),
   src_files,
   dependencies: [
-    cli11_dep,
     libevdev_dep,
     libudev_dep,
     luajit_dep
   ],
+  name_prefix: '',
   install: true,
-  install_dir: get_option('bindir'),
+  install_dir: get_option('libdir') / 'lua/5.1'
 )

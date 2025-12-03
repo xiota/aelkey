@@ -11,8 +11,7 @@ struct TickCallback {
   std::string name;
 };
 
-// Register all Lua functions with the given state
-void register_lua_bindings(lua_State *L);
-
-// Add script parent to module search paths
-void set_script_path(lua_State *L, const std::filesystem::path &script);
+int lua_run(lua_State *L);
+int lua_emit(lua_State *L);
+int lua_syn_report(lua_State *L);
+int lua_tick(lua_State *L);

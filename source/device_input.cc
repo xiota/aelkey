@@ -8,9 +8,12 @@
 #include <libevdev/libevdev-uinput.h>
 #include <libevdev/libevdev.h>
 #include <linux/hidraw.h>
+#include <lua.hpp>
 #include <sys/epoll.h>
 #include <sys/ioctl.h>
 #include <unistd.h>
+
+#include "aelkey_state.h"
 
 InputDecl parse_input(lua_State *L, int index) {
   InputDecl decl;
@@ -227,7 +230,7 @@ int attach_device(
       return -1;
     }
     ctx.idev = idev;
-    frames[fd] = {};
+    aelkey_state.frames[fd] = {};
     std::cout << "Attached evdev: " << libevdev_get_name(idev) << std::endl;
 
     if (in.grab) {
@@ -240,7 +243,7 @@ int attach_device(
     }
   }
 
-  input_map[fd] = ctx;
+  aelkey_state.input_map[fd] = ctx;
 
   struct epoll_event evreg{};
   evreg.events = EPOLLIN;
@@ -251,11 +254,33 @@ int attach_device(
       libevdev_grab(ctx.idev, LIBEVDEV_UNGRAB);
       libevdev_free(ctx.idev);
     }
-    input_map.erase(fd);
-    frames.erase(fd);
+    aelkey_state.input_map.erase(fd);
+    aelkey_state.frames.erase(fd);
     close(fd);
     return -1;
   }
 
   return fd;
+}
+
+void parse_inputs_from_lua(lua_State *L) {
+  aelkey_state.input_decls.clear();
+
+  lua_getglobal(L, "inputs");
+  if (!lua_istable(L, -1)) {
+    lua_pop(L, 1);
+    return;
+  }
+
+  lua_pushnil(L);
+  while (lua_next(L, -2) != 0) {
+    if (lua_istable(L, -1)) {
+      InputDecl decl = parse_input(L, lua_gettop(L));
+      if (!decl.id.empty()) {
+        aelkey_state.input_decls.push_back(decl);
+      }
+    }
+    lua_pop(L, 1);  // pop value, keep key
+  }
+  lua_pop(L, 1);  // pop inputs table
 }

@@ -44,3 +44,5 @@ int attach_device(
     std::unordered_map<int, std::vector<struct input_event>> &frames,
     int epfd
 );
+
+void parse_inputs_from_lua(lua_State *L);

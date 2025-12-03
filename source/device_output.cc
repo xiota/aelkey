@@ -3,6 +3,9 @@
 #include <iostream>
 
 #include <libevdev/libevdev.h>
+#include <lua.hpp>
+
+#include "aelkey_state.h"
 
 static constexpr int keyboard_keys[] = {
   // Letters
@@ -287,4 +290,26 @@ libevdev_uinput *create_output_device(const OutputDecl &out) {
 
   libevdev_free(dev);
   return uidev;
+}
+
+void parse_outputs_from_lua(lua_State *L) {
+  aelkey_state.output_decls.clear();
+
+  lua_getglobal(L, "outputs");
+  if (!lua_istable(L, -1)) {
+    lua_pop(L, 1);
+    return;
+  }
+
+  lua_pushnil(L);
+  while (lua_next(L, -2) != 0) {
+    if (lua_istable(L, -1)) {
+      OutputDecl decl = parse_output(L, lua_gettop(L));
+      if (!decl.id.empty()) {
+        aelkey_state.output_decls.push_back(decl);
+      }
+    }
+    lua_pop(L, 1);  // pop value, keep key
+  }
+  lua_pop(L, 1);  // pop outputs table
 }
