@@ -1,6 +1,7 @@
 #include <lua.hpp>
 
 #include "aelkey_core.h"
+#include "aelkey_loop.h"
 #include "luacompat.h"
 
 extern "C" int luaopen_aelkey(lua_State *L) {
