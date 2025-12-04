@@ -313,3 +313,18 @@ void parse_outputs_from_lua(lua_State *L) {
   }
   lua_pop(L, 1);  // pop outputs table
 }
+
+void create_outputs_from_decls() {
+  for (auto &out : aelkey_state.output_decls) {
+    if (out.id.empty()) {
+      continue;
+    }
+    if (aelkey_state.uinput_devices.count(out.id)) {
+      continue;
+    }
+    libevdev_uinput *uidev = create_output_device(out);
+    if (uidev) {
+      aelkey_state.uinput_devices[out.id] = uidev;
+    }
+  }
+}

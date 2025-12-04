@@ -1,4 +1,4 @@
-#include "lua_bindings.h"
+#include "aelkey_core.h"
 
 #include <cstring>
 #include <filesystem>
@@ -17,7 +17,7 @@
 struct udev *g_udev = nullptr;
 struct udev_monitor *g_mon = nullptr;
 
-void create_outputs_from_decls() {
+static void create_outputs_from_decls() {
   for (auto &out : aelkey_state.output_decls) {
     if (out.id.empty()) {
       continue;
@@ -32,7 +32,7 @@ void create_outputs_from_decls() {
   }
 }
 
-void attach_inputs_from_decls() {
+static void attach_inputs_from_decls() {
   for (auto &decl : aelkey_state.input_decls) {
     std::string devnode = match_device(decl);
     if (devnode.empty()) {
@@ -92,7 +92,8 @@ static int init_impl(lua_State *L) {
 
   return 0;
 }
-void handle_udev_remove(lua_State *L, const std::string &devnode) {
+
+static void handle_udev_remove(lua_State *L, const std::string &devnode) {
   if (devnode.empty()) {
     return;
   }
@@ -134,7 +135,7 @@ void handle_udev_remove(lua_State *L, const std::string &devnode) {
   aelkey_state.devnode_to_fd.erase(it);
 }
 
-void handle_udev_add(lua_State *L, const std::string &devnode) {
+static void handle_udev_add(lua_State *L, const std::string &devnode) {
   if (devnode.empty()) {
     return;
   }
@@ -174,7 +175,7 @@ void handle_udev_add(lua_State *L, const std::string &devnode) {
   }
 }
 
-void dispatch_tick(lua_State *L, int fd_ready) {
+static void dispatch_tick(lua_State *L, int fd_ready) {
   auto it_tick = aelkey_state.tick_callbacks.find(fd_ready);
   if (it_tick == aelkey_state.tick_callbacks.end()) {
     return;
@@ -208,7 +209,7 @@ void dispatch_tick(lua_State *L, int fd_ready) {
   }
 }
 
-void cleanup_fd_on_hup_err(lua_State *L, int fd_ready) {
+static void cleanup_fd_on_hup_err(lua_State *L, int fd_ready) {
   auto it_fd = aelkey_state.devnode_to_fd.begin();
   for (; it_fd != aelkey_state.devnode_to_fd.end(); ++it_fd) {
     if (it_fd->second == fd_ready) {
@@ -249,7 +250,7 @@ void cleanup_fd_on_hup_err(lua_State *L, int fd_ready) {
   }
 }
 
-void dispatch_hidraw(lua_State *L, int fd_ready, InputCtx &ctx) {
+static void dispatch_hidraw(lua_State *L, int fd_ready, InputCtx &ctx) {
   uint8_t buf[64];
   ssize_t r = read(fd_ready, buf, sizeof(buf));
   if (r > 0 && !ctx.decl.callback_events.empty()) {
@@ -275,7 +276,7 @@ void dispatch_hidraw(lua_State *L, int fd_ready, InputCtx &ctx) {
   }
 }
 
-void dispatch_evdev(lua_State *L, int fd_ready, InputCtx &ctx) {
+static void dispatch_evdev(lua_State *L, int fd_ready, InputCtx &ctx) {
   if (!ctx.idev) {
     return;
   }
@@ -490,7 +491,7 @@ int lua_run(lua_State *L) {
   return 1;
 }
 
-void epoll_remove_fd(int fd) {
+static void epoll_remove_fd(int fd) {
   if (fd >= 0) {
     if (epoll_ctl(aelkey_state.epfd, EPOLL_CTL_DEL, fd, nullptr) < 0) {
       perror("epoll_ctl EPOLL_CTL_DEL (tick)");

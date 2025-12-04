@@ -23,10 +23,10 @@ configure_file(
 # source
 src_files = files(
   'source/aelkey.cc',
+  'source/aelkey_core.cc',
   'source/aelkey_state.cc',
   'source/device_input.cc',
   'source/device_output.cc',
-  'source/lua_bindings.cc',
 )
 
 shared_library(

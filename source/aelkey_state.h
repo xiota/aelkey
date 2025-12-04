@@ -6,8 +6,8 @@
 
 #include <libevdev/libevdev-uinput.h>
 
+#include "aelkey_core.h"
 #include "device_input.h"
-#include "lua_bindings.h"
 
 struct AelkeyState {
   int epfd = -1;
