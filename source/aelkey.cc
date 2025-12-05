@@ -3,6 +3,7 @@
 #include "aelkey_bit.h"
 #include "aelkey_core.h"
 #include "aelkey_loop.h"
+#include "aelkey_util.h"
 #include "luacompat.h"
 
 extern "C" int luaopen_aelkey(lua_State *L) {
@@ -22,36 +23,9 @@ extern "C" int luaopen_aelkey(lua_State *L) {
   luaopen_aelkey_bit(L);
   lua_setfield(L, -2, "bit");
 
-  const char *custom_code = R"(
-local M = ...
-function M.dump_events(events)
-  print(string.format("events: %d", #events))
-  for i, ev in ipairs(events) do
-    print(string.format(
-      "[%d] device=%s type=%s code=%s value=%s",
-      i, ev.device, ev.type, ev.code, ev.value
-    ))
-  end
-end
-
-function M.dump_raw(ev)
-  local data = ev.report
-  local len = #data
-  io.write(string.format("hidraw report (%d bytes):", len))
-  for i = 1, len do
-    io.write(string.format(" %02X", string.byte(data, i)))
-  end
-  io.write("\n")
-end
-)";
-
-  // inject custom code
-  if (luaL_loadstring(L, custom_code) == 0) {
-    lua_pushvalue(L, -2);
-    lua_call(L, 1, 0);
-  } else {
-    lua_error(L);
-  }
+  // util submodule
+  luaopen_aelkey_util(L);
+  lua_setfield(L, -2, "util");
 
   return 1;
 }
