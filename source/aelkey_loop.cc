@@ -363,6 +363,11 @@ static void dispatch_evdev(lua_State *L, int fd_ready, InputCtx &ctx) {
   }
 }
 
+int lua_stop(lua_State *L) {
+  aelkey_state.should_stop = true;
+  return 0;
+}
+
 int lua_run(lua_State *L) {
   // 1) Ensure init is done (epoll + udev monitor)
   if (aelkey_state.epfd < 0) {

@@ -11,6 +11,7 @@ extern "C" int luaopen_aelkey(lua_State *L) {
   static const luaL_Reg funcs[] = {
     {"emit", lua_emit},
     {"run", lua_run},
+    {"stop", lua_stop},
     {"syn_report", lua_syn_report},
     {"tick", lua_tick},
     {nullptr, nullptr}
