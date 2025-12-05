@@ -1,5 +1,6 @@
 #include <lua.hpp>
 
+#include "aelkey_bit.h"
 #include "aelkey_core.h"
 #include "aelkey_loop.h"
 #include "luacompat.h"
@@ -16,6 +17,10 @@ extern "C" int luaopen_aelkey(lua_State *L) {
   // clang-format on
 
   luaL_newlib(L, funcs);
+
+  // bit submodule
+  luaopen_aelkey_bit(L);
+  lua_setfield(L, -2, "bit");
 
   const char *custom_code = R"(
 local M = ...
