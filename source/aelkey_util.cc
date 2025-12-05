@@ -2,9 +2,11 @@
 
 #include <array>
 #include <cstdint>
+#include <cstring>
 #include <string>
 
 #include <lua.hpp>
+#include <time.h>
 
 #include "luacompat.h"
 
@@ -52,10 +54,29 @@ static int lua_crc32(lua_State *L) {
   return 1;
 }
 
+static int lua_now(lua_State *L) {
+  const char *res = luaL_optstring(L, 1, "ms");  // default to ms
+  struct timespec ts;
+  clock_gettime(CLOCK_MONOTONIC, &ts);
+
+  uint64_t val;
+  if (strcmp(res, "us") == 0) {
+    val = ts.tv_sec * 1000000ULL + ts.tv_nsec / 1000ULL;
+  } else if (strcmp(res, "ns") == 0) {
+    val = ts.tv_sec * 1000000000ULL + ts.tv_nsec;
+  } else {  // default ms
+    val = ts.tv_sec * 1000ULL + ts.tv_nsec / 1000000ULL;
+  }
+
+  lua_pushinteger(L, val);
+  return 1;
+}
+
 extern "C" int luaopen_aelkey_util(lua_State *L) {
   // clang-format off
   static const luaL_Reg funcs[] = {
     {"crc32", lua_crc32},
+    {"now", lua_now},
     {nullptr, nullptr}
   };
   // clang-format on

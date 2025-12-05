@@ -1,7 +1,9 @@
 #include "aelkey_core.h"
 
 #include <ctime>
+
 #include <libevdev/libevdev-uinput.h>
+#include <lua.hpp>
 #include <sys/epoll.h>
 #include <sys/timerfd.h>
 #include <unistd.h>
