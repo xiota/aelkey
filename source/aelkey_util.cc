@@ -1,17 +1,54 @@
 #include "aelkey_util.h"
 
+#include <array>
+#include <cstdint>
 #include <string>
 
 #include <lua.hpp>
 
 #include "luacompat.h"
 
+// Compute one CRC32 entry
+constexpr uint32_t crc32_entry(int i) {
+  uint32_t c = static_cast<uint32_t>(i);
+  for (int j = 0; j < 8; ++j) {
+    if (c & 1) {
+      c = 0xEDB88320u ^ (c >> 1);
+    } else {
+      c >>= 1;
+    }
+  }
+  return c;
+}
+
+// Generate full table at compile time
+constexpr std::array<uint32_t, 256> make_crc32_table() {
+  std::array<uint32_t, 256> table{};
+  for (int i = 0; i < 256; ++i) {
+    table[i] = crc32_entry(i);
+  }
+  return table;
+}
+
+constexpr auto crc32_table = make_crc32_table();
+
+uint32_t crc32(const uint8_t *data, size_t len, uint32_t seed = 0) {
+  uint32_t crc = ~seed;
+  for (size_t i = 0; i < len; ++i) {
+    crc = (crc >> 8) ^ crc32_table[(crc ^ data[i]) & 0xFF];
+  }
+  return ~crc;
+}
+
 // crc32(data, seed)
 static int lua_crc32(lua_State *L) {
   size_t len;
   const char *data = luaL_checklstring(L, 1, &len);
   unsigned int seed = (unsigned int)luaL_optinteger(L, 2, 0);
-  lua_pushinteger(L, seed);
+
+  uint32_t result = crc32(reinterpret_cast<const uint8_t *>(data), len, seed);
+
+  lua_pushinteger(L, result);
   return 1;
 }
 
