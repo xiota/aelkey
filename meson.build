@@ -15,9 +15,18 @@ luajit_dep   = dependency('luajit')
 conf_data = configuration_data()
 conf_data.set('VERSION', '"' + meson.project_version() + '"')
 
-configure_file(
-  output: 'config.h',
-  configuration: conf_data,
+# lua scripts
+fs = import('fs')
+
+lua_util_content  = fs.read(meson.project_source_root() / 'data/aelkey_util.lua')
+
+lua_scripts = configuration_data()
+lua_scripts.set('AELKEY_UTIL_SCRIPT',  lua_util_content.strip())
+
+default_css_h = configure_file(
+  input: 'source/lua_scripts.h.in',
+  output: 'lua_scripts.h',
+  configuration: lua_scripts
 )
 
 # source
