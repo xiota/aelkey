@@ -26,6 +26,7 @@ src_files = files(
   'source/aelkey_bit.cc',
   'source/aelkey_core.cc',
   'source/aelkey_device.cc',
+  'source/aelkey_hid.cc',
   'source/aelkey_loop.cc',
   'source/aelkey_state.cc',
   'source/aelkey_util.cc',

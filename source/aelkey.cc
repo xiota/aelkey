@@ -3,6 +3,7 @@
 #include "aelkey_bit.h"
 #include "aelkey_core.h"
 #include "aelkey_device.h"
+#include "aelkey_hid.h"
 #include "aelkey_loop.h"
 #include "aelkey_util.h"
 #include "luacompat.h"
@@ -28,6 +29,10 @@ extern "C" int luaopen_aelkey(lua_State *L) {
   // bit submodule
   luaopen_aelkey_bit(L);
   lua_setfield(L, -2, "bit");
+
+  // hid submodule
+  luaopen_aelkey_hid(L);
+  lua_setfield(L, -2, "hid");
 
   // util submodule
   luaopen_aelkey_util(L);
