@@ -6,6 +6,7 @@
 #include "aelkey_hid.h"
 #include "aelkey_loop.h"
 #include "aelkey_util.h"
+#include "lua_scripts.h"
 #include "luacompat.h"
 
 extern "C" int luaopen_aelkey(lua_State *L) {
@@ -29,6 +30,14 @@ extern "C" int luaopen_aelkey(lua_State *L) {
   // bit submodule
   luaopen_aelkey_bit(L);
   lua_setfield(L, -2, "bit");
+
+  // click submodule
+  if (luaL_loadstring(L, aelkey_click_script) == LUA_OK) {
+    lua_call(L, 0, 1);
+    lua_setfield(L, -2, "click");  // aelkey.click = module
+  } else {
+    lua_error(L);
+  }
 
   // hid submodule
   luaopen_aelkey_hid(L);
