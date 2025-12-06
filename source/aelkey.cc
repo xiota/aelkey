@@ -2,6 +2,7 @@
 
 #include "aelkey_bit.h"
 #include "aelkey_core.h"
+#include "aelkey_device.h"
 #include "aelkey_loop.h"
 #include "aelkey_util.h"
 #include "luacompat.h"
@@ -14,6 +15,10 @@ extern "C" int luaopen_aelkey(lua_State *L) {
     {"stop", lua_stop},
     {"syn_report", lua_syn_report},
     {"tick", lua_tick},
+
+    {"open_device", lua_open_device},
+    {"close_device", lua_close_device},
+    {"get_device_info", lua_get_device_info},
     {nullptr, nullptr}
   };
   // clang-format on
