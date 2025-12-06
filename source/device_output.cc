@@ -8,51 +8,73 @@
 #include "aelkey_state.h"
 #include "device_capabilities.h"
 
+// Provide sensible max ranges for ABS axes
+// device_output.cc
+
+static const input_absinfo *default_absinfo_for(int code) {
+  static input_absinfo pos_default = { 0, 0, 65535, 0, 0, 0 };
+  static input_absinfo pressure_default = { 0, 0, 65535, 0, 0, 0 };
+  static input_absinfo tilt_default = { 0, -90, 90, 0, 0, 0 };
+  static input_absinfo distance_default = { 0, 0, 255, 0, 0, 0 };
+  static input_absinfo orient_default = { 0, 0, 3, 0, 0, 0 };
+  static input_absinfo wheel_default = { 0, 0, 65535, 0, 0, 0 };
+
+  switch (code) {
+    case ABS_X:
+    case ABS_Y:
+    case ABS_MT_POSITION_X:
+    case ABS_MT_POSITION_Y:
+      return &pos_default;
+    case ABS_PRESSURE:
+    case ABS_MT_PRESSURE:
+      return &pressure_default;
+    case ABS_TILT_X:
+    case ABS_TILT_Y:
+      return &tilt_default;
+    case ABS_DISTANCE:
+      return &distance_default;
+    case ABS_MT_ORIENTATION:
+      return &orient_default;
+    case ABS_WHEEL:
+      return &wheel_default;
+    default:
+      return nullptr;
+  }
+}
+
+static void enable_codes(libevdev *dev, unsigned int type, const auto &codes) {
+  libevdev_enable_event_type(dev, type);
+  for (int code : codes) {
+    const input_absinfo *absinfo = (type == EV_ABS) ? default_absinfo_for(code) : nullptr;
+    libevdev_enable_event_code(dev, type, code, absinfo);
+  }
+}
+
 libevdev_uinput *create_output_device(const OutputDecl &out) {
   struct libevdev *dev = libevdev_new();
   libevdev_set_name(dev, out.name.c_str());
 
   if (out.type == "keyboard") {
-    libevdev_enable_event_type(dev, EV_KEY);
-    for (int code : aelkey::capabilities::keyboard_keys) {
-      libevdev_enable_event_code(dev, EV_KEY, code, nullptr);
-    }
+    enable_codes(dev, EV_KEY, aelkey::capabilities::keyboard_keys);
   } else if (out.type == "consumer") {
-    libevdev_enable_event_type(dev, EV_KEY);
-    for (int code : aelkey::capabilities::consumer_keys) {
-      libevdev_enable_event_code(dev, EV_KEY, code, nullptr);
-    }
-  } else if (out.type == "mouse") {
-    // Buttons
-    libevdev_enable_event_type(dev, EV_KEY);
+    enable_codes(dev, EV_KEY, aelkey::capabilities::consumer_keys);
+  } else if (out.type == "mouse" || out.type == "touchpad") {
+    enable_codes(dev, EV_KEY, aelkey::capabilities::mouse_buttons);
+    enable_codes(dev, EV_REL, aelkey::capabilities::mouse_rel);
 
-    for (int code : aelkey::capabilities::mouse_buttons) {
-      libevdev_enable_event_code(dev, EV_KEY, code, nullptr);
-    }
-
-    // Relative axes
-    libevdev_enable_event_type(dev, EV_REL);
-    for (int code : aelkey::capabilities::mouse_rel) {
-      libevdev_enable_event_code(dev, EV_REL, code, nullptr);
+    if (out.type == "touchpad") {
+      enable_codes(dev, EV_ABS, aelkey::capabilities::touchpad_abs);
     }
   } else if (out.type == "gamepad") {
-    libevdev_enable_event_type(dev, EV_KEY);
-    for (int code : aelkey::capabilities::gamepad_buttons) {
-      libevdev_enable_event_code(dev, EV_KEY, code, nullptr);
-    }
+    enable_codes(dev, EV_KEY, aelkey::capabilities::gamepad_buttons);
+    enable_codes(dev, EV_ABS, aelkey::capabilities::gamepad_abs);
+  } else if (out.type == "touchscreen") {
+    enable_codes(dev, EV_KEY, aelkey::capabilities::touchscreen_keys);
+    enable_codes(dev, EV_ABS, aelkey::capabilities::touchscreen_abs);
 
-    libevdev_enable_event_type(dev, EV_ABS);
-
-    struct input_absinfo abs_default = { 0, -32768, 32767, 0, 0, 0 };
-    struct input_absinfo hat_default = { 0, -1, 1, 0, 0, 0 };
-
-    for (int code : aelkey::capabilities::gamepad_abs) {
-      if (code == ABS_HAT0X || code == ABS_HAT0Y) {
-        libevdev_enable_event_code(dev, EV_ABS, code, &hat_default);
-      } else {
-        libevdev_enable_event_code(dev, EV_ABS, code, &abs_default);
-      }
-    }
+  } else if (out.type == "digitizer") {
+    enable_codes(dev, EV_KEY, aelkey::capabilities::digitizer_keys);
+    enable_codes(dev, EV_ABS, aelkey::capabilities::digitizer_abs);
   }
 
   struct libevdev_uinput *uidev = nullptr;

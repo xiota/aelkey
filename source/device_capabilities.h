@@ -84,6 +84,47 @@ constexpr int gamepad_abs[] = {
   ABS_Z,     ABS_RZ,    // Triggers
   ABS_HAT0X, ABS_HAT0Y  // D-pad
 };
+
+
+constexpr int touchpad_abs[] = {
+  ABS_X, ABS_Y,
+  ABS_MT_SLOT,
+  ABS_MT_POSITION_X, ABS_MT_POSITION_Y,
+  ABS_MT_TRACKING_ID,
+  ABS_MT_PRESSURE,
+  ABS_MT_TOUCH_MAJOR, ABS_MT_TOUCH_MINOR
+};
+
+constexpr int touchscreen_keys[] = {
+  BTN_TOUCH
+};
+
+constexpr int touchscreen_abs[] = {
+  ABS_X, ABS_Y,
+  ABS_MT_SLOT,
+  ABS_MT_POSITION_X, ABS_MT_POSITION_Y,
+  ABS_MT_TRACKING_ID,
+  ABS_MT_PRESSURE,
+  ABS_MT_TOUCH_MAJOR, ABS_MT_TOUCH_MINOR,
+  ABS_MT_ORIENTATION
+};
+
+constexpr int digitizer_keys[] = {
+  BTN_TOOL_PEN,
+  BTN_TOOL_RUBBER,
+  BTN_STYLUS,
+  BTN_STYLUS2,
+  BTN_TOUCH
+};
+
+constexpr int digitizer_abs[] = {
+  ABS_X, ABS_Y,
+  ABS_PRESSURE,
+  ABS_TILT_X, ABS_TILT_Y,
+  ABS_DISTANCE,
+  ABS_WHEEL
+};
+
 // clang-format on
 
 }  // namespace aelkey::capabilities
