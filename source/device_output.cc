@@ -92,6 +92,23 @@ libevdev_uinput *create_output_device(const OutputDecl &out) {
   return uidev;
 }
 
+OutputDecl parse_output(lua_State *L, int index) {
+  OutputDecl decl;
+  lua_pushnil(L);
+  while (lua_next(L, index)) {
+    std::string key = lua_tostring(L, -2);
+    if (key == "id" && lua_isstring(L, -1)) {
+      decl.id = lua_tostring(L, -1);
+    } else if (key == "type" && lua_isstring(L, -1)) {
+      decl.type = lua_tostring(L, -1);
+    } else if (key == "name" && lua_isstring(L, -1)) {
+      decl.name = lua_tostring(L, -1);
+    }
+    lua_pop(L, 1);
+  }
+  return decl;
+}
+
 void parse_outputs_from_lua(lua_State *L) {
   aelkey_state.output_decls.clear();
 

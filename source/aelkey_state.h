@@ -8,6 +8,7 @@
 
 #include "aelkey_core.h"
 #include "device_input.h"
+#include "device_output.h"
 
 struct AelkeyState {
   int epfd = -1;

@@ -7,8 +7,6 @@
 #include <libevdev/libevdev.h>
 #include <lua.hpp>
 
-#include "device_output.h"
-
 struct InputDecl {
   std::string id;
   std::string type;
@@ -32,8 +30,6 @@ struct InputCtx {
 };
 
 InputDecl parse_input(lua_State *L, int index);
-
-OutputDecl parse_output(lua_State *L, int index);
 
 std::string match_device(const InputDecl &decl);
 
