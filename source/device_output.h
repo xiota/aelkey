@@ -9,6 +9,10 @@
 struct OutputDecl {
   std::string id;
   std::string type;
+  int vendor = 0x1234;
+  int product = 0x5678;
+  int bus = 3;
+  int version = 1;
   std::string name;
   std::vector<std::string> capabilities;
 };

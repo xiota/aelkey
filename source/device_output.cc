@@ -129,6 +129,10 @@ void enable_capability(libevdev *dev, const std::string &cap) {
 libevdev_uinput *create_output_device(const OutputDecl &out) {
   struct libevdev *dev = libevdev_new();
   libevdev_set_name(dev, out.name.c_str());
+  libevdev_set_id_bustype(dev, out.bus);
+  libevdev_set_id_vendor(dev, out.vendor);
+  libevdev_set_id_product(dev, out.product);
+  libevdev_set_id_version(dev, out.version);
 
   if (out.type == "keyboard") {
     enable_codes(dev, EV_KEY, aelkey::capabilities::keyboard_keys);
@@ -181,6 +185,21 @@ OutputDecl parse_output(lua_State *L, int index) {
       decl.id = lua_tostring(L, -1);
     } else if (key == "type" && lua_isstring(L, -1)) {
       decl.type = lua_tostring(L, -1);
+    } else if (key == "vendor" && lua_isnumber(L, -1)) {
+      decl.vendor = (int)lua_tointeger(L, -1);
+    } else if (key == "product" && lua_isnumber(L, -1)) {
+      decl.product = (int)lua_tointeger(L, -1);
+    } else if (key == "version" && lua_isnumber(L, -1)) {
+      decl.version = (int)lua_tointeger(L, -1);
+    } else if (key == "bus" && lua_isstring(L, -1)) {
+      std::string busstr = lua_tostring(L, -1);
+      if (busstr == "usb") {
+        decl.bus = BUS_USB;
+      } else if (busstr == "bluetooth") {
+        decl.bus = BUS_BLUETOOTH;
+      } else if (busstr == "pci") {
+        decl.bus = BUS_PCI;
+      }
     } else if (key == "name" && lua_isstring(L, -1)) {
       decl.name = lua_tostring(L, -1);
     } else if (key == "capabilities" && lua_istable(L, -1)) {
