@@ -19,3 +19,17 @@ function M.dump_raw(ev)
   end
   io.write("\n")
 end
+
+function M.dump_table(t, indent)
+  indent = indent or "  "
+  print "{"
+  for k, v in pairs(t) do
+    if type(v) == "table" then
+      print(indent .. tostring(k) .. " = ")
+      print_table(v, indent .. "  ")
+    else
+      print(indent .. tostring(k) .. " = " .. tostring(v))
+    end
+  end
+  print "}"
+end
