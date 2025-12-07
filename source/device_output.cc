@@ -1,6 +1,8 @@
 #include "device_output.h"
 
 #include <iostream>
+#include <string>
+#include <vector>
 
 #include <libevdev/libevdev.h>
 #include <lua.hpp>
@@ -13,30 +15,83 @@
 
 static const input_absinfo *default_absinfo_for(int code) {
   static input_absinfo pos_default = { 0, 0, 65535, 0, 0, 0 };
+  static input_absinfo stick_default = { 0, -32768, 32767, 0, 0, 0 };
+  static input_absinfo trigger_default = { 0, 0, 255, 0, 0, 0 };
   static input_absinfo pressure_default = { 0, 0, 65535, 0, 0, 0 };
   static input_absinfo tilt_default = { 0, -90, 90, 0, 0, 0 };
   static input_absinfo distance_default = { 0, 0, 255, 0, 0, 0 };
   static input_absinfo orient_default = { 0, 0, 3, 0, 0, 0 };
-  static input_absinfo wheel_default = { 0, 0, 65535, 0, 0, 0 };
+  static input_absinfo wheel_default = { 0, -32768, 32767, 0, 0, 0 };
+  static input_absinfo hat_default = { 0, -1, 1, 0, 0, 0 };
+  static input_absinfo mt_default = { 0, 0, 65535, 0, 0, 0 };
+  static input_absinfo misc_default = { 0, 0, 65535, 0, 0, 0 };
 
   switch (code) {
+    // Sticks
     case ABS_X:
     case ABS_Y:
-    case ABS_MT_POSITION_X:
-    case ABS_MT_POSITION_Y:
-      return &pos_default;
+    case ABS_RX:
+    case ABS_RY:
+      return &stick_default;
+
+    // Triggers / pedals
+    case ABS_Z:
+    case ABS_RZ:
+    case ABS_THROTTLE:
+    case ABS_BRAKE:
+    case ABS_GAS:
+    case ABS_RUDDER:
+      return &trigger_default;
+
+    // Pressure / touch
     case ABS_PRESSURE:
     case ABS_MT_PRESSURE:
       return &pressure_default;
+
+    // Tilt
     case ABS_TILT_X:
     case ABS_TILT_Y:
       return &tilt_default;
+
+    // Distance / orientation
     case ABS_DISTANCE:
       return &distance_default;
     case ABS_MT_ORIENTATION:
       return &orient_default;
+
+    // Wheel / steering
     case ABS_WHEEL:
       return &wheel_default;
+
+    // Hats (d‑pad)
+    case ABS_HAT0X:
+    case ABS_HAT0Y:
+    case ABS_HAT1X:
+    case ABS_HAT1Y:
+    case ABS_HAT2X:
+    case ABS_HAT2Y:
+    case ABS_HAT3X:
+    case ABS_HAT3Y:
+      return &hat_default;
+
+    // Multi‑touch positions and slots
+    case ABS_MT_POSITION_X:
+    case ABS_MT_POSITION_Y:
+    case ABS_MT_TOUCH_MAJOR:
+    case ABS_MT_TOUCH_MINOR:
+    case ABS_MT_WIDTH_MAJOR:
+    case ABS_MT_WIDTH_MINOR:
+    case ABS_MT_SLOT:
+    case ABS_MT_TRACKING_ID:
+    case ABS_MT_TOOL_TYPE:
+    case ABS_MT_BLOB_ID:
+      return &mt_default;
+
+    // Miscellaneous
+    case ABS_VOLUME:
+    case ABS_MISC:
+      return &misc_default;
+
     default:
       return nullptr;
   }
@@ -47,6 +102,27 @@ static void enable_codes(libevdev *dev, unsigned int type, const auto &codes) {
   for (int code : codes) {
     const input_absinfo *absinfo = (type == EV_ABS) ? default_absinfo_for(code) : nullptr;
     libevdev_enable_event_code(dev, type, code, absinfo);
+  }
+}
+
+void enable_capability(libevdev *dev, const std::string &cap) {
+  unsigned int evtype = EV_KEY;
+
+  if (cap.rfind("KEY_", 0) == 0 || cap.rfind("BTN_", 0) == 0) {
+    evtype = EV_KEY;
+  } else if (cap.rfind("REL_", 0) == 0) {
+    evtype = EV_REL;
+  } else if (cap.rfind("ABS_", 0) == 0) {
+    evtype = EV_ABS;
+  } else if (cap.rfind("SW_", 0) == 0) {
+    evtype = EV_SW;
+  }
+
+  int code = libevdev_event_code_from_name(evtype, cap.c_str());
+  if (code >= 0) {
+    enable_codes(dev, evtype, std::vector{ code });
+  } else {
+    std::cerr << "Unknown capability string: " << cap << std::endl;
   }
 }
 
@@ -77,6 +153,10 @@ libevdev_uinput *create_output_device(const OutputDecl &out) {
     enable_codes(dev, EV_ABS, aelkey::capabilities::digitizer_abs);
   }
 
+  for (const auto &cap : out.capabilities) {
+    enable_capability(dev, cap);
+  }
+
   struct libevdev_uinput *uidev = nullptr;
   int err = libevdev_uinput_create_from_device(dev, LIBEVDEV_UINPUT_OPEN_MANAGED, &uidev);
   if (err != 0) {
@@ -103,6 +183,15 @@ OutputDecl parse_output(lua_State *L, int index) {
       decl.type = lua_tostring(L, -1);
     } else if (key == "name" && lua_isstring(L, -1)) {
       decl.name = lua_tostring(L, -1);
+    } else if (key == "capabilities" && lua_istable(L, -1)) {
+      int capIndex = lua_gettop(L);
+      lua_pushnil(L);
+      while (lua_next(L, capIndex)) {
+        if (lua_isstring(L, -1)) {
+          decl.capabilities.push_back(lua_tostring(L, -1));
+        }
+        lua_pop(L, 1);
+      }
     }
     lua_pop(L, 1);
   }
