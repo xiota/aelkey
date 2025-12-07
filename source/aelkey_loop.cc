@@ -1,5 +1,6 @@
 #include "aelkey_core.h"
 
+#include <csignal>
 #include <cstring>
 #include <iostream>
 #include <string>
@@ -368,7 +369,16 @@ int lua_stop(lua_State *L) {
   return 0;
 }
 
+void handle_signal(int sig) {
+  aelkey_state.should_stop = true;
+}
+
 int lua_run(lua_State *L) {
+  // signal handlers
+  std::signal(SIGHUP, handle_signal);   // terminal hangup
+  std::signal(SIGINT, handle_signal);   // interactive interrupt (Ctrl+C)
+  std::signal(SIGTERM, handle_signal);  // termination request (kill, systemd stop)
+
   // 1) Ensure init is done (epoll + udev monitor)
   if (aelkey_state.epfd < 0) {
     int rc = init_impl(L);
