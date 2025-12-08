@@ -223,6 +223,13 @@ int attach_device(
   if (in.type == "hidraw") {
     // hidraw: no libevdev init
     std::cout << "Attached hidraw: " << devnode << std::endl;
+
+    if (in.grab) {
+      int flags = fcntl(fd, F_GETFL, 0);
+      if (flags != -1) {
+        fcntl(fd, F_SETFL, flags & ~O_NONBLOCK);
+      }
+    }
   } else {
     // default: evdev
     struct libevdev *idev = nullptr;
