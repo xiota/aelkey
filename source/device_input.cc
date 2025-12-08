@@ -107,11 +107,30 @@ std::string match_device(const InputDecl &decl) {
           if (!decl.name.empty()) {
             char name[256] = { 0 };
             if (ioctl(fd, HIDIOCGRAWNAME(sizeof(name) - 1), name) >= 0) {
-              if (decl.name != std::string(name)) {
+              std::string devname(name);
+              if (decl.name != devname) {
                 match = false;
               }
             } else {
               match = false;
+            }
+          }
+
+          if (!decl.phys.empty()) {
+            char phys[64] = { 0 };
+            if (ioctl(fd, HIDIOCGRAWPHYS(sizeof(phys) - 1), phys) >= 0) {
+              if (decl.phys != std::string(phys)) {
+                match = false;
+              }
+            }
+          }
+
+          if (!decl.uniq.empty()) {
+            char uniq[64] = { 0 };
+            if (ioctl(fd, HIDIOCGRAWUNIQ(sizeof(uniq) - 1), uniq) >= 0) {
+              if (decl.uniq != std::string(uniq)) {
+                match = false;
+              }
             }
           }
 
