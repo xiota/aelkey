@@ -15,7 +15,7 @@
 
 static const input_absinfo *default_absinfo_for(int code) {
   static input_absinfo pos_default = { 0, 0, 65535, 0, 0, 0 };
-  static input_absinfo stick_default = { 0, -32768, 32767, 0, 0, 0 };
+  static input_absinfo stick_default = { 0, -32767, 32767, 0, 0, 0 };
   static input_absinfo trigger_default = { 0, 0, 255, 0, 0, 0 };
   static input_absinfo pressure_default = { 0, 0, 65535, 0, 0, 0 };
   static input_absinfo tilt_default = { 0, -90, 90, 0, 0, 0 };
@@ -23,8 +23,13 @@ static const input_absinfo *default_absinfo_for(int code) {
   static input_absinfo orient_default = { 0, 0, 3, 0, 0, 0 };
   static input_absinfo wheel_default = { 0, -32768, 32767, 0, 0, 0 };
   static input_absinfo hat_default = { 0, -1, 1, 0, 0, 0 };
-  static input_absinfo mt_default = { 0, 0, 65535, 0, 0, 0 };
-  static input_absinfo misc_default = { 0, 0, 65535, 0, 0, 0 };
+
+  // multitouch defaults
+  static input_absinfo mt_pos_default = { 0, 0, 65535, 0, 0, 0 };       // positions
+  static input_absinfo mt_slot_default = { 0, 0, 4, 0, 0, 0 };          // 5 slots (0–4)
+  static input_absinfo mt_trackid_default = { 0, -1, 65535, 0, 0, 0 };  // tracking IDs
+  static input_absinfo mt_tooltype_default = { 0, 0, 2, 0, 0, 0 };      // finger/pen/palm
+  static input_absinfo mt_misc_default = { 0, 0, 255, 0, 0, 0 };        // pressure/size
 
   switch (code) {
     // Sticks
@@ -74,23 +79,26 @@ static const input_absinfo *default_absinfo_for(int code) {
     case ABS_HAT3Y:
       return &hat_default;
 
-    // Multi‑touch positions and slots
+    // Multitouch positions and slots
     case ABS_MT_POSITION_X:
     case ABS_MT_POSITION_Y:
+      return &mt_pos_default;
+    case ABS_MT_SLOT:
+      return &mt_slot_default;
+    case ABS_MT_TRACKING_ID:
+      return &mt_trackid_default;
+    case ABS_MT_TOOL_TYPE:
+      return &mt_tooltype_default;
     case ABS_MT_TOUCH_MAJOR:
     case ABS_MT_TOUCH_MINOR:
     case ABS_MT_WIDTH_MAJOR:
     case ABS_MT_WIDTH_MINOR:
-    case ABS_MT_SLOT:
-    case ABS_MT_TRACKING_ID:
-    case ABS_MT_TOOL_TYPE:
-    case ABS_MT_BLOB_ID:
-      return &mt_default;
+      return &mt_misc_default;
 
     // Miscellaneous
     case ABS_VOLUME:
     case ABS_MISC:
-      return &misc_default;
+      return &pos_default;
 
     default:
       return nullptr;
@@ -138,23 +146,30 @@ libevdev_uinput *create_output_device(const OutputDecl &out) {
     enable_codes(dev, EV_KEY, aelkey::capabilities::keyboard_keys);
   } else if (out.type == "consumer") {
     enable_codes(dev, EV_KEY, aelkey::capabilities::consumer_keys);
-  } else if (out.type == "mouse" || out.type == "touchpad") {
-    enable_codes(dev, EV_KEY, aelkey::capabilities::mouse_buttons);
-    enable_codes(dev, EV_REL, aelkey::capabilities::mouse_rel);
-
-    if (out.type == "touchpad") {
-      enable_codes(dev, EV_ABS, aelkey::capabilities::touchpad_abs);
-    }
   } else if (out.type == "gamepad") {
     enable_codes(dev, EV_KEY, aelkey::capabilities::gamepad_buttons);
     enable_codes(dev, EV_ABS, aelkey::capabilities::gamepad_abs);
+  } else if (out.type == "mouse") {
+    enable_codes(dev, EV_KEY, aelkey::capabilities::mouse_buttons);
+    enable_codes(dev, EV_REL, aelkey::capabilities::mouse_rel);
+  } else if (out.type == "touchpad") {
+    enable_codes(dev, EV_KEY, aelkey::capabilities::touchpad_buttons);
+    enable_codes(dev, EV_REL, aelkey::capabilities::touchpad_rel);
+    enable_codes(dev, EV_ABS, aelkey::capabilities::touchpad_abs);
+    libevdev_enable_property(dev, INPUT_PROP_POINTER);
+  } else if (out.type == "touchpad_mt") {
+    enable_codes(dev, EV_KEY, aelkey::capabilities::touchpad_buttons);
+    enable_codes(dev, EV_REL, aelkey::capabilities::touchpad_rel);
+    enable_codes(dev, EV_ABS, aelkey::capabilities::touchpad_mt_abs);
+    libevdev_enable_property(dev, INPUT_PROP_POINTER);
   } else if (out.type == "touchscreen") {
     enable_codes(dev, EV_KEY, aelkey::capabilities::touchscreen_keys);
     enable_codes(dev, EV_ABS, aelkey::capabilities::touchscreen_abs);
-
+    libevdev_enable_property(dev, INPUT_PROP_DIRECT);
   } else if (out.type == "digitizer") {
     enable_codes(dev, EV_KEY, aelkey::capabilities::digitizer_keys);
     enable_codes(dev, EV_ABS, aelkey::capabilities::digitizer_abs);
+    libevdev_enable_property(dev, INPUT_PROP_DIRECT);
   }
 
   for (const auto &cap : out.capabilities) {

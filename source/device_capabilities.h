@@ -52,14 +52,6 @@ constexpr int consumer_keys[] = {
   KEY_CAMERA, KEY_VIDEO, KEY_AUDIO, KEY_CD, KEY_TUNER, KEY_MP3, KEY_DVD, KEY_RADIO, KEY_TV, KEY_VCR
 };
 
-constexpr int mouse_buttons[] = {
-  BTN_LEFT,  BTN_RIGHT,   BTN_MIDDLE, BTN_SIDE, BTN_EXTRA, BTN_FORWARD, BTN_BACK,   BTN_TASK
-};
-
-constexpr int mouse_rel[] = {
-  REL_X, REL_Y, REL_WHEEL, REL_HWHEEL, REL_WHEEL_HI_RES, REL_HWHEEL_HI_RES
-};
-
 constexpr int gamepad_buttons[] = {
   BTN_A,       // South
   BTN_B,       // East
@@ -85,8 +77,35 @@ constexpr int gamepad_abs[] = {
   ABS_HAT0X, ABS_HAT0Y  // D-pad
 };
 
+constexpr int mouse_buttons[] = {
+  BTN_LEFT,  BTN_RIGHT,   BTN_MIDDLE, BTN_SIDE, BTN_EXTRA, BTN_FORWARD, BTN_BACK,   BTN_TASK
+};
+
+constexpr int mouse_rel[] = {
+  REL_X, REL_Y, REL_WHEEL, REL_HWHEEL, REL_WHEEL_HI_RES, REL_HWHEEL_HI_RES
+};
+
+constexpr int touchpad_buttons[] = {
+  BTN_LEFT, BTN_RIGHT, BTN_MIDDLE,
+  BTN_SIDE, BTN_EXTRA, BTN_FORWARD, BTN_BACK, BTN_TASK,
+  BTN_TOOL_FINGER,
+  BTN_TOOL_QUINTTAP,
+  BTN_TOUCH,
+  BTN_TOOL_DOUBLETAP,
+  BTN_TOOL_TRIPLETAP,
+  BTN_TOOL_QUADTAP
+};
+
+constexpr int touchpad_rel[] = {
+  REL_WHEEL, REL_HWHEEL,
+  REL_WHEEL_HI_RES, REL_HWHEEL_HI_RES
+};
 
 constexpr int touchpad_abs[] = {
+  ABS_X, ABS_Y,
+};
+
+constexpr int touchpad_mt_abs[] = {
   ABS_X, ABS_Y,
   ABS_MT_SLOT,
   ABS_MT_POSITION_X, ABS_MT_POSITION_Y,
@@ -100,13 +119,17 @@ constexpr int touchscreen_keys[] = {
 };
 
 constexpr int touchscreen_abs[] = {
+  // Core absolute axes
   ABS_X, ABS_Y,
-  ABS_MT_SLOT,
-  ABS_MT_POSITION_X, ABS_MT_POSITION_Y,
-  ABS_MT_TRACKING_ID,
-  ABS_MT_PRESSURE,
-  ABS_MT_TOUCH_MAJOR, ABS_MT_TOUCH_MINOR,
-  ABS_MT_ORIENTATION
+
+  // Multitouch slot management
+  ABS_MT_SLOT,          // slot selector (0–4 for 5 fingers)
+  ABS_MT_POSITION_X,    // X coordinate per slot
+  ABS_MT_POSITION_Y,    // Y coordinate per slot
+  ABS_MT_TRACKING_ID,   // unique ID per finger
+  ABS_MT_PRESSURE,      // optional pressure
+  ABS_MT_TOUCH_MAJOR,   // major axis of contact ellipse
+  ABS_MT_TOUCH_MINOR    // minor axis of contact ellipse
 };
 
 constexpr int digitizer_keys[] = {
