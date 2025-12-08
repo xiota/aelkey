@@ -97,10 +97,14 @@ std::string match_device(const InputDecl &decl) {
           if (decl.bus && static_cast<int>(info.bustype) != decl.bus) {
             match = false;
           }
-          if (decl.vendor && static_cast<int>(info.vendor) != decl.vendor) {
+
+          int vendor = static_cast<unsigned short>(info.vendor);
+          int product = static_cast<unsigned short>(info.product);
+
+          if (decl.vendor && vendor != decl.vendor) {
             match = false;
           }
-          if (decl.product && static_cast<int>(info.product) != decl.product) {
+          if (decl.product && product != decl.product) {
             match = false;
           }
 
