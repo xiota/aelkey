@@ -373,7 +373,7 @@ void handle_signal(int sig) {
   aelkey_state.should_stop = true;
 }
 
-int lua_run(lua_State *L) {
+int lua_start(lua_State *L) {
   // signal handlers
   std::signal(SIGHUP, handle_signal);   // terminal hangup
   std::signal(SIGINT, handle_signal);   // interactive interrupt (Ctrl+C)

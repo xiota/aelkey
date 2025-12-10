@@ -13,7 +13,7 @@ extern "C" int luaopen_aelkey(lua_State *L) {
   // clang-format off
   static const luaL_Reg funcs[] = {
     {"emit", lua_emit},
-    {"run", lua_run},
+    {"start", lua_start},
     {"stop", lua_stop},
     {"syn_report", lua_syn_report},
     {"tick", lua_tick},
