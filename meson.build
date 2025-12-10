@@ -43,6 +43,7 @@ src_files = files(
   'source/aelkey_util.cc',
   'source/device_input.cc',
   'source/device_output.cc',
+  'source/device_udev.cc',
 )
 
 shared_library(

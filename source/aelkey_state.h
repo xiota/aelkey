@@ -5,6 +5,7 @@
 #include <vector>
 
 #include <libevdev/libevdev-uinput.h>
+#include <libudev.h>
 
 #include "aelkey_core.h"
 #include "device_input.h"
@@ -22,6 +23,9 @@ struct AelkeyState {
 
   std::vector<InputDecl> input_decls;
   std::vector<OutputDecl> output_decls;
+
+  struct udev *g_udev = nullptr;
+  struct udev_monitor *g_mon = nullptr;
 };
 
 extern AelkeyState aelkey_state;

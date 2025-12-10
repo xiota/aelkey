@@ -12,9 +12,7 @@
 #include <unistd.h>
 
 #include "aelkey_state.h"
-
-struct udev *g_udev = nullptr;
-struct udev_monitor *g_mon = nullptr;
+#include "device_udev.h"
 
 static void create_outputs_from_decls() {
   for (auto &out : aelkey_state.output_decls) {
@@ -52,44 +50,6 @@ static void attach_inputs_from_decls() {
       std::cerr << "Failed to attach input: " << decl.id << " (" << devnode << ")" << std::endl;
     }
   }
-}
-
-static int init_impl(lua_State *L) {
-  if (aelkey_state.epfd >= 0) {
-    return 0;  // already initialized
-  }
-
-  int epfd = epoll_create1(0);
-  if (epfd < 0) {
-    return luaL_error(L, "epoll_create1 failed");
-  }
-  aelkey_state.epfd = epfd;
-
-  g_udev = udev_new();
-  if (!g_udev) {
-    return luaL_error(L, "udev_new failed");
-  }
-
-  g_mon = udev_monitor_new_from_netlink(g_udev, "udev");
-  if (!g_mon) {
-    return luaL_error(L, "udev_monitor_new failed");
-  }
-
-  udev_monitor_filter_add_match_subsystem_devtype(g_mon, "input", nullptr);
-  udev_monitor_filter_add_match_subsystem_devtype(g_mon, "hidraw", nullptr);
-  udev_monitor_enable_receiving(g_mon);
-
-  int mon_fd = udev_monitor_get_fd(g_mon);
-  aelkey_state.udev_fd = mon_fd;
-
-  struct epoll_event ev{};
-  ev.events = EPOLLIN;
-  ev.data.fd = mon_fd;
-  if (epoll_ctl(aelkey_state.epfd, EPOLL_CTL_ADD, mon_fd, &ev) < 0) {
-    return luaL_error(L, "epoll_ctl add udev failed");
-  }
-
-  return 0;
 }
 
 static void handle_udev_remove(lua_State *L, const std::string &devnode) {
@@ -381,7 +341,7 @@ int lua_start(lua_State *L) {
 
   // 1) Ensure init is done (epoll + udev monitor)
   if (aelkey_state.epfd < 0) {
-    int rc = init_impl(L);
+    int rc = device_udev_init(L);
     if (rc != 0) {
       // lua_init already pushed an error or returned an error code
       return rc;
@@ -418,7 +378,7 @@ int lua_start(lua_State *L) {
 
       // udev hotplug
       if (fd_ready == aelkey_state.udev_fd) {
-        struct udev_device *dev = udev_monitor_receive_device(g_mon);
+        struct udev_device *dev = udev_monitor_receive_device(aelkey_state.g_mon);
         if (!dev) {
           continue;
         }
@@ -487,13 +447,13 @@ int lua_start(lua_State *L) {
     epoll_ctl(aelkey_state.epfd, EPOLL_CTL_DEL, aelkey_state.udev_fd, nullptr);
     aelkey_state.udev_fd = -1;
   }
-  if (g_mon) {
-    udev_monitor_unref(g_mon);
-    g_mon = nullptr;
+  if (aelkey_state.g_mon) {
+    udev_monitor_unref(aelkey_state.g_mon);
+    aelkey_state.g_mon = nullptr;
   }
-  if (g_udev) {
-    udev_unref(g_udev);
-    g_udev = nullptr;
+  if (aelkey_state.g_udev) {
+    udev_unref(aelkey_state.g_udev);
+    aelkey_state.g_udev = nullptr;
   }
   if (aelkey_state.epfd >= 0) {
     close(aelkey_state.epfd);
