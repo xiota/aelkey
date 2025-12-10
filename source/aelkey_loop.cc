@@ -29,27 +29,50 @@ static void create_outputs_from_decls() {
   }
 }
 
-static void attach_inputs_from_decls() {
+static void attach_inputs_from_decls(lua_State *L) {
   for (auto &decl : aelkey_state.input_decls) {
     std::string devnode = match_device(decl);
     if (devnode.empty()) {
       continue;
     }
-
-    if (aelkey_state.devnode_to_fd.find(devnode) != aelkey_state.devnode_to_fd.end()) {
-      std::cout << "Device already attached: " << devnode << std::endl;
-      continue;
-    }
-
-    int newfd = attach_device(
-        devnode, decl, aelkey_state.input_map, aelkey_state.frames, aelkey_state.epfd
-    );
-    if (newfd >= 0) {
-      aelkey_state.devnode_to_fd[devnode] = newfd;
-    } else {
-      std::cerr << "Failed to attach input: " << decl.id << " (" << devnode << ")" << std::endl;
+    int fd = attach_input_device(devnode, decl);
+    if (fd >= 0) {
+      notify_state_change(L, decl, "connect");
     }
   }
+}
+
+static InputDecl detach_input_device(int fd) {
+  InputDecl decl{};
+
+  // Remove from epoll
+  epoll_ctl(aelkey_state.epfd, EPOLL_CTL_DEL, fd, nullptr);
+
+  // Lookup in input_map
+  auto im = aelkey_state.input_map.find(fd);
+  if (im != aelkey_state.input_map.end()) {
+    decl = im->second.decl;
+    if (im->second.idev) {
+      libevdev_grab(im->second.idev, LIBEVDEV_UNGRAB);
+      libevdev_free(im->second.idev);
+    }
+    // remove from input_map
+    aelkey_state.input_map.erase(im);
+  }
+
+  aelkey_state.frames.erase(fd);
+  close(fd);
+
+  // remove from devnode_to_fd
+  for (auto it = aelkey_state.devnode_to_fd.begin(); it != aelkey_state.devnode_to_fd.end();
+       ++it) {
+    if (it->second == fd) {
+      aelkey_state.devnode_to_fd.erase(it);
+      break;
+    }
+  }
+
+  return decl;
 }
 
 static void handle_udev_remove(lua_State *L, const std::string &devnode) {
@@ -62,36 +85,17 @@ static void handle_udev_remove(lua_State *L, const std::string &devnode) {
     return;
   }
 
-  int dfd = it->second;
-  epoll_ctl(aelkey_state.epfd, EPOLL_CTL_DEL, dfd, nullptr);
-
-  auto im = aelkey_state.input_map.find(dfd);
-  if (im != aelkey_state.input_map.end()) {
-    auto &ctx = im->second;
-
-    if (!ctx.decl.callback_state.empty()) {
-      lua_getglobal(L, ctx.decl.callback_state.c_str());
-      if (lua_isfunction(L, -1)) {
-        lua_pushstring(L, "disconnect");
-        if (lua_pcall(L, 1, 0, 0) != LUA_OK) {
-          std::cerr << "Lua state_callback error: " << lua_tostring(L, -1) << std::endl;
-          lua_pop(L, 1);
-        }
-      } else {
-        lua_pop(L, 1);
-      }
-    }
-
-    if (ctx.idev) {
-      libevdev_grab(ctx.idev, LIBEVDEV_UNGRAB);
-      libevdev_free(ctx.idev);
-    }
-    aelkey_state.input_map.erase(im);
-    aelkey_state.frames.erase(dfd);
+  InputDecl decl = detach_input_device(it->second);
+  if (!decl.id.empty()) {
+    notify_state_change(L, decl, "disconnect");
   }
+}
 
-  close(dfd);
-  aelkey_state.devnode_to_fd.erase(it);
+static void cleanup_fd_on_hup_err(lua_State *L, int fd_ready) {
+  InputDecl decl = detach_input_device(fd_ready);
+  if (!decl.id.empty()) {
+    notify_state_change(L, decl, "disconnect");
+  }
 }
 
 static void handle_udev_add(lua_State *L, const std::string &devnode) {
@@ -99,35 +103,19 @@ static void handle_udev_add(lua_State *L, const std::string &devnode) {
     return;
   }
 
+  // already attached
   if (aelkey_state.devnode_to_fd.find(devnode) != aelkey_state.devnode_to_fd.end()) {
     std::cout << "Device already attached: " << devnode << std::endl;
     return;
   }
 
+  // match and attach
   for (auto &decl : aelkey_state.input_decls) {
     std::string candidate = match_device(decl);
     if (candidate == devnode) {
-      int newfd = attach_device(
-          devnode, decl, aelkey_state.input_map, aelkey_state.frames, aelkey_state.epfd
-      );
-      if (newfd >= 0) {
-        aelkey_state.devnode_to_fd[devnode] = newfd;
-
-        if (!decl.callback_state.empty()) {
-          lua_getglobal(L, decl.callback_state.c_str());
-          if (lua_isfunction(L, -1)) {
-            lua_pushstring(L, "reconnect");
-            if (lua_pcall(L, 1, 0, 0) != LUA_OK) {
-              std::cerr << "Lua state_callback error: " << lua_tostring(L, -1) << std::endl;
-              lua_pop(L, 1);
-            }
-          } else {
-            lua_pop(L, 1);
-          }
-        }
-      } else {
-        std::cerr << "Failed to reattach input: " << decl.id << " (" << devnode << ")"
-                  << std::endl;
+      int fd = attach_input_device(devnode, decl);
+      if (fd >= 0) {
+        notify_state_change(L, decl, "reconnect");
       }
       break;
     }
@@ -165,47 +153,6 @@ static void dispatch_tick(lua_State *L, int fd_ready) {
     }
   } else if (r < 0 && errno != EAGAIN) {
     perror("read(timerfd)");
-  }
-}
-
-static void cleanup_fd_on_hup_err(lua_State *L, int fd_ready) {
-  auto it_fd = aelkey_state.devnode_to_fd.begin();
-  for (; it_fd != aelkey_state.devnode_to_fd.end(); ++it_fd) {
-    if (it_fd->second == fd_ready) {
-      break;
-    }
-  }
-
-  epoll_ctl(aelkey_state.epfd, EPOLL_CTL_DEL, fd_ready, nullptr);
-
-  auto input_it = aelkey_state.input_map.find(fd_ready);
-  if (input_it != aelkey_state.input_map.end()) {
-    auto &ctx = input_it->second;
-
-    if (!ctx.decl.callback_state.empty()) {
-      lua_getglobal(L, ctx.decl.callback_state.c_str());
-      if (lua_isfunction(L, -1)) {
-        lua_pushstring(L, "disconnect");
-        if (lua_pcall(L, 1, 0, 0) != LUA_OK) {
-          std::cerr << "Lua state_callback error: " << lua_tostring(L, -1) << std::endl;
-          lua_pop(L, 1);
-        }
-      } else {
-        lua_pop(L, 1);
-      }
-    }
-
-    if (ctx.idev) {
-      libevdev_grab(ctx.idev, LIBEVDEV_UNGRAB);
-      libevdev_free(ctx.idev);
-    }
-    aelkey_state.input_map.erase(input_it);
-  }
-
-  aelkey_state.frames.erase(fd_ready);
-  close(fd_ready);
-  if (it_fd != aelkey_state.devnode_to_fd.end()) {
-    aelkey_state.devnode_to_fd.erase(it_fd);
   }
 }
 
@@ -355,7 +302,7 @@ int lua_start(lua_State *L) {
   parse_inputs_from_lua(L);
 
   create_outputs_from_decls();
-  attach_inputs_from_decls();
+  attach_inputs_from_decls(L);
 
   // 3) Blocking epoll loop
   constexpr int MAX_EVENTS = 64;

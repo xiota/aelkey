@@ -1,10 +1,34 @@
 #include "device_udev.h"
 
+#include <iostream>
+#include <string>
+
 #include <libudev.h>
 #include <lua.hpp>
 #include <sys/epoll.h>
 
 #include "aelkey_state.h"
+#include "device_input.h"
+
+int attach_input_device(const std::string &devnode, const InputDecl &decl) {
+  // already attached
+  if (aelkey_state.devnode_to_fd.find(devnode) != aelkey_state.devnode_to_fd.end()) {
+    std::cout << "Device already attached: " << devnode << std::endl;
+    return -1;
+  }
+
+  // try to attach
+  int newfd = attach_device(
+      devnode, decl, aelkey_state.input_map, aelkey_state.frames, aelkey_state.epfd
+  );
+  if (newfd >= 0) {
+    aelkey_state.devnode_to_fd[devnode] = newfd;
+    return newfd;
+  } else {
+    std::cerr << "Failed to attach input: " << decl.id << " (" << devnode << ")" << std::endl;
+    return -1;
+  }
+}
 
 int device_udev_init(lua_State *L) {
   if (aelkey_state.epfd >= 0) {
@@ -42,4 +66,23 @@ int device_udev_init(lua_State *L) {
   }
 
   return 0;
+}
+
+void notify_state_change(lua_State *L, const InputDecl &decl, const char *state) {
+  if (decl.callback_state.empty()) {
+    return;
+  }
+
+  lua_getglobal(L, decl.callback_state.c_str());
+  if (!lua_isfunction(L, -1)) {
+    lua_pop(L, 1);
+    return;
+  }
+
+  lua_pushstring(L, state);
+
+  if (lua_pcall(L, 1, 0, 0) != LUA_OK) {
+    std::cerr << "Lua state_callback error: " << lua_tostring(L, -1) << std::endl;
+    lua_pop(L, 1);
+  }
 }
