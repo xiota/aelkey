@@ -2,6 +2,7 @@
 
 #include "aelkey_bit.h"
 #include "aelkey_core.h"
+#include "aelkey_daemon.h"
 #include "aelkey_device.h"
 #include "aelkey_hid.h"
 #include "aelkey_loop.h"
@@ -38,6 +39,10 @@ extern "C" int luaopen_aelkey(lua_State *L) {
   } else {
     lua_error(L);
   }
+
+  // daemon submodule
+  luaopen_aelkey_daemon(L);
+  lua_setfield(L, -2, "daemon");
 
   // hid submodule
   luaopen_aelkey_hid(L);
