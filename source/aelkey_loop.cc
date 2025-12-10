@@ -7,12 +7,14 @@
 
 #include <libevdev/libevdev-uinput.h>
 #include <libudev.h>
+#include <lua.hpp>
 #include <sys/epoll.h>
 #include <sys/timerfd.h>
 #include <unistd.h>
 
 #include "aelkey_state.h"
 #include "device_udev.h"
+#include "luacompat.h"
 
 static void create_outputs_from_decls() {
   for (auto &out : aelkey_state.output_decls) {
@@ -272,15 +274,25 @@ static void dispatch_evdev(lua_State *L, int fd_ready, InputCtx &ctx) {
 }
 
 int lua_stop(lua_State *L) {
-  aelkey_state.should_stop = true;
+  aelkey_state.loop_should_stop = true;
   return 0;
 }
 
 void handle_signal(int sig) {
-  aelkey_state.should_stop = true;
+  aelkey_state.loop_should_stop = true;
 }
 
 int lua_start(lua_State *L) {
+  if (aelkey_state.active_mode == AelkeyState::ActiveMode::DAEMON) {
+    luaL_error(L, "cannot start event loop while daemon is running");
+    return 1;
+  } else if (aelkey_state.active_mode == AelkeyState::ActiveMode::LOOP) {
+    lua_warning(L, "event loop is already running");
+    return 1;
+  }
+
+  aelkey_state.aelkey_set_mode(AelkeyState::ActiveMode::LOOP);
+
   // signal handlers
   std::signal(SIGHUP, handle_signal);   // terminal hangup
   std::signal(SIGINT, handle_signal);   // interactive interrupt (Ctrl+C)
@@ -307,9 +319,8 @@ int lua_start(lua_State *L) {
   // 3) Blocking epoll loop
   constexpr int MAX_EVENTS = 64;
   struct epoll_event events[MAX_EVENTS];
-  aelkey_state.should_stop = false;
 
-  while (!aelkey_state.should_stop) {
+  while (!aelkey_state.loop_should_stop) {
     int n = epoll_wait(aelkey_state.epfd, events, MAX_EVENTS, -1);  // block until event
     if (n < 0) {
       if (errno == EINTR) {
@@ -406,6 +417,8 @@ int lua_start(lua_State *L) {
     close(aelkey_state.epfd);
     aelkey_state.epfd = -1;
   }
+
+  aelkey_state.aelkey_set_mode(AelkeyState::ActiveMode::NONE);
 
   lua_pushboolean(L, 1);
   return 1;

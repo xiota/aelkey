@@ -6,10 +6,23 @@
 #include "luacompat.h"
 
 static int l_daemon_start(lua_State *L) {
-  return 0;
+  if (aelkey_state.active_mode == AelkeyState::ActiveMode::LOOP) {
+    luaL_error(L, "cannot start event loop while daemon is running");
+    return 1;
+  } else if (aelkey_state.active_mode == AelkeyState::ActiveMode::DAEMON) {
+    lua_warning(L, "event loop is already running");
+    return 1;
+  }
+
+  aelkey_state.aelkey_set_mode(AelkeyState::ActiveMode::LOOP);
+
+  aelkey_state.aelkey_set_mode(AelkeyState::ActiveMode::NONE);
+
+  lua_pushboolean(L, 1);
 }
 
 static int l_daemon_stop(lua_State *L) {
+  aelkey_state.daemon_should_stop = true;
   return 0;
 }
 
