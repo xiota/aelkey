@@ -31,6 +31,8 @@ struct AelkeyState {
   struct udev *g_udev = nullptr;
   struct udev_monitor *g_mon = nullptr;
 
+  std::unordered_map<std::string, std::vector<InputDecl>> watch_map;
+
   void aelkey_set_mode(ActiveMode mode) {
     switch (mode) {
       case LOOP:

@@ -2,6 +2,8 @@
 
 #include <lua.hpp>
 
+#include "aelkey_state.h"
+#include "device_input.h"
 #include "lua_scripts.h"
 #include "luacompat.h"
 
@@ -19,6 +21,7 @@ static int l_daemon_start(lua_State *L) {
   aelkey_state.aelkey_set_mode(AelkeyState::ActiveMode::NONE);
 
   lua_pushboolean(L, 1);
+  return 1;
 }
 
 static int l_daemon_stop(lua_State *L) {
@@ -27,15 +30,54 @@ static int l_daemon_stop(lua_State *L) {
 }
 
 static int l_daemon_watch(lua_State *L) {
+  // 1. Get reference string
+  const char *ref = luaL_checkstring(L, 1);
+
+  // 2. Get declarations table
+  luaL_checktype(L, 2, LUA_TTABLE);
+
+  std::vector<InputDecl> decls;
+
+  // Iterate over outer table (list of decl tables)
+  int len = lua_objlen(L, 2);
+  for (int i = 1; i <= len; i++) {
+    lua_rawgeti(L, 2, i);
+    if (lua_istable(L, -1)) {
+      InputDecl decl = parse_input(L, lua_gettop(L));
+      decls.push_back(decl);
+    }
+    lua_pop(L, 1);
+  }
+
+  // 3. Store in watch_map
+  aelkey_state.watch_map[ref] = decls;
+
   return 0;
 }
 
 static int l_daemon_unwatch(lua_State *L) {
+  // 1. Get reference string
+  const char *ref = luaL_checkstring(L, 1);
+
+  // 2. Erase from watch_map if present
+  auto it = aelkey_state.watch_map.find(ref);
+  if (it != aelkey_state.watch_map.end()) {
+    aelkey_state.watch_map.erase(it);
+  }
+
   return 0;
 }
 
 static int l_daemon_watchlist(lua_State *L) {
-  return 0;
+  lua_newtable(L);
+
+  int i = 1;
+  for (const auto &entry : aelkey_state.watch_map) {
+    lua_pushstring(L, entry.first.c_str());
+    lua_rawseti(L, -2, i++);
+  }
+
+  return 1;
 }
 
 int luaopen_aelkey_daemon(lua_State *L) {
