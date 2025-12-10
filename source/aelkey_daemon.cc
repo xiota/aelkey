@@ -2,6 +2,7 @@
 
 #include <lua.hpp>
 
+#include "lua_scripts.h"
 #include "luacompat.h"
 
 static int l_daemon_start(lua_State *L) {
@@ -37,5 +38,14 @@ int luaopen_aelkey_daemon(lua_State *L) {
   // clang-format on
 
   luaL_newlib(L, funcs);
+
+  // lua scripts
+  if (luaL_loadstring(L, aelkey_daemon_script) == 0) {
+    lua_pushvalue(L, -2);
+    lua_call(L, 1, 0);
+  } else {
+    lua_error(L);
+  }
+
   return 1;
 }

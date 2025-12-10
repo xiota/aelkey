@@ -19,10 +19,12 @@ conf_data.set('VERSION', '"' + meson.project_version() + '"')
 fs = import('fs')
 
 lua_click_content  = fs.read(meson.project_source_root() / 'data/aelkey_click.lua')
+lua_daemon_content  = fs.read(meson.project_source_root() / 'data/aelkey_daemon.lua')
 lua_util_content  = fs.read(meson.project_source_root() / 'data/aelkey_util.lua')
 
 lua_scripts = configuration_data()
 lua_scripts.set('AELKEY_CLICK_SCRIPT',  lua_click_content.strip())
+lua_scripts.set('AELKEY_DAEMON_SCRIPT',  lua_daemon_content.strip())
 lua_scripts.set('AELKEY_UTIL_SCRIPT',  lua_util_content.strip())
 
 default_css_h = configure_file(
