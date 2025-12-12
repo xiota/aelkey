@@ -18,9 +18,9 @@ conf_data.set('VERSION', '"' + meson.project_version() + '"')
 # lua scripts
 fs = import('fs')
 
-lua_click_content  = fs.read(meson.project_source_root() / 'data/aelkey_click.lua')
-lua_daemon_content  = fs.read(meson.project_source_root() / 'data/aelkey_daemon.lua')
-lua_util_content  = fs.read(meson.project_source_root() / 'data/aelkey_util.lua')
+lua_click_content  = fs.read(meson.project_source_root() / 'source/aelkey_click.lua')
+lua_daemon_content  = fs.read(meson.project_source_root() / 'source/aelkey_daemon.lua')
+lua_util_content  = fs.read(meson.project_source_root() / 'source/aelkey_util.lua')
 
 lua_scripts = configuration_data()
 lua_scripts.set('AELKEY_CLICK_SCRIPT',  lua_click_content.strip())
