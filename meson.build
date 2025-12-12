@@ -61,3 +61,8 @@ shared_library(
   install: true,
   install_dir: get_option('libdir') / 'lua/5.1'
 )
+
+install_data(
+  'data/60-aelkey-general.rules',
+  install_dir: get_option('datadir') / meson.project_name(),
+)
