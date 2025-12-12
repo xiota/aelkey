@@ -13,6 +13,7 @@ struct InputDecl {
   int vendor = 0;
   int product = 0;
   int bus = 0;
+  int interface = -1;
   std::string name;
   std::string phys;
   std::string uniq;

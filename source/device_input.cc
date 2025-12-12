@@ -1,12 +1,16 @@
 #include "device_input.h"
 
+#include <climits>  // for PATH_MAX
 #include <cstring>
+#include <fstream>
 #include <iostream>
+#include <string>
 
 #include <fcntl.h>
 #include <glob.h>
 #include <libevdev/libevdev-uinput.h>
 #include <libevdev/libevdev.h>
+#include <libudev.h>
 #include <linux/hidraw.h>
 #include <lua.hpp>
 #include <sys/epoll.h>
@@ -42,6 +46,8 @@ InputDecl parse_input(lua_State *L, int index) {
       } else if (busstr == "pci") {
         decl.bus = BUS_PCI;
       }
+    } else if (key == "interface" && lua_isnumber(L, -1)) {
+      decl.interface = (int)lua_tointeger(L, -1);
     } else if (key == "name" && lua_isstring(L, -1)) {
       decl.name = lua_tostring(L, -1);
     } else if (key == "phys" && lua_isstring(L, -1)) {
@@ -78,6 +84,33 @@ InputDecl parse_input(lua_State *L, int index) {
     lua_pop(L, 1);
   }
   return decl;
+}
+
+static int get_interface_num(const std::string &devnode) {
+  struct udev *udev = udev_new();
+  if (!udev) {
+    std::cerr << "Failed to init udev\n";
+    return -1;
+  }
+
+  // Create udev device object from the hidraw node
+  struct udev_device *dev = udev_device_new_from_subsystem_sysname(
+      udev, "hidraw", devnode.substr(devnode.find_last_of('/') + 1).c_str()
+  );
+  if (!dev) {
+    udev_unref(udev);
+    return -1;
+  }
+
+  const char *iface_str = udev_device_get_property_value(dev, "ID_USB_INTERFACE_NUM");
+  int iface = -1;
+  if (iface_str) {
+    iface = std::stoi(iface_str, nullptr, 16);  // property is hex string like "01"
+  }
+
+  udev_device_unref(dev);
+  udev_unref(udev);
+  return iface;
 }
 
 std::string match_device(const InputDecl &decl) {
@@ -124,6 +157,7 @@ std::string match_device(const InputDecl &decl) {
             char phys[64] = { 0 };
             if (ioctl(fd, HIDIOCGRAWPHYS(sizeof(phys) - 1), phys) >= 0) {
               if (decl.phys != std::string(phys)) {
+                std::cout << std::string(phys) << std::endl;
                 match = false;
               }
             }
@@ -133,8 +167,16 @@ std::string match_device(const InputDecl &decl) {
             char uniq[64] = { 0 };
             if (ioctl(fd, HIDIOCGRAWUNIQ(sizeof(uniq) - 1), uniq) >= 0) {
               if (decl.uniq != std::string(uniq)) {
+                std::cout << std::string(uniq) << std::endl;
                 match = false;
               }
+            }
+          }
+
+          if (decl.interface >= 0) {
+            int iface = get_interface_num(devnode);
+            if (iface != decl.interface) {
+              match = false;
             }
           }
 
