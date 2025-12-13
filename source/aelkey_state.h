@@ -6,6 +6,7 @@
 
 #include <libevdev/libevdev-uinput.h>
 #include <libudev.h>
+#include <libusb-1.0/libusb.h>
 
 #include "aelkey_core.h"
 #include "device_input.h"
@@ -32,6 +33,8 @@ struct AelkeyState {
   struct udev_monitor *g_mon = nullptr;
 
   std::unordered_map<std::string, std::vector<InputDecl>> watch_map;
+
+  libusb_context *g_libusb = nullptr;
 
   void aelkey_set_mode(ActiveMode mode) {
     switch (mode) {

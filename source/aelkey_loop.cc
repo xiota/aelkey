@@ -7,6 +7,7 @@
 
 #include <libevdev/libevdev-uinput.h>
 #include <libudev.h>
+#include <libusb-1.0/libusb.h>
 #include <lua.hpp>
 #include <sys/epoll.h>
 #include <sys/timerfd.h>
@@ -416,6 +417,10 @@ int lua_start(lua_State *L) {
   if (aelkey_state.epfd >= 0) {
     close(aelkey_state.epfd);
     aelkey_state.epfd = -1;
+  }
+  if (aelkey_state.g_libusb) {
+    libusb_exit(aelkey_state.g_libusb);
+    aelkey_state.g_libusb = nullptr;
   }
 
   aelkey_state.aelkey_set_mode(AelkeyState::ActiveMode::NONE);

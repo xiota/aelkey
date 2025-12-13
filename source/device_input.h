@@ -5,6 +5,7 @@
 #include <vector>
 
 #include <libevdev/libevdev.h>
+#include <libusb-1.0/libusb.h>
 #include <lua.hpp>
 
 struct InputDecl {
@@ -28,6 +29,7 @@ struct InputDecl {
 struct InputCtx {
   InputDecl decl;
   libevdev *idev = nullptr;
+  libusb_device_handle *usb_handle = nullptr;
 };
 
 InputDecl parse_input(lua_State *L, int index);

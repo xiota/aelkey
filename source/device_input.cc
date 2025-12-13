@@ -11,6 +11,7 @@
 #include <libevdev/libevdev-uinput.h>
 #include <libevdev/libevdev.h>
 #include <libudev.h>
+#include <libusb-1.0/libusb.h>
 #include <linux/hidraw.h>
 #include <lua.hpp>
 #include <sys/epoll.h>
@@ -276,6 +277,37 @@ int attach_device(
         fcntl(fd, F_SETFL, flags & ~O_NONBLOCK);
       }
     }
+  } else if (in.type == "libusb") {
+    if (!aelkey_state.g_libusb) {
+      if (libusb_init(&aelkey_state.g_libusb) != 0) {
+        std::cerr << "Failed to init libusb\n";
+        return -1;
+      }
+    }
+    ctx.usb_handle =
+        libusb_open_device_with_vid_pid(aelkey_state.g_libusb, in.vendor, in.product);
+    if (!ctx.usb_handle) {
+      std::cerr << "Failed to open libusb device " << std::hex << in.vendor << ":" << in.product
+                << std::dec << "\n";
+      return -1;
+    }
+    std::cout << "Attached libusb device: " << in.id << std::endl;
+
+    const struct libusb_pollfd **pfds = libusb_get_pollfds(aelkey_state.g_libusb);
+    if (pfds) {
+      for (int i = 0; pfds[i] != nullptr; i++) {
+        struct epoll_event evreg{};
+        evreg.events = pfds[i]->events;
+        evreg.data.fd = pfds[i]->fd;
+        if (epoll_ctl(epfd, EPOLL_CTL_ADD, pfds[i]->fd, &evreg) < 0) {
+          if (errno != EEXIST) {
+            perror("epoll_ctl add libusb fd");
+          }
+        }
+      }
+      free(pfds);
+    }
+    return 0;  // no usable fds for libusb
   } else {
     // default: evdev
     struct libevdev *idev = nullptr;
