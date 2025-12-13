@@ -11,9 +11,9 @@ function M.dump_events(events)
 end
 
 function M.dump_raw(ev)
-  local data = ev.report
+  local data = ev.data
   local len = #data
-  io.write(string.format("hidraw report (%d bytes):", len))
+  io.write(string.format("raw data (%d bytes):", len))
   for i = 1, len do
     io.write(string.format(" %02X", string.byte(data, i)))
   end

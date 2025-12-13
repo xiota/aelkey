@@ -211,7 +211,7 @@ static void LIBUSB_CALL dispatch_libusb(libusb_transfer *transfer) {
       lua_pushstring(L, ctx->decl.id.c_str());
       lua_settable(L, -3);
 
-      lua_pushstring(L, "report");
+      lua_pushstring(L, "data");
       lua_pushlstring(
           L, reinterpret_cast<const char *>(transfer->buffer), transfer->actual_length
       );
@@ -257,7 +257,7 @@ static void dispatch_hidraw(lua_State *L, int fd_ready, InputCtx &ctx) {
       lua_pushstring(L, ctx.decl.id.c_str());
       lua_settable(L, -3);
 
-      lua_pushstring(L, "report");
+      lua_pushstring(L, "data");
       lua_pushlstring(L, (const char *)buf, r);
       lua_settable(L, -3);
 
