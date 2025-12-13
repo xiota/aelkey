@@ -114,6 +114,26 @@ static int get_interface_num(const std::string &devnode) {
   return iface;
 }
 
+static int ensure_claimed(libusb_device_handle *devh, const InputDecl &in) {
+  int iface = (in.interface == -1) ? 0 : in.interface;
+
+  if (libusb_kernel_driver_active(devh, iface) == 1) {
+    int d = libusb_detach_kernel_driver(devh, iface);
+    if (d != 0) {
+      std::cerr << "Failed to detach kernel driver: " << libusb_error_name(d) << "\n";
+      return d;
+    }
+  }
+
+  int r = libusb_claim_interface(devh, iface);
+  if (r != 0) {
+    std::cerr << "Failed to claim interface " << iface << ": " << libusb_error_name(r) << "\n";
+    return r;
+  }
+
+  return 0;
+}
+
 std::string match_device(const InputDecl &decl) {
   if (decl.type == "hidraw") {
     glob_t g;
@@ -278,6 +298,7 @@ int attach_device(
       }
     }
   } else if (in.type == "libusb") {
+    // open global context
     if (!aelkey_state.g_libusb) {
       if (libusb_init(&aelkey_state.g_libusb) != 0) {
         std::cerr << "Failed to init libusb\n";
@@ -292,6 +313,8 @@ int attach_device(
       return -1;
     }
     std::cout << "Attached libusb device: " << in.id << std::endl;
+
+    ensure_claimed(ctx.usb_handle, in);
 
     const struct libusb_pollfd **pfds = libusb_get_pollfds(aelkey_state.g_libusb);
     if (pfds) {
