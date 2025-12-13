@@ -6,6 +6,7 @@
 #include "aelkey_device.h"
 #include "aelkey_hid.h"
 #include "aelkey_loop.h"
+#include "aelkey_usb.h"
 #include "aelkey_util.h"
 #include "lua_scripts.h"
 #include "luacompat.h"
@@ -28,10 +29,6 @@ extern "C" int luaopen_aelkey(lua_State *L) {
 
   luaL_newlib(L, funcs);
 
-  // bit submodule
-  luaopen_aelkey_bit(L);
-  lua_setfield(L, -2, "bit");
-
   // click submodule
   if (luaL_loadstring(L, aelkey_click_script) == LUA_OK) {
     lua_call(L, 0, 1);
@@ -40,6 +37,10 @@ extern "C" int luaopen_aelkey(lua_State *L) {
     lua_error(L);
   }
 
+  // bit submodule
+  luaopen_aelkey_bit(L);
+  lua_setfield(L, -2, "bit");
+
   // daemon submodule
   luaopen_aelkey_daemon(L);
   lua_setfield(L, -2, "daemon");
@@ -47,6 +48,10 @@ extern "C" int luaopen_aelkey(lua_State *L) {
   // hid submodule
   luaopen_aelkey_hid(L);
   lua_setfield(L, -2, "hid");
+
+  // usb submodule
+  luaopen_aelkey_usb(L);
+  lua_setfield(L, -2, "usb");
 
   // util submodule
   luaopen_aelkey_util(L);
