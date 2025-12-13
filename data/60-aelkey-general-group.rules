@@ -1,0 +1,16 @@
+## allow virtual device creation
+KERNEL=="uinput", SUBSYSTEM=="misc", MODE="0660", GROUP="aelkey-dev", OPTIONS+="static_node=uinput"
+KERNEL=="uhid", SUBSYSTEM=="misc", MODE="0660", GROUP="aelkey-dev", OPTIONS+="static_node=uhid"
+
+## libusb access
+SUBSYSTEM=="usb", MODE="0660", GROUP="aelkey-dev"
+
+## general access
+SUBSYSTEM=="input", MODE="0660", GROUP="aelkey-dev"
+SUBSYSTEM=="hidraw", MODE="0660", GROUP="aelkey-dev"
+
+## devices without specific driver
+KERNEL=="hidraw*", SUBSYSTEM=="hidraw", DRIVERS=="hid-generic", MODE="0660", GROUP="aelkey-dev"
+
+## bluetooth devices, otherwise unspecified
+KERNEL=="hidraw*", SUBSYSTEM=="hidraw", KERNELS=="0005:0000:0000.*",  MODE="0660", GROUP="aelkey-dev"

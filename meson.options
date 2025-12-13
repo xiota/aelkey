@@ -1,0 +1,6 @@
+option(
+  'sysusersdir',
+  type: 'string',
+  value: '',
+  description: 'Directory for sysusers.d files'
+)

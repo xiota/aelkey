@@ -63,6 +63,20 @@ shared_library(
 )
 
 install_data(
-  'data/60-aelkey-general.rules',
+  [
+    'data/60-aelkey-general-group.rules',
+    'data/60-aelkey-general-uaccess.rules',
+  ],
   install_dir: get_option('datadir') / meson.project_name(),
+)
+
+sysusersdir = get_option('sysusersdir')
+if sysusersdir == ''
+  sysusersdir = get_option('libdir') / 'sysusers.d'
+endif
+
+install_data(
+  'data/sysusers-aelkey.conf',
+  rename: meson.project_name() + '.conf',
+  install_dir: sysusersdir,
 )
