@@ -9,6 +9,7 @@ project(
 # depends
 libevdev_dep = dependency('libevdev')
 libudev_dep  = dependency('libudev')
+libusb_dep  = dependency('libusb-1.0')
 luajit_dep   = dependency('luajit')
 
 # config.h
@@ -55,7 +56,8 @@ shared_library(
   dependencies: [
     libevdev_dep,
     libudev_dep,
-    luajit_dep
+    libusb_dep,
+    luajit_dep,
   ],
   name_prefix: '',
   install: true,
