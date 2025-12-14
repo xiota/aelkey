@@ -295,6 +295,15 @@ int lua_start(lua_State *L) {
       int fd_ready = events[i].data.fd;
       uint32_t evmask = events[i].events;
 
+      // libusb poll fds
+      if (aelkey_state.libusb_fd_set.count(fd_ready)) {
+        int rc = libusb_handle_events(aelkey_state.g_libusb);
+        if (rc != 0) {
+          std::cerr << "libusb_handle_events error: " << libusb_error_name(rc) << std::endl;
+        }
+        continue;  // handled; go to next epoll event
+      }
+
       // udev hotplug
       if (fd_ready == aelkey_state.udev_fd) {
         struct udev_device *dev = udev_monitor_receive_device(aelkey_state.g_mon);
@@ -347,13 +356,7 @@ int lua_start(lua_State *L) {
 
       if (ctx_ptr->decl.type == "hidraw") {
         dispatch_hidraw(L, fd_ready, *ctx_ptr);
-      } else if (ctx_ptr->decl.type == "libusb") {
-        // completions will be delivered to the transfer callback
-        int rc = libusb_handle_events(aelkey_state.g_libusb);
-        if (rc != 0) {
-          std::cerr << "libusb_handle_events error: " << libusb_error_name(rc) << std::endl;
-        }
-      } else {
+      } else if (ctx_ptr->decl.type == "evdev") {
         dispatch_evdev(L, *ctx_ptr);
       }
     }

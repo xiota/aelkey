@@ -309,7 +309,6 @@ InputCtx attach_device(
       close(ctx.fd);
       ctx.fd = -1;
     }
-
   } else if (in.type == "libusb") {
     // open global libusb context
     if (!aelkey_state.g_libusb) {
@@ -329,19 +328,22 @@ InputCtx attach_device(
 
     ensure_claimed(ctx.usb_handle, in);
 
+    // After libusb_init(&aelkey_state.g_libusb) and open/claim device:
     const struct libusb_pollfd **pfds = libusb_get_pollfds(aelkey_state.g_libusb);
     if (pfds) {
-      for (int i = 0; pfds[i] != nullptr; i++) {
+      for (int i = 0; pfds[i] != nullptr; ++i) {
         struct epoll_event evreg{};
-        evreg.events = pfds[i]->events;
+        evreg.events = pfds[i]->events;  // typically EPOLLIN
         evreg.data.fd = pfds[i]->fd;
         if (epoll_ctl(epfd, EPOLL_CTL_ADD, pfds[i]->fd, &evreg) < 0) {
           if (errno != EEXIST) {
             perror("epoll_ctl add libusb fd");
           }
+        } else {
+          aelkey_state.libusb_fd_set.insert(pfds[i]->fd);
         }
       }
-      free(pfds);
+      libusb_free_pollfds(pfds);  // not free(pfds)!
     }
     // libusb devices don’t have a single usable fd, so ctx.fd stays -1
   } else {

@@ -2,6 +2,7 @@
 
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 #include <libevdev/libevdev-uinput.h>
@@ -34,6 +35,7 @@ struct AelkeyState {
   std::unordered_map<std::string, std::vector<InputDecl>> watch_map;
 
   libusb_context *g_libusb = nullptr;
+  std::unordered_set<int> libusb_fd_set;
 
   void aelkey_set_mode(ActiveMode mode) {
     switch (mode) {
