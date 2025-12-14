@@ -17,9 +17,8 @@ struct AelkeyState {
   int udev_fd = -1;
   std::unordered_map<std::string, libevdev_uinput *> uinput_devices;
   std::unordered_map<int, TickCallback> tick_callbacks;
-  std::unordered_map<int, InputCtx> input_map;
-  std::unordered_map<int, std::vector<struct input_event>> frames;
-  std::unordered_map<std::string, int> devnode_to_fd;
+  std::unordered_map<std::string, InputCtx> input_map;
+  std::unordered_map<std::string, std::vector<struct input_event>> frames;
 
   enum ActiveMode { NONE, LOOP, DAEMON };
   ActiveMode active_mode = NONE;

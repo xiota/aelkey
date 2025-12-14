@@ -10,24 +10,26 @@
 #include "aelkey_state.h"
 #include "device_input.h"
 
-int attach_input_device(const std::string &devnode, const InputDecl &decl) {
-  // already attached
-  if (aelkey_state.devnode_to_fd.find(devnode) != aelkey_state.devnode_to_fd.end()) {
-    std::cout << "Device already attached: " << devnode << std::endl;
-    return -1;
+bool attach_input_device(const std::string &devnode, const InputDecl &decl) {
+  // already attached?
+  if (aelkey_state.input_map.find(decl.id) != aelkey_state.input_map.end()) {
+    std::cout << "Device already attached: " << decl.id << std::endl;
+    return false;
   }
 
-  // try to attach
-  int newfd = attach_device(
+  InputCtx ctx = attach_device(
       devnode, decl, aelkey_state.input_map, aelkey_state.frames, aelkey_state.epfd
   );
-  if (newfd >= 0) {
-    aelkey_state.devnode_to_fd[devnode] = newfd;
-    return newfd;
-  } else {
+
+  // failure check: neither fd nor usb_handle valid
+  if (ctx.fd < 0 && !ctx.usb_handle) {
     std::cerr << "Failed to attach input: " << decl.id << " (" << devnode << ")" << std::endl;
-    return -1;
+    return false;
   }
+
+  // store context keyed by string id
+  aelkey_state.input_map[decl.id] = std::move(ctx);
+  return true;
 }
 
 int device_udev_init(lua_State *L) {

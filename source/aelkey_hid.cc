@@ -11,34 +11,30 @@
 #include "aelkey_state.h"
 #include "luacompat.h"
 
-static int resolve_fd(lua_State *L, int idx) {
-  if (lua_type(L, idx) == LUA_TSTRING) {
-    const char *id = lua_tostring(L, idx);
-    auto it = aelkey_state.devnode_to_fd.find(id);
-    if (it == aelkey_state.devnode_to_fd.end()) {
-      return -1;  // not found
-    }
-    return it->second;
-  } else {
-    return luaL_checkinteger(L, idx);  // still allow raw fd
-  }
-}
-
 // Retrieve a HID feature report
 // get_feature_report(dev_id, report_id)
 static int lua_get_feature_report(lua_State *L) {
-  int fd = resolve_fd(L, 1);
-  if (fd < 0) {
+  const char *id = luaL_checkstring(L, 1);
+
+  auto it = aelkey_state.input_map.find(id);
+  if (it == aelkey_state.input_map.end()) {
     lua_pushnil(L);
     return 1;
   }
+
+  InputCtx &ctx = it->second;
+  if (ctx.fd < 0) {
+    lua_pushnil(L);
+    return 1;
+  }
+
   int report_id = luaL_checkinteger(L, 2);
 
   const int max_size = 256;
   std::vector<unsigned char> buf(max_size);
   buf[0] = static_cast<unsigned char>(report_id);
 
-  if (ioctl(fd, HIDIOCGFEATURE(max_size), buf.data()) < 0) {
+  if (ioctl(ctx.fd, HIDIOCGFEATURE(max_size), buf.data()) < 0) {
     lua_pushnil(L);
     return 1;
   }
@@ -50,14 +46,23 @@ static int lua_get_feature_report(lua_State *L) {
 // Retrieve the HID report descriptor
 // get_report_descriptor(dev_id)
 static int lua_get_report_descriptor(lua_State *L) {
-  int fd = resolve_fd(L, 1);
-  if (fd < 0) {
+  // first argument must be a string id
+  const char *id = luaL_checkstring(L, 1);
+
+  auto it = aelkey_state.input_map.find(id);
+  if (it == aelkey_state.input_map.end()) {
+    lua_pushnil(L);
+    return 1;
+  }
+
+  InputCtx &ctx = it->second;
+  if (ctx.fd < 0) {
     lua_pushnil(L);
     return 1;
   }
 
   int desc_size;
-  if (ioctl(fd, HIDIOCGRDESCSIZE, &desc_size) < 0) {
+  if (ioctl(ctx.fd, HIDIOCGRDESCSIZE, &desc_size) < 0) {
     lua_pushnil(L);
     return 1;
   }
@@ -65,7 +70,7 @@ static int lua_get_report_descriptor(lua_State *L) {
   struct hidraw_report_descriptor rpt_desc;
   rpt_desc.size = desc_size;
 
-  if (ioctl(fd, HIDIOCGRDESC, &rpt_desc) < 0) {
+  if (ioctl(ctx.fd, HIDIOCGRDESC, &rpt_desc) < 0) {
     lua_pushnil(L);
     return 1;
   }
@@ -77,8 +82,17 @@ static int lua_get_report_descriptor(lua_State *L) {
 // Read an input report from hidraw
 // read_input_report(dev_id)
 static int lua_read_input_report(lua_State *L) {
-  int fd = resolve_fd(L, 1);
-  if (fd < 0) {
+  const char *dev_id_cstr = luaL_checkstring(L, 1);
+  std::string dev_id(dev_id_cstr);
+
+  auto it = aelkey_state.input_map.find(dev_id);
+  if (it == aelkey_state.input_map.end()) {
+    lua_pushnil(L);
+    return 1;
+  }
+
+  InputCtx &ctx = it->second;
+  if (ctx.fd < 0) {
     lua_pushnil(L);
     return 1;
   }
@@ -86,7 +100,7 @@ static int lua_read_input_report(lua_State *L) {
   const int max_size = 256;
   std::vector<unsigned char> buf(max_size);
 
-  ssize_t n = read(fd, buf.data(), max_size);
+  ssize_t n = read(ctx.fd, buf.data(), max_size);
   if (n <= 0) {
     lua_pushnil(L);
     return 1;
@@ -99,15 +113,24 @@ static int lua_read_input_report(lua_State *L) {
 // Send a HID feature report
 // send_feature_report(dev_id, data)
 static int lua_send_feature_report(lua_State *L) {
-  int fd = resolve_fd(L, 1);
-  if (fd < 0) {
+  const char *id = luaL_checkstring(L, 1);
+
+  auto it = aelkey_state.input_map.find(id);
+  if (it == aelkey_state.input_map.end()) {
     lua_pushnil(L);
     return 1;
   }
+
+  InputCtx &ctx = it->second;
+  if (ctx.fd < 0) {
+    lua_pushnil(L);
+    return 1;
+  }
+
   size_t len;
   const char *data = luaL_checklstring(L, 2, &len);
 
-  if (ioctl(fd, HIDIOCSFEATURE(len), data) < 0) {
+  if (ioctl(ctx.fd, HIDIOCSFEATURE(len), data) < 0) {
     lua_pushboolean(L, 0);
     return 1;
   }
@@ -119,15 +142,24 @@ static int lua_send_feature_report(lua_State *L) {
 // Write an output report to hidraw
 // send_output_report(dev_id, data)
 static int lua_send_output_report(lua_State *L) {
-  int fd = resolve_fd(L, 1);
-  if (fd < 0) {
+  const char *id = luaL_checkstring(L, 1);
+
+  auto it = aelkey_state.input_map.find(id);
+  if (it == aelkey_state.input_map.end()) {
     lua_pushnil(L);
     return 1;
   }
+
+  InputCtx &ctx = it->second;
+  if (ctx.fd < 0) {
+    lua_pushnil(L);
+    return 1;
+  }
+
   size_t len;
   const char *data = luaL_checklstring(L, 2, &len);
 
-  ssize_t n = write(fd, data, len);
+  ssize_t n = write(ctx.fd, data, len);
   if (n < 0 || static_cast<size_t>(n) != len) {
     lua_pushboolean(L, 0);
     return 1;

@@ -29,6 +29,7 @@ struct InputDecl {
 struct InputCtx {
   InputDecl decl;
   libevdev *idev = nullptr;
+  int fd = -1;
   libusb_device_handle *usb_handle = nullptr;
 };
 
@@ -36,11 +37,11 @@ InputDecl parse_input(lua_State *L, int index);
 
 std::string match_device(const InputDecl &decl);
 
-int attach_device(
+InputCtx attach_device(
     const std::string &devnode,
     const InputDecl &in,
-    std::unordered_map<int, InputCtx> &input_map,
-    std::unordered_map<int, std::vector<struct input_event>> &frames,
+    std::unordered_map<std::string, InputCtx> &input_map,
+    std::unordered_map<std::string, std::vector<struct input_event>> &frames,
     int epfd
 );
 

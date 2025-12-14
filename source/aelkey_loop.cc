@@ -38,42 +38,50 @@ static void attach_inputs_from_decls(lua_State *L) {
     if (devnode.empty()) {
       continue;
     }
-    int fd = attach_input_device(devnode, decl);
-    if (fd >= 0) {
+    if (attach_input_device(devnode, decl)) {
       notify_state_change(L, decl, "connect");
     }
   }
 }
 
-static InputDecl detach_input_device(int fd) {
+static InputDecl detach_input_device(const std::string &dev_id) {
   InputDecl decl{};
 
-  // Remove from epoll
-  epoll_ctl(aelkey_state.epfd, EPOLL_CTL_DEL, fd, nullptr);
-
-  // Lookup in input_map
-  auto im = aelkey_state.input_map.find(fd);
-  if (im != aelkey_state.input_map.end()) {
-    decl = im->second.decl;
-    if (im->second.idev) {
-      libevdev_grab(im->second.idev, LIBEVDEV_UNGRAB);
-      libevdev_free(im->second.idev);
-    }
-    // remove from input_map
-    aelkey_state.input_map.erase(im);
+  auto im = aelkey_state.input_map.find(dev_id);
+  if (im == aelkey_state.input_map.end()) {
+    return decl;  // nothing to detach
   }
 
-  aelkey_state.frames.erase(fd);
-  close(fd);
+  InputCtx &ctx = im->second;
+  decl = ctx.decl;
 
-  // remove from devnode_to_fd
-  for (auto it = aelkey_state.devnode_to_fd.begin(); it != aelkey_state.devnode_to_fd.end();
-       ++it) {
-    if (it->second == fd) {
-      aelkey_state.devnode_to_fd.erase(it);
-      break;
-    }
+  // Remove from epoll if fd is valid
+  if (aelkey_state.epfd >= 0 && ctx.fd >= 0) {
+    epoll_ctl(aelkey_state.epfd, EPOLL_CTL_DEL, ctx.fd, nullptr);
   }
+
+  // Free libevdev resources if present
+  if (ctx.idev) {
+    libevdev_grab(ctx.idev, LIBEVDEV_UNGRAB);
+    libevdev_free(ctx.idev);
+    ctx.idev = nullptr;
+  }
+
+  // Close fd if valid
+  if (ctx.fd >= 0) {
+    close(ctx.fd);
+    ctx.fd = -1;
+  }
+
+  // Close libusb handle if present
+  if (ctx.usb_handle) {
+    libusb_close(ctx.usb_handle);
+    ctx.usb_handle = nullptr;
+  }
+
+  // Erase from maps keyed by string id
+  aelkey_state.input_map.erase(im);
+  aelkey_state.frames.erase(dev_id);
 
   return decl;
 }
@@ -83,21 +91,15 @@ static void handle_udev_remove(lua_State *L, const std::string &devnode) {
     return;
   }
 
-  auto it = aelkey_state.devnode_to_fd.find(devnode);
-  if (it == aelkey_state.devnode_to_fd.end()) {
-    return;
-  }
-
-  InputDecl decl = detach_input_device(it->second);
-  if (!decl.id.empty()) {
-    notify_state_change(L, decl, "disconnect");
-  }
-}
-
-static void cleanup_fd_on_hup_err(lua_State *L, int fd_ready) {
-  InputDecl decl = detach_input_device(fd_ready);
-  if (!decl.id.empty()) {
-    notify_state_change(L, decl, "disconnect");
+  for (auto &decl : aelkey_state.input_decls) {
+    std::string candidate = match_device(decl);
+    if (candidate == devnode) {
+      InputDecl removed = detach_input_device(decl.id);
+      if (!removed.id.empty()) {
+        notify_state_change(L, removed, "disconnect");
+      }
+      break;
+    }
   }
 }
 
@@ -106,18 +108,17 @@ static void handle_udev_add(lua_State *L, const std::string &devnode) {
     return;
   }
 
-  // already attached
-  if (aelkey_state.devnode_to_fd.find(devnode) != aelkey_state.devnode_to_fd.end()) {
-    std::cout << "Device already attached: " << devnode << std::endl;
-    return;
-  }
-
-  // match and attach
+  // already attached?
   for (auto &decl : aelkey_state.input_decls) {
     std::string candidate = match_device(decl);
     if (candidate == devnode) {
-      int fd = attach_input_device(devnode, decl);
-      if (fd >= 0) {
+      if (aelkey_state.input_map.find(decl.id) != aelkey_state.input_map.end()) {
+        std::cout << "Device already attached: " << decl.id << std::endl;
+        return;
+      }
+
+      // try to attach
+      if (attach_input_device(devnode, decl)) {
         notify_state_change(L, decl, "connect");
       }
       break;
@@ -125,14 +126,14 @@ static void handle_udev_add(lua_State *L, const std::string &devnode) {
   }
 }
 
-static void dispatch_tick(lua_State *L, int fd_ready) {
-  auto it_tick = aelkey_state.tick_callbacks.find(fd_ready);
+static void dispatch_tick(lua_State *L, int timer_fd) {
+  auto it_tick = aelkey_state.tick_callbacks.find(timer_fd);
   if (it_tick == aelkey_state.tick_callbacks.end()) {
     return;
   }
 
   uint64_t expirations = 0;
-  ssize_t r = read(fd_ready, &expirations, sizeof(expirations));
+  ssize_t r = read(timer_fd, &expirations, sizeof(expirations));
   if (r > 0) {
     auto &cb = it_tick->second;
     if (cb.is_function && cb.ref != LUA_NOREF) {
@@ -271,12 +272,12 @@ static void dispatch_hidraw(lua_State *L, int fd_ready, InputCtx &ctx) {
   }
 }
 
-static void dispatch_evdev(lua_State *L, int fd_ready, InputCtx &ctx) {
+static void dispatch_evdev(lua_State *L, InputCtx &ctx) {
   if (!ctx.idev) {
     return;
   }
 
-  auto fit = aelkey_state.frames.find(fd_ready);
+  auto fit = aelkey_state.frames.find(ctx.decl.id);
   if (fit == aelkey_state.frames.end()) {
     return;
   }
@@ -447,55 +448,78 @@ int lua_start(lua_State *L) {
         continue;
       }
 
+      // look up InputCtx
+      InputCtx *ctx_ptr = nullptr;
+      for (auto &kv : aelkey_state.input_map) {
+        if (kv.second.fd == fd_ready) {
+          ctx_ptr = &kv.second;
+          break;
+        }
+      }
+      if (!ctx_ptr) {
+        continue;
+      }
+
       // Input fds or cleanup
       if ((evmask & (EPOLLHUP | EPOLLERR)) != 0) {
-        cleanup_fd_on_hup_err(L, fd_ready);
+        InputDecl decl = detach_input_device(ctx_ptr->decl.id);
+        if (!decl.id.empty()) {
+          notify_state_change(L, decl, "disconnect");
+        }
         continue;
       }
       if ((evmask & EPOLLIN) == 0) {
         continue;
       }
 
-      auto it = aelkey_state.input_map.find(fd_ready);
-      if (it == aelkey_state.input_map.end()) {
-        continue;
-      }
-
-      InputCtx &ctx = it->second;
-      if (ctx.decl.type == "hidraw") {
-        dispatch_hidraw(L, fd_ready, ctx);
-      } else if (ctx.decl.type == "libusb") {
+      if (ctx_ptr->decl.type == "hidraw") {
+        dispatch_hidraw(L, fd_ready, *ctx_ptr);
+      } else if (ctx_ptr->decl.type == "libusb") {
         // completions will be delivered to the transfer callback
         int rc = libusb_handle_events(aelkey_state.g_libusb);
         if (rc != 0) {
           std::cerr << "libusb_handle_events error: " << libusb_error_name(rc) << std::endl;
         }
       } else {
-        dispatch_evdev(L, fd_ready, ctx);
+        dispatch_evdev(L, *ctx_ptr);
       }
     }
   }
 
   // 4) Cleanup all resources
+  // Detach all devices
   for (auto &kv : aelkey_state.input_map) {
-    int fd = kv.first;
-    if (kv.second.idev) {
-      libevdev_grab(kv.second.idev, LIBEVDEV_UNGRAB);
-      libevdev_free(kv.second.idev);
+    InputCtx &ctx = kv.second;
+
+    // Evdev/hidraw cleanup
+    if (ctx.idev) {
+      libevdev_grab(ctx.idev, LIBEVDEV_UNGRAB);
+      libevdev_free(ctx.idev);
     }
-    close(fd);
+    if (ctx.fd >= 0) {
+      close(ctx.fd);
+      ctx.fd = -1;
+    }
+
+    // Libusb cleanup
+    if (ctx.usb_handle) {
+      libusb_close(ctx.usb_handle);
+      ctx.usb_handle = nullptr;
+    }
   }
   aelkey_state.input_map.clear();
   aelkey_state.frames.clear();
-  aelkey_state.devnode_to_fd.clear();
 
+  // Destroy uinput devices
   for (auto &kv : aelkey_state.uinput_devices) {
     libevdev_uinput_destroy(kv.second);
   }
   aelkey_state.uinput_devices.clear();
 
+  // Tear down global monitoring state
   if (aelkey_state.udev_fd >= 0) {
     epoll_ctl(aelkey_state.epfd, EPOLL_CTL_DEL, aelkey_state.udev_fd, nullptr);
+    close(aelkey_state.udev_fd);
     aelkey_state.udev_fd = -1;
   }
   if (aelkey_state.g_mon) {
@@ -515,6 +539,7 @@ int lua_start(lua_State *L) {
     aelkey_state.g_libusb = nullptr;
   }
 
+  // Reset mode
   aelkey_state.aelkey_set_mode(AelkeyState::ActiveMode::NONE);
 
   lua_pushboolean(L, 1);

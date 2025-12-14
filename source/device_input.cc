@@ -270,39 +270,49 @@ std::string match_device(const InputDecl &decl) {
   }
 }
 
-int attach_device(
+InputCtx attach_device(
     const std::string &devnode,
     const InputDecl &in,
-    std::unordered_map<int, InputCtx> &input_map,
-    std::unordered_map<int, std::vector<struct input_event>> &frames,
+    std::unordered_map<std::string, InputCtx> &input_map,
+    std::unordered_map<std::string, std::vector<struct input_event>> &frames,
     int epfd
 ) {
-  // Open the device node
-  int fd = open(devnode.c_str(), O_RDONLY | O_NONBLOCK);
-  if (fd < 0) {
-    perror("open");
-    return -1;
-  }
-
   InputCtx ctx;
   ctx.decl = in;
 
   if (in.type == "hidraw") {
-    // hidraw: no libevdev init
+    // hidraw: open fd, no libevdev init
+    ctx.fd = ::open(devnode.c_str(), O_RDONLY | O_NONBLOCK);
+    if (ctx.fd < 0) {
+      perror("open");
+      return ctx;  // ctx.fd == -1 signals failure
+    }
+
     std::cout << "Attached hidraw: " << devnode << std::endl;
 
     if (in.grab) {
-      int flags = fcntl(fd, F_GETFL, 0);
+      int flags = fcntl(ctx.fd, F_GETFL, 0);
       if (flags != -1) {
-        fcntl(fd, F_SETFL, flags & ~O_NONBLOCK);
+        fcntl(ctx.fd, F_SETFL, flags & ~O_NONBLOCK);
       }
     }
+
+    // register with epoll
+    struct epoll_event evreg{};
+    evreg.events = EPOLLIN;
+    evreg.data.fd = ctx.fd;
+    if (epoll_ctl(epfd, EPOLL_CTL_ADD, ctx.fd, &evreg) < 0) {
+      perror("epoll_ctl EPOLL_CTL_ADD hidraw");
+      close(ctx.fd);
+      ctx.fd = -1;
+    }
+
   } else if (in.type == "libusb") {
-    // open global context
+    // open global libusb context
     if (!aelkey_state.g_libusb) {
       if (libusb_init(&aelkey_state.g_libusb) != 0) {
         std::cerr << "Failed to init libusb\n";
-        return -1;
+        return ctx;
       }
     }
     ctx.usb_handle =
@@ -310,7 +320,7 @@ int attach_device(
     if (!ctx.usb_handle) {
       std::cerr << "Failed to open libusb device " << std::hex << in.vendor << ":" << in.product
                 << std::dec << "\n";
-      return -1;
+      return ctx;
     }
     std::cout << "Attached libusb device: " << in.id << std::endl;
 
@@ -330,17 +340,25 @@ int attach_device(
       }
       free(pfds);
     }
-    return 0;  // no usable fds for libusb
+    // libusb devices don’t have a single usable fd, so ctx.fd stays -1
+
   } else {
     // default: evdev
+    ctx.fd = ::open(devnode.c_str(), O_RDONLY | O_NONBLOCK);
+    if (ctx.fd < 0) {
+      perror("open");
+      return ctx;
+    }
+
     struct libevdev *idev = nullptr;
-    if (libevdev_new_from_fd(fd, &idev) < 0) {
+    if (libevdev_new_from_fd(ctx.fd, &idev) < 0) {
       std::cerr << "Failed to init libevdev for " << devnode << std::endl;
-      close(fd);
-      return -1;
+      close(ctx.fd);
+      ctx.fd = -1;
+      return ctx;
     }
     ctx.idev = idev;
-    aelkey_state.frames[fd] = {};
+    frames[in.id] = {};  // keyed by string id now
     std::cout << "Attached evdev: " << libevdev_get_name(idev) << std::endl;
 
     if (in.grab) {
@@ -351,26 +369,27 @@ int attach_device(
         std::cout << "Grabbed device exclusively: " << devnode << std::endl;
       }
     }
-  }
 
-  aelkey_state.input_map[fd] = ctx;
-
-  struct epoll_event evreg{};
-  evreg.events = EPOLLIN;
-  evreg.data.fd = fd;
-  if (epoll_ctl(epfd, EPOLL_CTL_ADD, fd, &evreg) < 0) {
-    perror("epoll_ctl EPOLL_CTL_ADD");
-    if (ctx.idev) {
+    // register with epoll
+    struct epoll_event evreg{};
+    evreg.events = EPOLLIN;
+    evreg.data.fd = ctx.fd;
+    if (epoll_ctl(epfd, EPOLL_CTL_ADD, ctx.fd, &evreg) < 0) {
+      perror("epoll_ctl EPOLL_CTL_ADD evdev");
       libevdev_grab(ctx.idev, LIBEVDEV_UNGRAB);
       libevdev_free(ctx.idev);
+      ctx.idev = nullptr;
+      close(ctx.fd);
+      ctx.fd = -1;
     }
-    aelkey_state.input_map.erase(fd);
-    aelkey_state.frames.erase(fd);
-    close(fd);
-    return -1;
   }
 
-  return fd;
+  // Save context keyed by string id if valid
+  if (!in.id.empty() && (ctx.fd >= 0 || ctx.usb_handle)) {
+    input_map[in.id] = ctx;
+  }
+
+  return ctx;
 }
 
 void parse_inputs_from_lua(lua_State *L) {
