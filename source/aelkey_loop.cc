@@ -13,36 +13,10 @@
 #include <sys/timerfd.h>
 #include <unistd.h>
 
+#include "aelkey_device.h"
 #include "aelkey_state.h"
 #include "device_udev.h"
 #include "luacompat.h"
-
-static void create_outputs_from_decls() {
-  for (auto &out : aelkey_state.output_decls) {
-    if (out.id.empty()) {
-      continue;
-    }
-    if (aelkey_state.uinput_devices.count(out.id)) {
-      continue;
-    }
-    libevdev_uinput *uidev = create_output_device(out);
-    if (uidev) {
-      aelkey_state.uinput_devices[out.id] = uidev;
-    }
-  }
-}
-
-static void attach_inputs_from_decls(lua_State *L) {
-  for (auto &decl : aelkey_state.input_decls) {
-    std::string devnode = match_device(decl);
-    if (devnode.empty()) {
-      continue;
-    }
-    if (attach_input_device(devnode, decl)) {
-      notify_state_change(L, decl, "connect");
-    }
-  }
-}
 
 static InputDecl detach_input_device(const std::string &dev_id) {
   InputDecl decl{};
@@ -386,25 +360,10 @@ int lua_start(lua_State *L) {
   std::signal(SIGINT, handle_signal);   // interactive interrupt (Ctrl+C)
   std::signal(SIGTERM, handle_signal);  // termination request (kill, systemd stop)
 
-  // 1) Ensure init is done (epoll + udev monitor)
-  if (aelkey_state.epfd < 0) {
-    int rc = device_udev_init(L);
-    if (rc != 0) {
-      // lua_init already pushed an error or returned an error code
-      return rc;
-    }
-  }
+  // open inputs and outputs tables
+  lua_open_device(L);
 
-  // 2) Parse declarations from Lua and perform initial setup
-  // These helpers should read from the script's tables and fill:
-  //   aelkey_state.output_decls and aelkey_state.input_decls
-  parse_outputs_from_lua(L);
-  parse_inputs_from_lua(L);
-
-  create_outputs_from_decls();
-  attach_inputs_from_decls(L);
-
-  // 3) Blocking epoll loop
+  // Blocking epoll loop
   constexpr int MAX_EVENTS = 64;
   struct epoll_event events[MAX_EVENTS];
 
@@ -486,7 +445,7 @@ int lua_start(lua_State *L) {
     }
   }
 
-  // 4) Cleanup all resources
+  // Cleanup all resources
   // Detach all devices
   for (auto &kv : aelkey_state.input_map) {
     InputCtx &ctx = kv.second;

@@ -6,46 +6,62 @@
 
 #include "aelkey_state.h"
 #include "device_input.h"
+#include "device_udev.h"
+
+static void create_outputs_from_decls() {
+  for (auto &out : aelkey_state.output_decls) {
+    if (out.id.empty()) {
+      continue;
+    }
+    if (aelkey_state.uinput_devices.count(out.id)) {
+      continue;
+    }
+    libevdev_uinput *uidev = create_output_device(out);
+    if (uidev) {
+      aelkey_state.uinput_devices[out.id] = uidev;
+    }
+  }
+}
+
+static void attach_inputs_from_decls(lua_State *L) {
+  for (auto &decl : aelkey_state.input_decls) {
+    std::string devnode = match_device(decl);
+    if (devnode.empty()) {
+      continue;
+    }
+    if (attach_input_device(devnode, decl)) {
+      notify_state_change(L, decl, "connect");
+    }
+  }
+}
 
 int lua_open_device(lua_State *L) {
-  luaL_checktype(L, 1, LUA_TTABLE);
-  InputDecl decl = parse_input(L, 1);
-
-  if (decl.id.empty()) {
-    return luaL_error(L, "open_device: missing 'id' field");
+  // If devices already attached, skip
+  if (!aelkey_state.input_map.empty() || !aelkey_state.uinput_devices.empty()) {
+    lua_pushboolean(L, 1);
+    return 1;
   }
 
-  // Ensure epoll fd exists
-  if (aelkey_state.epfd < 0) {
-    aelkey_state.epfd = epoll_create1(0);
-    if (aelkey_state.epfd < 0) {
-      return luaL_error(L, "open_device: failed to create epoll fd");
+  // Ensure init is done (epoll + udev monitor)
+  if (aelkey_state.epfd < 0 || aelkey_state.udev_fd < 0 || !aelkey_state.g_udev ||
+      !aelkey_state.g_mon) {
+    int rc = device_udev_init(L);
+    if (rc != 0) {
+      // lua_init already pushed an error or returned an error code
+      return rc;
     }
   }
 
-  // Match device node
-  std::string devnode = match_device(decl);
-  if (devnode.empty()) {
-    lua_pushnil(L);
-    return 1;
-  }
+  // Parse declarations from Lua and perform initial setup
+  // These helpers should read from the script's tables and fill:
+  //   aelkey_state.output_decls and aelkey_state.input_decls
+  parse_outputs_from_lua(L);
+  parse_inputs_from_lua(L);
 
-  // Attach device returns a full InputCtx
-  InputCtx ctx = attach_device(
-      devnode, decl, aelkey_state.input_map, aelkey_state.frames, aelkey_state.epfd
-  );
+  create_outputs_from_decls();
+  attach_inputs_from_decls(L);
 
-  // Check for failure: both fd and usb_handle invalid
-  if (ctx.fd < 0 && !ctx.usb_handle) {
-    lua_pushnil(L);
-    return 1;
-  }
-
-  // Store context keyed by string id
-  aelkey_state.input_map[decl.id] = std::move(ctx);
-
-  // Return the string id to Lua, not the fd
-  lua_pushstring(L, decl.id.c_str());
+  lua_pushboolean(L, 1);
   return 1;
 }
 
