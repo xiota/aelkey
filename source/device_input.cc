@@ -135,7 +135,10 @@ static int ensure_claimed(libusb_device_handle *devh, const InputDecl &in) {
 }
 
 std::string match_device(const InputDecl &decl) {
-  if (decl.type == "hidraw") {
+  if (decl.type == "libusb") {
+    // libusb devices do not have a single /dev node to match
+    return {};
+  } else if (decl.type == "hidraw") {
     glob_t g;
     if (glob("/dev/hidraw*", 0, nullptr, &g) == 0) {
       for (size_t i = 0; i < g.gl_pathc; i++) {
@@ -341,7 +344,6 @@ InputCtx attach_device(
       free(pfds);
     }
     // libusb devices don’t have a single usable fd, so ctx.fd stays -1
-
   } else {
     // default: evdev
     ctx.fd = ::open(devnode.c_str(), O_RDONLY | O_NONBLOCK);

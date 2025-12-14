@@ -25,10 +25,18 @@ static void create_outputs_from_decls() {
 
 static void attach_inputs_from_decls(lua_State *L) {
   for (auto &decl : aelkey_state.input_decls) {
+    if (decl.type == "libusb") {
+      if (attach_input_device("", decl)) {
+        notify_state_change(L, decl, "connect");
+      }
+      continue;
+    }
+
     std::string devnode = match_device(decl);
     if (devnode.empty()) {
       continue;
     }
+
     if (attach_input_device(devnode, decl)) {
       notify_state_change(L, decl, "connect");
     }
