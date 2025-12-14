@@ -1,10 +1,102 @@
 #include "aelkey_hid.h"
 
+#include <cstring>
+
 #include <libusb-1.0/libusb.h>
 #include <lua.hpp>
 
 #include "aelkey_state.h"
 #include "luacompat.h"
+
+// Map libusb_transfer_type enum → string
+static const char *transfer_type_to_string(uint8_t type) {
+  switch (type) {
+    case LIBUSB_TRANSFER_TYPE_CONTROL:
+      return "control";
+    case LIBUSB_TRANSFER_TYPE_ISOCHRONOUS:
+      return "iso";
+    case LIBUSB_TRANSFER_TYPE_BULK:
+      return "bulk";
+    case LIBUSB_TRANSFER_TYPE_INTERRUPT:
+      return "interrupt";
+    default:
+      return "unknown";
+  }
+}
+
+// Map libusb_transfer_status enum → string
+static const char *transfer_status_to_string(libusb_transfer_status status) {
+  switch (status) {
+    case LIBUSB_TRANSFER_COMPLETED:
+      return "ok";
+    case LIBUSB_TRANSFER_ERROR:
+      return "error";
+    case LIBUSB_TRANSFER_TIMED_OUT:
+      return "timeout";
+    case LIBUSB_TRANSFER_CANCELLED:
+      return "cancelled";
+    case LIBUSB_TRANSFER_STALL:
+      return "stall";
+    case LIBUSB_TRANSFER_NO_DEVICE:
+      return "no_device";
+    case LIBUSB_TRANSFER_OVERFLOW:
+      return "overflow";
+    default:
+      return "unknown";
+  }
+}
+
+static void LIBUSB_CALL dispatch_libusb(libusb_transfer *transfer) {
+  auto *ud = static_cast<std::pair<InputCtx *, lua_State *> *>(transfer->user_data);
+  InputCtx *ctx = ud->first;
+  lua_State *L = ud->second;
+
+  if (!ctx->decl.callback_events.empty()) {
+    lua_getglobal(L, ctx->decl.callback_events.c_str());
+    if (lua_isfunction(L, -1)) {
+      lua_newtable(L);
+
+      lua_pushstring(L, "device");
+      lua_pushstring(L, ctx->decl.id.c_str());
+      lua_settable(L, -3);
+
+      lua_pushstring(L, "data");
+      lua_pushlstring(
+          L, reinterpret_cast<const char *>(transfer->buffer), transfer->actual_length
+      );
+      lua_settable(L, -3);
+
+      lua_pushstring(L, "size");
+      lua_pushinteger(L, transfer->actual_length);
+      lua_settable(L, -3);
+
+      lua_pushstring(L, "endpoint");
+      lua_pushinteger(L, transfer->endpoint);
+      lua_settable(L, -3);
+
+      lua_pushstring(L, "transfer");
+      lua_pushstring(L, transfer_type_to_string(transfer->type));
+      lua_settable(L, -3);
+
+      lua_pushstring(L, "status");
+      lua_pushstring(L, transfer_status_to_string(transfer->status));
+      lua_settable(L, -3);
+
+      if (lua_pcall(L, 1, 0, 0) != LUA_OK) {
+        std::cerr << "Lua libusb callback error: " << lua_tostring(L, -1) << std::endl;
+        lua_pop(L, 1);
+      }
+    } else {
+      lua_pop(L, 1);
+    }
+  }
+
+  // resubmit for continuous streaming
+  int rc = libusb_submit_transfer(transfer);
+  if (rc != 0) {
+    std::cerr << "libusb_submit_transfer error: " << libusb_error_name(rc) << std::endl;
+  }
+}
 
 static int lua_bulk_transfer(lua_State *L) {
   luaL_checktype(L, 1, LUA_TTABLE);
@@ -286,7 +378,121 @@ static int lua_interrupt_transfer(lua_State *L) {
 }
 
 static int lua_submit_transfer(lua_State *L) {
-  return 0;
+  luaL_checktype(L, 1, LUA_TTABLE);
+
+  // device id
+  lua_getfield(L, 1, "device");
+  const char *dev_id = luaL_checkstring(L, -1);
+  lua_pop(L, 1);
+
+  auto it = aelkey_state.input_map.find(dev_id);
+  if (it == aelkey_state.input_map.end() || !it->second.usb_handle) {
+    lua_pushnil(L);
+    return 1;
+  }
+  libusb_device_handle *handle = it->second.usb_handle;
+  InputCtx *ctx = &it->second;
+
+  // endpoint
+  lua_getfield(L, 1, "endpoint");
+  int endpoint = luaL_checkinteger(L, -1);
+  lua_pop(L, 1);
+
+  // type string
+  lua_getfield(L, 1, "type");
+  const char *type_str = luaL_checkstring(L, -1);
+  lua_pop(L, 1);
+  int type = LIBUSB_TRANSFER_TYPE_INTERRUPT;
+  if (strcmp(type_str, "bulk") == 0) {
+    type = LIBUSB_TRANSFER_TYPE_BULK;
+  } else if (strcmp(type_str, "control") == 0) {
+    type = LIBUSB_TRANSFER_TYPE_CONTROL;
+  } else if (strcmp(type_str, "iso") == 0) {
+    type = LIBUSB_TRANSFER_TYPE_ISOCHRONOUS;
+  } else {
+    type = LIBUSB_TRANSFER_TYPE_INTERRUPT;
+  }
+
+  // size
+  lua_getfield(L, 1, "size");
+  int size = luaL_checkinteger(L, -1);
+  lua_pop(L, 1);
+
+  // timeout (optional)
+  lua_getfield(L, 1, "timeout");
+  unsigned int timeout = lua_isnil(L, -1) ? 0u : (unsigned int)luaL_checkinteger(L, -1);
+  lua_pop(L, 1);
+
+  // allocate transfer + buffer
+  libusb_transfer *xfer = libusb_alloc_transfer(0);
+  if (!xfer) {
+    lua_pushnil(L);
+    return 1;
+  }
+  unsigned char *buf = (unsigned char *)malloc(size);
+  if (!buf) {
+    libusb_free_transfer(xfer);
+    lua_pushnil(L);
+    return 1;
+  }
+
+  // fill transfer
+  xfer->dev_handle = handle;
+  xfer->endpoint = (uint8_t)endpoint;
+  xfer->type = (uint8_t)type;
+  xfer->timeout = timeout;
+  xfer->buffer = buf;
+  xfer->length = size;
+  // user_data carries InputCtx* and lua_State*
+  xfer->user_data = new std::pair<InputCtx *, lua_State *>(ctx, L);
+  xfer->callback = dispatch_libusb;
+
+  int rc = libusb_submit_transfer(xfer);
+  if (rc != 0) {
+    std::cerr << "libusb_submit_transfer error: " << libusb_error_name(rc) << std::endl;
+    free(buf);
+    delete static_cast<std::pair<InputCtx *, lua_State *> *>(xfer->user_data);
+    libusb_free_transfer(xfer);
+    lua_pushnil(L);
+    return 1;
+  }
+
+  // return a simple handle table with cancel/resubmit
+  lua_newtable(L);
+
+  lua_pushcfunction(L, [](lua_State *Lh) -> int {
+    luaL_checktype(Lh, 1, LUA_TTABLE);
+    lua_getfield(Lh, 1, "_xfer");
+    libusb_transfer *x = (libusb_transfer *)lua_touserdata(Lh, -1);
+    lua_pop(Lh, 1);
+    if (x) {
+      libusb_cancel_transfer(x);
+    }
+    lua_pushboolean(Lh, 1);
+    return 1;
+  });
+  lua_setfield(L, -2, "cancel");
+
+  lua_pushcfunction(L, [](lua_State *Lh) -> int {
+    luaL_checktype(Lh, 1, LUA_TTABLE);
+    lua_getfield(Lh, 1, "_xfer");
+    libusb_transfer *x = (libusb_transfer *)lua_touserdata(Lh, -1);
+    lua_pop(Lh, 1);
+    if (!x) {
+      lua_pushboolean(Lh, 0);
+      return 1;
+    }
+    int rc = libusb_submit_transfer(x);
+    lua_pushboolean(Lh, rc == 0);
+    return 1;
+  });
+  lua_setfield(L, -2, "resubmit");
+
+  // stash raw transfer pointer inside handle table
+  lua_pushlightuserdata(L, xfer);
+  lua_setfield(L, -2, "_xfer");
+
+  return 1;
 }
 
 extern "C" int luaopen_aelkey_usb(lua_State *L) {
