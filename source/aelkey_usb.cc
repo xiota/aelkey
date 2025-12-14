@@ -56,31 +56,25 @@ static void LIBUSB_CALL dispatch_libusb(libusb_transfer *transfer) {
     if (lua_isfunction(L, -1)) {
       lua_newtable(L);
 
-      lua_pushstring(L, "device");
       lua_pushstring(L, ctx->decl.id.c_str());
-      lua_settable(L, -3);
+      lua_setfield(L, -2, "device");
 
-      lua_pushstring(L, "data");
       lua_pushlstring(
           L, reinterpret_cast<const char *>(transfer->buffer), transfer->actual_length
       );
-      lua_settable(L, -3);
+      lua_setfield(L, -2, "data");
 
-      lua_pushstring(L, "size");
       lua_pushinteger(L, transfer->actual_length);
-      lua_settable(L, -3);
+      lua_setfield(L, -2, "size");
 
-      lua_pushstring(L, "endpoint");
       lua_pushinteger(L, transfer->endpoint);
-      lua_settable(L, -3);
+      lua_setfield(L, -2, "endpoint");
 
-      lua_pushstring(L, "transfer");
       lua_pushstring(L, transfer_type_to_string(transfer->type));
-      lua_settable(L, -3);
+      lua_setfield(L, -2, "transfer");
 
-      lua_pushstring(L, "status");
       lua_pushstring(L, transfer_status_to_string(transfer->status));
-      lua_settable(L, -3);
+      lua_setfield(L, -2, "status");
 
       if (lua_pcall(L, 1, 0, 0) != LUA_OK) {
         std::cerr << "Lua libusb callback error: " << lua_tostring(L, -1) << std::endl;

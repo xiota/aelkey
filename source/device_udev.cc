@@ -83,13 +83,11 @@ void notify_state_change(lua_State *L, const InputDecl &decl, const char *state)
 
   lua_newtable(L);
 
-  lua_pushstring(L, "device");
   lua_pushstring(L, decl.id.c_str());
-  lua_settable(L, -3);
+  lua_setfield(L, -2, "device");
 
-  lua_pushstring(L, "state");
   lua_pushstring(L, state);
-  lua_settable(L, -3);
+  lua_setfield(L, -2, "state");
 
   if (lua_pcall(L, 1, 0, 0) != LUA_OK) {
     std::cerr << "Lua state_callback error: " << lua_tostring(L, -1) << std::endl;

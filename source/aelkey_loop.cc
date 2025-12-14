@@ -142,13 +142,11 @@ static void dispatch_hidraw(lua_State *L, int fd_ready, InputCtx &ctx) {
     if (lua_isfunction(L, -1)) {
       lua_newtable(L);
 
-      lua_pushstring(L, "device");
       lua_pushstring(L, ctx.decl.id.c_str());
-      lua_settable(L, -3);
+      lua_setfield(L, -2, "device");
 
-      lua_pushstring(L, "data");
       lua_pushlstring(L, (const char *)buf, r);
-      lua_settable(L, -3);
+      lua_setfield(L, -2, "data");
 
       if (lua_pcall(L, 1, 0, 0) != LUA_OK) {
         std::cerr << "Lua hidraw callback error: " << lua_tostring(L, -1) << std::endl;
@@ -189,40 +187,32 @@ static void dispatch_evdev(lua_State *L, InputCtx &ctx) {
             for (const auto &e : frame) {
               lua_newtable(L);
 
-              lua_pushstring(L, "device");
               lua_pushstring(L, ctx.decl.id.c_str());
-              lua_settable(L, -3);
+              lua_setfield(L, -2, "device");
 
               const char *tname = libevdev_event_type_get_name(e.type);
               const char *cname = libevdev_event_code_get_name(e.type, e.code);
 
-              lua_pushstring(L, "type_name");
               lua_pushstring(L, tname ? tname : "");
-              lua_settable(L, -3);
+              lua_setfield(L, -2, "type_name");
 
-              lua_pushstring(L, "code_name");
               lua_pushstring(L, cname ? cname : "");
-              lua_settable(L, -3);
+              lua_setfield(L, -2, "code_name");
 
-              lua_pushstring(L, "type");
               lua_pushinteger(L, e.type);
-              lua_settable(L, -3);
+              lua_setfield(L, -2, "type");
 
-              lua_pushstring(L, "code");
               lua_pushinteger(L, e.code);
-              lua_settable(L, -3);
+              lua_setfield(L, -2, "code");
 
-              lua_pushstring(L, "value");
               lua_pushinteger(L, e.value);
-              lua_settable(L, -3);
+              lua_setfield(L, -2, "value");
 
-              lua_pushstring(L, "sec");
               lua_pushinteger(L, e.time.tv_sec);
-              lua_settable(L, -3);
+              lua_setfield(L, -2, "sec");
 
-              lua_pushstring(L, "usec");
               lua_pushinteger(L, e.time.tv_usec);
-              lua_settable(L, -3);
+              lua_setfield(L, -2, "usec");
 
               lua_rawseti(L, -2, idx++);
             }
