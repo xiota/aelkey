@@ -172,6 +172,8 @@ static int lua_bulk_transfer(lua_State *L) {
   }
 
   // common fields
+  lua_pushstring(L, dev_id);
+  lua_setfield(L, -2, "device");
   lua_pushinteger(L, transferred);
   lua_setfield(L, -2, "size");
   lua_pushinteger(L, status);
@@ -286,6 +288,9 @@ static int lua_control_transfer(lua_State *L) {
     lua_setfield(L, -2, "data");
   }
 
+  // common fields
+  lua_pushstring(L, dev_id);
+  lua_setfield(L, -2, "device");
   lua_pushinteger(L, transferred);
   lua_setfield(L, -2, "size");
   lua_pushinteger(L, status);
@@ -369,6 +374,8 @@ static int lua_interrupt_transfer(lua_State *L) {
   }
 
   // common fields
+  lua_pushstring(L, dev_id);
+  lua_setfield(L, -2, "device");
   lua_pushinteger(L, transferred);
   lua_setfield(L, -2, "size");
   lua_pushinteger(L, status);
