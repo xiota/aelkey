@@ -118,7 +118,7 @@ static void handle_udev_add(lua_State *L, const std::string &devnode) {
     if (candidate == devnode) {
       int fd = attach_input_device(devnode, decl);
       if (fd >= 0) {
-        notify_state_change(L, decl, "reconnect");
+        notify_state_change(L, decl, "connect");
       }
       break;
     }
