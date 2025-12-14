@@ -135,9 +135,10 @@ static void dispatch_tick(lua_State *L, int timer_fd) {
 }
 
 static void dispatch_hidraw(lua_State *L, int fd_ready, InputCtx &ctx) {
-  uint8_t buf[64];
+  uint8_t buf[4096];
   ssize_t r = read(fd_ready, buf, sizeof(buf));
-  if (r > 0 && !ctx.decl.callback_events.empty()) {
+
+  if (!ctx.decl.callback_events.empty()) {
     lua_getglobal(L, ctx.decl.callback_events.c_str());
     if (lua_isfunction(L, -1)) {
       lua_newtable(L);
@@ -145,8 +146,24 @@ static void dispatch_hidraw(lua_State *L, int fd_ready, InputCtx &ctx) {
       lua_pushstring(L, ctx.decl.id.c_str());
       lua_setfield(L, -2, "device");
 
-      lua_pushlstring(L, (const char *)buf, r);
-      lua_setfield(L, -2, "data");
+      if (r > 0) {
+        lua_pushlstring(L, (const char *)buf, r);
+        lua_setfield(L, -2, "data");
+
+        lua_pushinteger(L, r);
+        lua_setfield(L, -2, "size");
+
+        lua_pushstring(L, "ok");
+        lua_setfield(L, -2, "status");
+      } else if (r == 0) {
+        // EOF / disconnect
+        lua_pushstring(L, "disconnect");
+        lua_setfield(L, -2, "status");
+      } else {
+        // error
+        lua_pushstring(L, strerror(errno));
+        lua_setfield(L, -2, "status");
+      }
 
       if (lua_pcall(L, 1, 0, 0) != LUA_OK) {
         std::cerr << "Lua hidraw callback error: " << lua_tostring(L, -1) << std::endl;
