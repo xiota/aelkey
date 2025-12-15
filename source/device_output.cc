@@ -12,32 +12,34 @@
 
 // Provide sensible max ranges for ABS axes
 // device_output.cc
+static input_absinfo pos_default = { 0, 0, 65535, 0, 0, 0 };
+static input_absinfo stick_default = { 0, -32767, 32767, 0, 0, 0 };
+static input_absinfo trigger_default = { 0, 0, 255, 0, 0, 0 };
+static input_absinfo pressure_default = { 0, 0, 65535, 0, 0, 0 };
+static input_absinfo tilt_default = { 0, -90, 90, 0, 0, 0 };
+static input_absinfo distance_default = { 0, 0, 255, 0, 0, 0 };
+static input_absinfo orient_default = { 0, 0, 3, 0, 0, 0 };
+static input_absinfo wheel_default = { 0, -32768, 32767, 0, 0, 0 };
+static input_absinfo hat_default = { 0, -1, 1, 0, 0, 0 };
+
+// multitouch defaults
+static input_absinfo mt_pos_default = { 0, 0, 65535, 0, 0, 0 };       // positions
+static input_absinfo mt_slot_default = { 0, 0, 4, 0, 0, 0 };          // 5 slots (0–4)
+static input_absinfo mt_trackid_default = { 0, -1, 65535, 0, 0, 0 };  // tracking IDs
+static input_absinfo mt_tooltype_default = { 0, 0, 2, 0, 0, 0 };      // finger/pen/palm
+static input_absinfo mt_misc_default = { 0, 0, 255, 0, 0, 0 };        // pressure/size
 
 static const input_absinfo *default_absinfo_for(int code) {
-  static input_absinfo pos_default = { 0, 0, 65535, 0, 0, 0 };
-  static input_absinfo stick_default = { 0, -32767, 32767, 0, 0, 0 };
-  static input_absinfo trigger_default = { 0, 0, 255, 0, 0, 0 };
-  static input_absinfo pressure_default = { 0, 0, 65535, 0, 0, 0 };
-  static input_absinfo tilt_default = { 0, -90, 90, 0, 0, 0 };
-  static input_absinfo distance_default = { 0, 0, 255, 0, 0, 0 };
-  static input_absinfo orient_default = { 0, 0, 3, 0, 0, 0 };
-  static input_absinfo wheel_default = { 0, -32768, 32767, 0, 0, 0 };
-  static input_absinfo hat_default = { 0, -1, 1, 0, 0, 0 };
-
-  // multitouch defaults
-  static input_absinfo mt_pos_default = { 0, 0, 65535, 0, 0, 0 };       // positions
-  static input_absinfo mt_slot_default = { 0, 0, 4, 0, 0, 0 };          // 5 slots (0–4)
-  static input_absinfo mt_trackid_default = { 0, -1, 65535, 0, 0, 0 };  // tracking IDs
-  static input_absinfo mt_tooltype_default = { 0, 0, 2, 0, 0, 0 };      // finger/pen/palm
-  static input_absinfo mt_misc_default = { 0, 0, 255, 0, 0, 0 };        // pressure/size
-
   switch (code) {
     // Sticks
-    case ABS_X:
-    case ABS_Y:
     case ABS_RX:
     case ABS_RY:
       return &stick_default;
+
+    // Coordinates (Tablets, Digitizers, etc)
+    case ABS_X:
+    case ABS_Y:
+      return &pos_default;
 
     // Triggers / pedals
     case ABS_Z:
@@ -149,6 +151,10 @@ libevdev_uinput *create_output_device(const OutputDecl &out) {
   } else if (out.type == "gamepad") {
     enable_codes(dev, EV_KEY, aelkey::capabilities::gamepad_buttons);
     enable_codes(dev, EV_ABS, aelkey::capabilities::gamepad_abs);
+
+    // Override ABS_X/ABS_Y to stick range
+    libevdev_enable_event_code(dev, EV_ABS, ABS_X, &stick_default);
+    libevdev_enable_event_code(dev, EV_ABS, ABS_Y, &stick_default);
   } else if (out.type == "mouse") {
     enable_codes(dev, EV_KEY, aelkey::capabilities::mouse_buttons);
     enable_codes(dev, EV_REL, aelkey::capabilities::mouse_rel);
@@ -159,7 +165,6 @@ libevdev_uinput *create_output_device(const OutputDecl &out) {
     libevdev_enable_property(dev, INPUT_PROP_POINTER);
   } else if (out.type == "touchpad_mt") {
     enable_codes(dev, EV_KEY, aelkey::capabilities::touchpad_buttons);
-    enable_codes(dev, EV_REL, aelkey::capabilities::touchpad_rel);
     enable_codes(dev, EV_ABS, aelkey::capabilities::touchpad_mt_abs);
     libevdev_enable_property(dev, INPUT_PROP_POINTER);
   } else if (out.type == "touchscreen") {

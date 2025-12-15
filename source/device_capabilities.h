@@ -88,12 +88,12 @@ constexpr int mouse_rel[] = {
 constexpr int touchpad_buttons[] = {
   BTN_LEFT, BTN_RIGHT, BTN_MIDDLE,
   BTN_SIDE, BTN_EXTRA, BTN_FORWARD, BTN_BACK, BTN_TASK,
-  BTN_TOOL_FINGER,
-  BTN_TOOL_QUINTTAP,
   BTN_TOUCH,
+  BTN_TOOL_FINGER,
   BTN_TOOL_DOUBLETAP,
   BTN_TOOL_TRIPLETAP,
-  BTN_TOOL_QUADTAP
+  BTN_TOOL_QUADTAP,
+  BTN_TOOL_QUINTTAP
 };
 
 constexpr int touchpad_rel[] = {
@@ -110,8 +110,7 @@ constexpr int touchpad_mt_abs[] = {
   ABS_MT_SLOT,
   ABS_MT_POSITION_X, ABS_MT_POSITION_Y,
   ABS_MT_TRACKING_ID,
-  ABS_MT_PRESSURE,
-  ABS_MT_TOUCH_MAJOR, ABS_MT_TOUCH_MINOR
+  ABS_MT_TOOL_TYPE
 };
 
 constexpr int touchscreen_keys[] = {
@@ -135,8 +134,15 @@ constexpr int touchscreen_abs[] = {
 constexpr int digitizer_keys[] = {
   BTN_TOOL_PEN,
   BTN_TOOL_RUBBER,
+  BTN_TOOL_BRUSH,
+  BTN_TOOL_PENCIL,
+  BTN_TOOL_AIRBRUSH,
+  BTN_TOOL_FINGER,
+  BTN_TOOL_MOUSE,
+  BTN_TOOL_LENS,
   BTN_STYLUS,
   BTN_STYLUS2,
+  BTN_STYLUS3,
   BTN_TOUCH
 };
 
