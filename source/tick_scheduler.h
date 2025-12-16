@@ -12,9 +12,10 @@
 #include <unistd.h>
 
 struct TickCb {
-  bool is_function = false;
-  int ref = LUA_NOREF;  // Lua registry reference for function callbacks
-  std::string name;     // string name for named callbacks
+  bool is_function = false;      // Lua function flag
+  int ref = LUA_NOREF;           // Lua registry reference
+  std::string name;              // Lua global name
+  std::function<void()> native;  // native C++ callback
 };
 
 class TickScheduler {
@@ -114,7 +115,15 @@ class TickScheduler {
     }
 
     auto &cb = it->second;
-    if (cb.is_function) {
+
+    if (cb.native) {
+      // Call native C++ function
+      try {
+        cb.native();
+      } catch (const std::exception &e) {
+        fprintf(stderr, "tick native error: %s\n", e.what());
+      }
+    } else if (cb.is_function) {
       lua_rawgeti(L_, LUA_REGISTRYINDEX, cb.ref);
       // pcall with 0 args, 0 results, 0 error func
       if (lua_pcall(L_, 0, 0, 0) != LUA_OK) {
