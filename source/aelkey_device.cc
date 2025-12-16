@@ -44,32 +44,82 @@ static void attach_inputs_from_decls(lua_State *L) {
 }
 
 int lua_open_device(lua_State *L) {
-  // If devices already attached, skip
-  if (!aelkey_state.input_map.empty() || !aelkey_state.uinput_devices.empty()) {
+  int nargs = lua_gettop(L);  // how many arguments Lua passed
+
+  // --- GLOBAL MODE: no arguments ---
+  if (nargs == 0) {
+    // If devices already attached, skip
+    if (!aelkey_state.input_map.empty() || !aelkey_state.uinput_devices.empty()) {
+      lua_pushboolean(L, 1);
+      return 1;
+    }
+
+    // Ensure init is done (epoll + udev monitor)
+    if (aelkey_state.epfd < 0 || aelkey_state.udev_fd < 0 || !aelkey_state.g_udev ||
+        !aelkey_state.g_mon) {
+      int rc = device_udev_init(L);
+      if (rc != 0) {
+        // lua_init already pushed an error or returned an error code
+        return rc;
+      }
+    }
+
+    // Parse declarations from Lua and perform initial setup
+    // These helpers should read from the script's tables and fill:
+    //   aelkey_state.output_decls and aelkey_state.input_decls
+    parse_outputs_from_lua(L);
+    parse_inputs_from_lua(L);
+
+    create_outputs_from_decls();
+    attach_inputs_from_decls(L);
+
     lua_pushboolean(L, 1);
     return 1;
   }
 
-  // Ensure init is done (epoll + udev monitor)
+  // --- SINGLE DEVICE MODE: one argument (device ID) ---
+  const char *dev_id_cstr = luaL_checkstring(L, 1);
+  std::string dev_id(dev_id_cstr);
+
+  // Ensure init is done if not already
   if (aelkey_state.epfd < 0 || aelkey_state.udev_fd < 0 || !aelkey_state.g_udev ||
       !aelkey_state.g_mon) {
     int rc = device_udev_init(L);
     if (rc != 0) {
-      // lua_init already pushed an error or returned an error code
       return rc;
     }
   }
 
-  // Parse declarations from Lua and perform initial setup
-  // These helpers should read from the script's tables and fill:
-  //   aelkey_state.output_decls and aelkey_state.input_decls
-  parse_outputs_from_lua(L);
-  parse_inputs_from_lua(L);
+  // Parse declarations if not already parsed
+  if (aelkey_state.input_decls.empty() && aelkey_state.output_decls.empty()) {
+    parse_outputs_from_lua(L);
+    parse_inputs_from_lua(L);
+    create_outputs_from_decls();
+  }
 
-  create_outputs_from_decls();
-  attach_inputs_from_decls(L);
+  // Attach only the requested device
+  bool ok = false;
+  for (auto &decl : aelkey_state.input_decls) {
+    if (decl.id != dev_id) {
+      continue;  // only match the requested device
+    }
 
-  lua_pushboolean(L, 1);
+    if (decl.type == "libusb") {
+      if (attach_input_device("", decl)) {
+        notify_state_change(L, decl, "connect");
+        ok = true;
+      }
+    } else {
+      std::string devnode = match_device(decl);
+      if (!devnode.empty() && attach_input_device(devnode, decl)) {
+        notify_state_change(L, decl, "connect");
+        ok = true;
+      }
+    }
+    break;  // stop after first match
+  }
+
+  lua_pushboolean(L, ok ? 1 : 0);
   return 1;
 }
 
