@@ -14,12 +14,12 @@
 #include <libusb-1.0/libusb.h>
 #include <linux/hidraw.h>
 #include <lua.hpp>
-#include <poll.h>
 #include <sys/epoll.h>
 #include <sys/ioctl.h>
 #include <unistd.h>
 
 #include "aelkey_state.h"
+#include "device_libusb.h"
 
 InputDecl parse_input(lua_State *L, int index) {
   InputDecl decl;
@@ -311,13 +311,8 @@ InputCtx attach_device(
       ctx.fd = -1;
     }
   } else if (in.type == "libusb") {
-    // open global libusb context
-    if (!aelkey_state.g_libusb) {
-      if (libusb_init(&aelkey_state.g_libusb) != 0) {
-        std::cerr << "Failed to init libusb\n";
-        return ctx;
-      }
-    }
+    ensure_libusb_initialized();
+
     ctx.usb_handle =
         libusb_open_device_with_vid_pid(aelkey_state.g_libusb, in.vendor, in.product);
     if (!ctx.usb_handle) {
@@ -329,29 +324,7 @@ InputCtx attach_device(
 
     ensure_claimed(ctx.usb_handle, in);
 
-    // After libusb_init(&aelkey_state.g_libusb) and open/claim device:
-    const struct libusb_pollfd **pfds = libusb_get_pollfds(aelkey_state.g_libusb);
-    if (pfds) {
-      for (int i = 0; pfds[i] != nullptr; ++i) {
-        struct epoll_event evreg{};
-        if (pfds[i]->events & POLLIN) {
-          evreg.events |= EPOLLIN;
-        }
-        if (pfds[i]->events & POLLOUT) {
-          evreg.events |= EPOLLOUT;
-        }
-        evreg.data.fd = pfds[i]->fd;
-        if (epoll_ctl(epfd, EPOLL_CTL_ADD, pfds[i]->fd, &evreg) < 0) {
-          if (errno != EEXIST) {
-            perror("epoll_ctl add libusb fd");
-          }
-        } else {
-          aelkey_state.libusb_fd_set.insert(pfds[i]->fd);
-        }
-      }
-      libusb_free_pollfds(pfds);  // not free(pfds)!
-    }
-    // libusb devices don’t have a single usable fd, so ctx.fd stays -1
+    // no ctx.fd, epoll integration handled by pollfd notifiers
   } else {
     // default: evdev
     ctx.fd = ::open(devnode.c_str(), O_RDONLY | O_NONBLOCK);
