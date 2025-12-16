@@ -16,6 +16,7 @@ struct TickCb {
   int ref = LUA_NOREF;           // Lua registry reference
   std::string name;              // Lua global name
   std::function<void()> native;  // native C++ callback
+  bool oneshot = false;
 };
 
 class TickScheduler {
@@ -39,9 +40,15 @@ class TickScheduler {
     }
 
     struct itimerspec spec{};
-    spec.it_interval.tv_sec = ms / 1000;
-    spec.it_interval.tv_nsec = (ms % 1000) * 1000000;
-    spec.it_value = spec.it_interval;  // repeating
+    spec.it_value.tv_sec = ms / 1000;
+    spec.it_value.tv_nsec = (ms % 1000) * 1000000;
+
+    if (cb.oneshot) {
+      spec.it_interval.tv_sec = 0;
+      spec.it_interval.tv_nsec = 0;
+    } else {
+      spec.it_interval = spec.it_value;  // repeat with the same interval
+    }
 
     if (timerfd_settime(fd, 0, &spec, nullptr) < 0) {
       perror("timerfd_settime");
@@ -147,6 +154,15 @@ class TickScheduler {
       } else {
         lua_pop(L_, 1);  // not a function; silently ignore
       }
+    }
+
+    if (cb.oneshot) {
+      epoll_ctl(epfd_, EPOLL_CTL_DEL, fd, nullptr);
+      close(fd);
+      if (cb.is_function && cb.ref != LUA_NOREF) {
+        luaL_unref(L_, LUA_REGISTRYINDEX, cb.ref);
+      }
+      callbacks_.erase(it);
     }
   }
 
