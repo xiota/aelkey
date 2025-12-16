@@ -42,6 +42,7 @@ int device_udev_init(lua_State *L) {
     return luaL_error(L, "epoll_create1 failed");
   }
   aelkey_state.epfd = epfd;
+  aelkey_state.scheduler = new TickScheduler(epfd, L);
 
   aelkey_state.g_udev = udev_new();
   if (!aelkey_state.g_udev) {

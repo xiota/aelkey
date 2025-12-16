@@ -10,6 +10,7 @@
 #include "aelkey_util.h"
 #include "lua_scripts.h"
 #include "luacompat.h"
+#include "tick_scheduler.h"
 
 extern "C" int luaopen_aelkey(lua_State *L) {
   // clang-format off

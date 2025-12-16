@@ -413,6 +413,10 @@ int lua_start(lua_State *L) {
     udev_unref(aelkey_state.g_udev);
     aelkey_state.g_udev = nullptr;
   }
+  if (aelkey_state.scheduler) {
+    delete aelkey_state.scheduler;
+    aelkey_state.scheduler = nullptr;
+  }
   if (aelkey_state.epfd >= 0) {
     close(aelkey_state.epfd);
     aelkey_state.epfd = -1;

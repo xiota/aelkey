@@ -12,8 +12,11 @@
 #include "aelkey_core.h"
 #include "device_input.h"
 #include "device_output.h"
+#include "tick_scheduler.h"
 
 struct AelkeyState {
+  TickScheduler *scheduler = nullptr;
+
   int epfd = -1;
   int udev_fd = -1;
   std::unordered_map<std::string, libevdev_uinput *> uinput_devices;

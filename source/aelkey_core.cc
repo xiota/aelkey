@@ -9,6 +9,7 @@
 #include <unistd.h>
 
 #include "aelkey_state.h"
+#include "tick_scheduler.h"
 
 static void epoll_remove_fd(int fd) {
   if (fd >= 0) {
@@ -88,104 +89,49 @@ int lua_syn_report(lua_State *L) {
   return 0;
 }
 
+// Assume aelkey_state.scheduler is a TickScheduler*
 int lua_tick(lua_State *L) {
   int ms = luaL_checkinteger(L, 1);
 
   // Case: tick(0) with no callback → stop all
   if (ms == 0 && lua_gettop(L) < 2) {
-    for (auto &[fd, cb] : aelkey_state.tick_callbacks) {
-      epoll_remove_fd(fd);
-      close(fd);
-      if (cb.is_function && cb.ref != LUA_NOREF) {
-        luaL_unref(L, LUA_REGISTRYINDEX, cb.ref);
-      }
-    }
-    aelkey_state.tick_callbacks.clear();
+    aelkey_state.scheduler->cancel_all();
     return 0;
   }
 
-  // Parse callback
-  TickCallback cb{};
+  // Parse callback key (string name OR function)
+  TickCb key{};
   if (lua_isstring(L, 2)) {
-    cb.name = lua_tostring(L, 2);
-    cb.is_function = false;
+    key.name = lua_tostring(L, 2);
+    key.is_function = false;
   } else if (lua_isfunction(L, 2)) {
     lua_pushvalue(L, 2);
-    cb.ref = luaL_ref(L, LUA_REGISTRYINDEX);
-    cb.is_function = true;
+    key.ref = luaL_ref(L, LUA_REGISTRYINDEX);
+    key.is_function = true;
   } else {
     return luaL_error(L, "tick callback must be string or function");
   }
 
-  // Cancel existing timer for this callback
-  for (auto it = aelkey_state.tick_callbacks.begin();
-       it != aelkey_state.tick_callbacks.end();) {
-    auto &existing = it->second;
-    bool match = false;
-    if (cb.is_function && existing.is_function) {
-      lua_rawgeti(L, LUA_REGISTRYINDEX, existing.ref);
-      lua_rawgeti(L, LUA_REGISTRYINDEX, cb.ref);
-      match = lua_rawequal(L, -1, -2);
-      lua_pop(L, 2);
-    } else if (!cb.is_function && !existing.is_function) {
-      match = (existing.name == cb.name);
-    }
-    if (match) {
-      int fd = it->first;
-      epoll_remove_fd(fd);
-      close(fd);
-      if (existing.is_function && existing.ref != LUA_NOREF) {
-        luaL_unref(L, LUA_REGISTRYINDEX, existing.ref);
-      }
-      it = aelkey_state.tick_callbacks.erase(it);
-    } else {
-      ++it;
-    }
-  }
+  // Cancel existing timer(s) for this callback key (feature parity)
+  aelkey_state.scheduler->cancel_matching(key);
 
-  // If ms == 0, we were just canceling
+  // If ms == 0, we were just canceling (feature parity)
   if (ms == 0) {
-    if (cb.is_function && cb.ref != LUA_NOREF) {
-      luaL_unref(L, LUA_REGISTRYINDEX, cb.ref);
+    if (key.is_function && key.ref != LUA_NOREF) {
+      luaL_unref(L, LUA_REGISTRYINDEX, key.ref);
     }
     return 0;
   }
 
-  // Create new timerfd
-  int fd = timerfd_create(CLOCK_MONOTONIC, TFD_NONBLOCK);
+  // Schedule new repeating timer
+  int fd = aelkey_state.scheduler->schedule(ms, key);
   if (fd < 0) {
-    perror("timerfd_create");
-    if (cb.is_function && cb.ref != LUA_NOREF) {
-      luaL_unref(L, LUA_REGISTRYINDEX, cb.ref);
+    // schedule failed; clean up function ref if any
+    if (key.is_function && key.ref != LUA_NOREF) {
+      luaL_unref(L, LUA_REGISTRYINDEX, key.ref);
     }
     return 0;
   }
 
-  struct itimerspec spec{};
-  spec.it_interval.tv_sec = ms / 1000;
-  spec.it_interval.tv_nsec = (ms % 1000) * 1000000;
-  spec.it_value = spec.it_interval;
-  if (timerfd_settime(fd, 0, &spec, nullptr) < 0) {
-    perror("timerfd_settime");
-    close(fd);
-    if (cb.is_function && cb.ref != LUA_NOREF) {
-      luaL_unref(L, LUA_REGISTRYINDEX, cb.ref);
-    }
-    return 0;
-  }
-
-  struct epoll_event ev{};
-  ev.events = EPOLLIN;
-  ev.data.fd = fd;
-  if (epoll_ctl(aelkey_state.epfd, EPOLL_CTL_ADD, fd, &ev) < 0) {
-    perror("epoll_ctl EPOLL_CTL_ADD (tick)");
-    close(fd);
-    if (cb.is_function && cb.ref != LUA_NOREF) {
-      luaL_unref(L, LUA_REGISTRYINDEX, cb.ref);
-    }
-    return 0;
-  }
-
-  aelkey_state.tick_callbacks[fd] = cb;
-  return 0;
+  return 0;  // feature parity: no handle returned
 }
