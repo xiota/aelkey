@@ -270,7 +270,8 @@ int lua_start(lua_State *L) {
 
       // libusb poll fds
       if (aelkey_state.libusb_fd_set.count(fd_ready)) {
-        int rc = libusb_handle_events(aelkey_state.g_libusb);
+        timeval tv{ 0, 0 };
+        int rc = libusb_handle_events_timeout_completed(aelkey_state.g_libusb, &tv, nullptr);
         if (rc != 0) {
           std::cerr << "libusb_handle_events error: " << libusb_error_name(rc) << std::endl;
         }
