@@ -14,6 +14,7 @@
 #include <libusb-1.0/libusb.h>
 #include <linux/hidraw.h>
 #include <lua.hpp>
+#include <poll.h>
 #include <sys/epoll.h>
 #include <sys/ioctl.h>
 #include <unistd.h>
@@ -333,7 +334,12 @@ InputCtx attach_device(
     if (pfds) {
       for (int i = 0; pfds[i] != nullptr; ++i) {
         struct epoll_event evreg{};
-        evreg.events = pfds[i]->events;  // typically EPOLLIN
+        if (pfds[i]->events & POLLIN) {
+          evreg.events |= EPOLLIN;
+        }
+        if (pfds[i]->events & POLLOUT) {
+          evreg.events |= EPOLLOUT;
+        }
         evreg.data.fd = pfds[i]->fd;
         if (epoll_ctl(epfd, EPOLL_CTL_ADD, pfds[i]->fd, &evreg) < 0) {
           if (errno != EEXIST) {
