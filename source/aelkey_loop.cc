@@ -100,40 +100,6 @@ static void handle_udev_add(lua_State *L, const std::string &devnode) {
   }
 }
 
-static void dispatch_tick(lua_State *L, int timer_fd) {
-  auto it_tick = aelkey_state.tick_callbacks.find(timer_fd);
-  if (it_tick == aelkey_state.tick_callbacks.end()) {
-    return;
-  }
-
-  uint64_t expirations = 0;
-  ssize_t r = read(timer_fd, &expirations, sizeof(expirations));
-  if (r > 0) {
-    auto &cb = it_tick->second;
-    if (cb.is_function && cb.ref != LUA_NOREF) {
-      lua_rawgeti(L, LUA_REGISTRYINDEX, cb.ref);
-      lua_pushinteger(L, (lua_Integer)expirations);
-      if (lua_pcall(L, 1, 0, 0) != LUA_OK) {
-        std::cerr << "Lua tick callback error: " << lua_tostring(L, -1) << std::endl;
-        lua_pop(L, 1);
-      }
-    } else if (!cb.name.empty()) {
-      lua_getglobal(L, cb.name.c_str());
-      if (lua_isfunction(L, -1)) {
-        lua_pushinteger(L, (lua_Integer)expirations);
-        if (lua_pcall(L, 1, 0, 0) != LUA_OK) {
-          std::cerr << "Lua tick callback error: " << lua_tostring(L, -1) << std::endl;
-          lua_pop(L, 1);
-        }
-      } else {
-        lua_pop(L, 1);
-      }
-    }
-  } else if (r < 0 && errno != EAGAIN) {
-    perror("read(timerfd)");
-  }
-}
-
 static void dispatch_hidraw(lua_State *L, int fd_ready, InputCtx &ctx) {
   uint8_t buf[4096];
   ssize_t r = read(fd_ready, buf, sizeof(buf));
@@ -332,8 +298,8 @@ int lua_start(lua_State *L) {
       }
 
       // timerfd ticks
-      if (aelkey_state.tick_callbacks.count(fd_ready)) {
-        dispatch_tick(L, fd_ready);
+      if (aelkey_state.scheduler && aelkey_state.scheduler->owns_fd(fd_ready)) {
+        aelkey_state.scheduler->handle_event(fd_ready);
         continue;
       }
 

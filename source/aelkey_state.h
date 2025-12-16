@@ -20,7 +20,6 @@ struct AelkeyState {
   int epfd = -1;
   int udev_fd = -1;
   std::unordered_map<std::string, libevdev_uinput *> uinput_devices;
-  std::unordered_map<int, TickCallback> tick_callbacks;
   std::unordered_map<std::string, InputCtx> input_map;
   std::unordered_map<std::string, std::vector<struct input_event>> frames;
 

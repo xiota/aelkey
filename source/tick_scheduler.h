@@ -25,9 +25,13 @@ class TickScheduler {
     cancel_all();
   }
 
+  bool owns_fd(int fd) const {
+    return callbacks_.find(fd) != callbacks_.end();
+  }
+
   // Feature parity: schedule repeating timer by string name or Lua function ref
   // Returns fd on success, -1 on failure
-  int schedule(int ms, const TickCb &cb) {
+  int schedule(int ms, TickCb cb) {
     int fd = timerfd_create(CLOCK_MONOTONIC, TFD_NONBLOCK);
     if (fd < 0) {
       perror("timerfd_create");
@@ -54,7 +58,7 @@ class TickScheduler {
       return -1;
     }
 
-    callbacks_[fd] = cb;
+    callbacks_[fd] = std::move(cb);
     return fd;
   }
 

@@ -11,14 +11,6 @@
 #include "aelkey_state.h"
 #include "tick_scheduler.h"
 
-static void epoll_remove_fd(int fd) {
-  if (fd >= 0) {
-    if (epoll_ctl(aelkey_state.epfd, EPOLL_CTL_DEL, fd, nullptr) < 0) {
-      perror("epoll_ctl EPOLL_CTL_DEL (tick)");
-    }
-  }
-}
-
 int lua_emit(lua_State *L) {
   luaL_checktype(L, 1, LUA_TTABLE);
 
