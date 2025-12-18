@@ -9,7 +9,7 @@
 
 bool attach_input_device(const std::string &devnode, const InputDecl &decl);
 
-int device_udev_init(lua_State *L);
+int ensure_udev_initialized(lua_State *L);
 void notify_state_change(lua_State *L, const InputDecl &decl, const char *state);
 
 void handle_udev_add(lua_State *L, struct udev_device *dev);

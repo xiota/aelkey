@@ -10,7 +10,7 @@
 #include "aelkey_state.h"
 #include "device_input.h"
 
-int device_udev_init(lua_State *L) {
+int ensure_udev_initialized(lua_State *L) {
   if (aelkey_state.epfd >= 0) {
     return 0;  // already initialized
   }

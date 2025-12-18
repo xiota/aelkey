@@ -51,7 +51,7 @@ int lua_open_device(lua_State *L) {
     // Ensure init is done (epoll + udev monitor)
     if (aelkey_state.epfd < 0 || aelkey_state.udev_fd < 0 || !aelkey_state.g_udev ||
         !aelkey_state.g_mon) {
-      int rc = device_udev_init(L);
+      int rc = ensure_udev_initialized(L);
       if (rc != 0) {
         // lua_init already pushed an error or returned an error code
         return rc;
@@ -78,7 +78,7 @@ int lua_open_device(lua_State *L) {
   // Ensure init is done if not already
   if (aelkey_state.epfd < 0 || aelkey_state.udev_fd < 0 || !aelkey_state.g_udev ||
       !aelkey_state.g_mon) {
-    int rc = device_udev_init(L);
+    int rc = ensure_udev_initialized(L);
     if (rc != 0) {
       return rc;
     }
