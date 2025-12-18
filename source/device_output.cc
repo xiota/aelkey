@@ -124,6 +124,8 @@ void enable_capability(libevdev *dev, const std::string &cap) {
     evtype = EV_REL;
   } else if (cap.rfind("ABS_", 0) == 0) {
     evtype = EV_ABS;
+  } else if (cap.rfind("MSC_", 0) == 0) {
+    evtype = EV_MSC;
   } else if (cap.rfind("SW_", 0) == 0) {
     evtype = EV_SW;
   }
@@ -146,6 +148,15 @@ libevdev_uinput *create_output_device(const OutputDecl &out) {
 
   if (out.type == "keyboard") {
     enable_codes(dev, EV_KEY, aelkey::capabilities::keyboard_keys);
+
+    // scan codes
+    libevdev_enable_event_type(dev, EV_MSC);
+    libevdev_enable_event_code(dev, EV_MSC, MSC_SCAN, nullptr);
+
+    // repeating event settings
+    libevdev_enable_event_type(dev, EV_REP);
+    libevdev_enable_event_code(dev, EV_REP, REP_DELAY, nullptr);
+    libevdev_enable_event_code(dev, EV_REP, REP_PERIOD, nullptr);
   } else if (out.type == "consumer") {
     enable_codes(dev, EV_KEY, aelkey::capabilities::consumer_keys);
   } else if (out.type == "gamepad") {
