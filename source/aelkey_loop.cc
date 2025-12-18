@@ -18,88 +18,6 @@
 #include "device_udev.h"
 #include "luacompat.h"
 
-static InputDecl detach_input_device(const std::string &dev_id) {
-  InputDecl decl{};
-
-  auto im = aelkey_state.input_map.find(dev_id);
-  if (im == aelkey_state.input_map.end()) {
-    return decl;  // nothing to detach
-  }
-
-  InputCtx &ctx = im->second;
-  decl = ctx.decl;
-
-  // Remove from epoll if fd is valid
-  if (aelkey_state.epfd >= 0 && ctx.fd >= 0) {
-    epoll_ctl(aelkey_state.epfd, EPOLL_CTL_DEL, ctx.fd, nullptr);
-  }
-
-  // Free libevdev resources if present
-  if (ctx.idev) {
-    libevdev_grab(ctx.idev, LIBEVDEV_UNGRAB);
-    libevdev_free(ctx.idev);
-    ctx.idev = nullptr;
-  }
-
-  // Close fd if valid
-  if (ctx.fd >= 0) {
-    close(ctx.fd);
-    ctx.fd = -1;
-  }
-
-  // Close libusb handle if present
-  if (ctx.usb_handle) {
-    libusb_close(ctx.usb_handle);
-    ctx.usb_handle = nullptr;
-  }
-
-  // Erase from maps keyed by string id
-  aelkey_state.input_map.erase(im);
-  aelkey_state.frames.erase(dev_id);
-
-  return decl;
-}
-
-static void handle_udev_remove(lua_State *L, const std::string &devnode) {
-  if (devnode.empty()) {
-    return;
-  }
-
-  for (auto &decl : aelkey_state.input_decls) {
-    std::string candidate = match_device(decl);
-    if (candidate == devnode) {
-      InputDecl removed = detach_input_device(decl.id);
-      if (!removed.id.empty()) {
-        notify_state_change(L, removed, "disconnect");
-      }
-      break;
-    }
-  }
-}
-
-static void handle_udev_add(lua_State *L, const std::string &devnode) {
-  if (devnode.empty()) {
-    return;
-  }
-
-  // already attached?
-  for (auto &decl : aelkey_state.input_decls) {
-    std::string candidate = match_device(decl);
-    if (candidate == devnode) {
-      if (aelkey_state.input_map.find(decl.id) != aelkey_state.input_map.end()) {
-        std::cout << "Device already attached: " << decl.id << std::endl;
-        return;
-      }
-
-      // try to attach
-      if (attach_input_device(devnode, decl)) {
-        notify_state_change(L, decl, "connect");
-      }
-      break;
-    }
-  }
-}
-
 static void dispatch_hidraw(lua_State *L, int fd_ready, InputCtx &ctx) {
   uint8_t buf[4096];
   ssize_t r = read(fd_ready, buf, sizeof(buf));
@@ -286,16 +204,15 @@ int lua_start(lua_State *L) {
         }
 
         const char *action = udev_device_get_action(dev);
-        const char *node = udev_device_get_devnode(dev);
-        std::string devnode = node ? node : "";
-
-        if (action && strcmp(action, "add") == 0) {
-          handle_udev_add(L, devnode);
-        } else if (action && strcmp(action, "remove") == 0) {
-          handle_udev_remove(L, devnode);
+        if (action) {
+          if (strcmp(action, "add") == 0) {
+            handle_udev_add(L, dev);
+          } else if (strcmp(action, "remove") == 0) {
+            handle_udev_remove(L, dev);
+          }
         }
+
         udev_device_unref(dev);
-        continue;
       }
 
       // timerfd ticks
@@ -320,7 +237,7 @@ int lua_start(lua_State *L) {
       if ((evmask & (EPOLLHUP | EPOLLERR)) != 0) {
         InputDecl decl = detach_input_device(ctx_ptr->decl.id);
         if (!decl.id.empty()) {
-          notify_state_change(L, decl, "disconnect");
+          notify_state_change(L, decl, "remove");
         }
         continue;
       }

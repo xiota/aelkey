@@ -135,143 +135,175 @@ static int ensure_claimed(libusb_device_handle *devh, const InputDecl &in) {
   return 0;
 }
 
+static std::string enumerate_and_match(
+    const char *subsystem,
+    std::function<std::string(struct udev_device *)> matcher
+) {
+  struct udev_enumerate *enumerate = udev_enumerate_new(aelkey_state.g_udev);
+  udev_enumerate_add_match_subsystem(enumerate, subsystem);
+  udev_enumerate_scan_devices(enumerate);
+
+  struct udev_list_entry *devices = udev_enumerate_get_list_entry(enumerate);
+  struct udev_list_entry *entry;
+
+  std::string result;
+  udev_list_entry_foreach(entry, devices) {
+    const char *path = udev_list_entry_get_name(entry);
+    struct udev_device *dev = udev_device_new_from_syspath(aelkey_state.g_udev, path);
+    if (!dev) {
+      continue;
+    }
+
+    result = matcher(dev);
+    udev_device_unref(dev);
+    if (!result.empty()) {
+      break;
+    }
+  }
+
+  udev_enumerate_unref(enumerate);
+  return result;
+}
+
 std::string match_device(const InputDecl &decl) {
   if (decl.type == "libusb") {
-    // libusb devices do not have a single /dev node to match
-    return {};
+    return enumerate_and_match("usb", [&](struct udev_device *dev) {
+      const char *vid = udev_device_get_property_value(dev, "ID_VENDOR_ID");
+      const char *pid = udev_device_get_property_value(dev, "ID_MODEL_ID");
+      if (vid && pid && std::stoi(vid, nullptr, 16) == decl.vendor &&
+          std::stoi(pid, nullptr, 16) == decl.product) {
+        return std::string{ udev_device_get_syspath(dev) };
+      }
+      return std::string{};
+    });
   } else if (decl.type == "hidraw") {
-    glob_t g;
-    if (glob("/dev/hidraw*", 0, nullptr, &g) == 0) {
-      for (size_t i = 0; i < g.gl_pathc; i++) {
-        std::string devnode = g.gl_pathv[i];
-        int fd = open(devnode.c_str(), O_RDONLY | O_NONBLOCK);
-        if (fd < 0) {
-          continue;
-        }
-
-        struct hidraw_devinfo info;
-        if (ioctl(fd, HIDIOCGRAWINFO, &info) == 0) {
-          bool match = true;
-          if (decl.bus && static_cast<int>(info.bustype) != decl.bus) {
-            match = false;
-          }
-
-          int vendor = static_cast<unsigned short>(info.vendor);
-          int product = static_cast<unsigned short>(info.product);
-
-          if (decl.vendor && vendor != decl.vendor) {
-            match = false;
-          }
-          if (decl.product && product != decl.product) {
-            match = false;
-          }
-
-          if (!decl.name.empty()) {
-            char name[256] = { 0 };
-            if (ioctl(fd, HIDIOCGRAWNAME(sizeof(name) - 1), name) >= 0) {
-              std::string devname(name);
-              if (decl.name != devname) {
-                match = false;
-              }
-            } else {
-              match = false;
-            }
-          }
-
-          if (!decl.phys.empty()) {
-            char phys[64] = { 0 };
-            if (ioctl(fd, HIDIOCGRAWPHYS(sizeof(phys) - 1), phys) >= 0) {
-              if (decl.phys != std::string(phys)) {
-                std::cout << std::string(phys) << std::endl;
-                match = false;
-              }
-            }
-          }
-
-          if (!decl.uniq.empty()) {
-            char uniq[64] = { 0 };
-            if (ioctl(fd, HIDIOCGRAWUNIQ(sizeof(uniq) - 1), uniq) >= 0) {
-              if (decl.uniq != std::string(uniq)) {
-                std::cout << std::string(uniq) << std::endl;
-                match = false;
-              }
-            }
-          }
-
-          if (decl.interface >= 0) {
-            int iface = get_interface_num(devnode);
-            if (iface != decl.interface) {
-              match = false;
-            }
-          }
-
-          if (match) {
-            std::cout << "Matched " << decl.id << " → " << devnode << std::endl;
-            close(fd);
-            globfree(&g);
-            return devnode;
-          }
-        }
-        close(fd);
+    return enumerate_and_match("hidraw", [&](struct udev_device *dev) {
+      const char *devnode = udev_device_get_devnode(dev);
+      if (!devnode) {
+        return std::string{};
       }
-    }
-    globfree(&g);
-    return {};
-  } else {
-    glob_t g;
-    if (glob("/dev/input/event*", 0, nullptr, &g) == 0) {
-      for (size_t i = 0; i < g.gl_pathc; i++) {
-        std::string devnode = g.gl_pathv[i];
-        int fd = open(devnode.c_str(), O_RDONLY | O_NONBLOCK);
-        if (fd < 0) {
-          continue;
+      // keep your existing ioctl checks here
+      int fd = open(devnode, O_RDONLY | O_NONBLOCK);
+      if (fd < 0) {
+        return std::string{};
+      }
+
+      struct hidraw_devinfo info;
+      if (ioctl(fd, HIDIOCGRAWINFO, &info) == 0) {
+        bool match = true;
+        if (decl.bus && static_cast<int>(info.bustype) != decl.bus) {
+          match = false;
         }
 
-        struct libevdev *dev = nullptr;
-        if (libevdev_new_from_fd(fd, &dev) == 0) {
-          bool match = true;
-          if (decl.bus && libevdev_get_id_bustype(dev) != decl.bus) {
-            match = false;
-          }
-          if (decl.vendor && libevdev_get_id_vendor(dev) != decl.vendor) {
-            match = false;
-          }
-          if (decl.product && libevdev_get_id_product(dev) != decl.product) {
-            match = false;
-          }
-          if (!decl.name.empty() && decl.name != (libevdev_get_name(dev) ?: "")) {
-            match = false;
-          }
-          if (!decl.phys.empty() && decl.phys != (libevdev_get_phys(dev) ?: "")) {
-            match = false;
-          }
-          if (!decl.uniq.empty() && decl.uniq != (libevdev_get_uniq(dev) ?: "")) {
-            match = false;
-          }
+        int vendor = static_cast<unsigned short>(info.vendor);
+        int product = static_cast<unsigned short>(info.product);
 
-          for (auto &[type, code] : decl.capabilities) {
-            if (!libevdev_has_event_code(dev, type, code)) {
+        if (decl.vendor && vendor != decl.vendor) {
+          match = false;
+        }
+        if (decl.product && product != decl.product) {
+          match = false;
+        }
+
+        if (!decl.name.empty()) {
+          char name[256] = { 0 };
+          if (ioctl(fd, HIDIOCGRAWNAME(sizeof(name) - 1), name) >= 0) {
+            std::string devname(name);
+            if (decl.name != devname) {
               match = false;
-              break;
+            }
+          } else {
+            match = false;
+          }
+        }
+
+        if (!decl.phys.empty()) {
+          char phys[64] = { 0 };
+          if (ioctl(fd, HIDIOCGRAWPHYS(sizeof(phys) - 1), phys) >= 0) {
+            if (decl.phys != std::string(phys)) {
+              std::cout << std::string(phys) << std::endl;
+              match = false;
             }
           }
+        }
 
-          if (match) {
-            std::cout << "Matched " << decl.id << " → " << devnode << " ("
-                      << (libevdev_get_name(dev) ?: "") << ")\n";
-            libevdev_free(dev);
-            close(fd);
-            globfree(&g);
-            return devnode;
+        if (!decl.uniq.empty()) {
+          char uniq[64] = { 0 };
+          if (ioctl(fd, HIDIOCGRAWUNIQ(sizeof(uniq) - 1), uniq) >= 0) {
+            if (decl.uniq != std::string(uniq)) {
+              std::cout << std::string(uniq) << std::endl;
+              match = false;
+            }
           }
         }
-        libevdev_free(dev);
-        close(fd);
+
+        if (decl.interface >= 0) {
+          int iface = get_interface_num(devnode);
+          if (iface != decl.interface) {
+            match = false;
+          }
+        }
+
+        if (match) {
+          std::cout << "Matched " << decl.id << " → " << devnode << std::endl;
+        }
       }
-    }
-    globfree(&g);
-    return {};
+      close(fd);
+      return std::string{ devnode };
+    });
+  } else if (decl.type == "evdev") {
+    return enumerate_and_match("input", [&](struct udev_device *dev) {
+      const char *devnode = udev_device_get_devnode(dev);
+      if (!devnode) {
+        return std::string{};
+      }
+      int fd = open(devnode, O_RDONLY | O_NONBLOCK);
+      if (fd < 0) {
+        return std::string{};
+      }
+      struct libevdev *evdev = nullptr;
+      if (libevdev_new_from_fd(fd, &evdev) == 0) {
+        bool match = true;
+        if (decl.bus && libevdev_get_id_bustype(evdev) != decl.bus) {
+          match = false;
+        }
+        if (decl.vendor && libevdev_get_id_vendor(evdev) != decl.vendor) {
+          match = false;
+        }
+        if (decl.product && libevdev_get_id_product(evdev) != decl.product) {
+          match = false;
+        }
+        if (!decl.name.empty() && decl.name != (libevdev_get_name(evdev) ?: "")) {
+          match = false;
+        }
+        if (!decl.phys.empty() && decl.phys != (libevdev_get_phys(evdev) ?: "")) {
+          match = false;
+        }
+        if (!decl.uniq.empty() && decl.uniq != (libevdev_get_uniq(evdev) ?: "")) {
+          match = false;
+        }
+
+        for (auto &[type, code] : decl.capabilities) {
+          if (!libevdev_has_event_code(evdev, type, code)) {
+            match = false;
+            break;
+          }
+        }
+
+        if (match) {
+          std::cout << "Matched " << decl.id << " → " << devnode << " ("
+                    << (libevdev_get_name(evdev) ?: "") << ")\n";
+          libevdev_free(evdev);
+          close(fd);
+          return std::string{ devnode };
+        }
+      }
+      libevdev_free(evdev);
+      close(fd);
+      return std::string{};
+    });
   }
+  return {};
 }
 
 InputCtx attach_device(
@@ -395,4 +427,76 @@ void parse_inputs_from_lua(lua_State *L) {
     lua_pop(L, 1);  // pop value, keep key
   }
   lua_pop(L, 1);  // pop inputs table
+}
+
+bool attach_input_device(const std::string &devnode, const InputDecl &decl) {
+  // already attached?
+  if (aelkey_state.input_map.find(decl.id) != aelkey_state.input_map.end()) {
+    std::cout << "Device already attached: " << decl.id << std::endl;
+    return false;
+  }
+
+  InputCtx ctx = attach_device(
+      devnode, decl, aelkey_state.input_map, aelkey_state.frames, aelkey_state.epfd
+  );
+
+  // failure check: neither fd nor usb_handle valid
+  if (ctx.fd < 0 && !ctx.usb_handle) {
+    std::cerr << "Failed to attach input: " << decl.id << " ("
+              << (devnode.empty() ? decl.type : devnode) << ")" << std::endl;
+    return false;
+  }
+
+  // store context keyed by string id
+  aelkey_state.input_map[decl.id] = std::move(ctx);
+  return true;
+}
+
+InputDecl detach_input_device(const std::string &dev_id) {
+  InputDecl decl{};
+
+  auto im = aelkey_state.input_map.find(dev_id);
+  if (im == aelkey_state.input_map.end()) {
+    return decl;  // nothing to detach
+  }
+
+  InputCtx &ctx = im->second;
+  decl = ctx.decl;
+
+  // Remove from epoll if fd is valid
+  if (aelkey_state.epfd >= 0 && ctx.fd >= 0) {
+    epoll_ctl(aelkey_state.epfd, EPOLL_CTL_DEL, ctx.fd, nullptr);
+  }
+
+  // Free libevdev resources if present
+  if (ctx.idev) {
+    libevdev_grab(ctx.idev, LIBEVDEV_UNGRAB);
+    libevdev_free(ctx.idev);
+    ctx.idev = nullptr;
+  }
+
+  // Close fd if valid
+  if (ctx.fd >= 0) {
+    close(ctx.fd);
+    ctx.fd = -1;
+  }
+
+  // Close libusb handle if present
+  if (ctx.usb_handle) {
+    // Cancel and free any active libusb transfers
+    for (auto *t : ctx.transfers) {
+      libusb_cancel_transfer(t);
+      libusb_free_transfer(t);
+    }
+    ctx.transfers.clear();
+
+    libusb_close(ctx.usb_handle);
+    ctx.usb_handle = nullptr;
+  }
+
+  // Erase from maps keyed by string id
+  aelkey_state.input_map.erase(im);
+  aelkey_state.frames.erase(dev_id);
+
+  return decl;
 }

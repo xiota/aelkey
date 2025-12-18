@@ -25,20 +25,14 @@ static void create_outputs_from_decls() {
 
 static void attach_inputs_from_decls(lua_State *L) {
   for (auto &decl : aelkey_state.input_decls) {
-    if (decl.type == "libusb") {
-      if (attach_input_device("", decl)) {
-        notify_state_change(L, decl, "connect");
-      }
-      continue;
-    }
-
     std::string devnode = match_device(decl);
     if (devnode.empty()) {
       continue;
     }
 
     if (attach_input_device(devnode, decl)) {
-      notify_state_change(L, decl, "connect");
+      decl.devnode = devnode;
+      notify_state_change(L, decl, "add");
     }
   }
 }
@@ -104,17 +98,11 @@ int lua_open_device(lua_State *L) {
       continue;  // only match the requested device
     }
 
-    if (decl.type == "libusb") {
-      if (attach_input_device("", decl)) {
-        notify_state_change(L, decl, "connect");
-        ok = true;
-      }
-    } else {
-      std::string devnode = match_device(decl);
-      if (!devnode.empty() && attach_input_device(devnode, decl)) {
-        notify_state_change(L, decl, "connect");
-        ok = true;
-      }
+    std::string devnode = match_device(decl);
+    decl.devnode = devnode;
+    if (!devnode.empty() && attach_input_device(devnode, decl)) {
+      notify_state_change(L, decl, "add");
+      ok = true;
     }
     break;  // stop after first match
   }
@@ -127,42 +115,8 @@ int lua_close_device(lua_State *L) {
   const char *dev_id_cstr = luaL_checkstring(L, 1);
   std::string dev_id(dev_id_cstr);
 
-  auto it = aelkey_state.input_map.find(dev_id);
-  if (it == aelkey_state.input_map.end()) {
-    lua_pushboolean(L, 0);
-    return 1;
-  }
-  InputCtx &ctx = it->second;
-
-  // If evdev/hidraw, free libevdev resources
-  if (ctx.idev) {
-    libevdev_grab(ctx.idev, LIBEVDEV_UNGRAB);
-    libevdev_free(ctx.idev);
-    ctx.idev = nullptr;
-  }
-
-  // Remove from epoll if fd is valid
-  if (aelkey_state.epfd >= 0 && ctx.fd >= 0) {
-    epoll_ctl(aelkey_state.epfd, EPOLL_CTL_DEL, ctx.fd, nullptr);
-  }
-
-  // Cleanup maps
-  aelkey_state.input_map.erase(dev_id);
-  aelkey_state.frames.erase(dev_id);
-
-  // Close the file descriptor if valid
-  if (ctx.fd >= 0) {
-    close(ctx.fd);
-    ctx.fd = -1;
-  }
-
-  // Close libusb handle if present
-  if (ctx.usb_handle) {
-    libusb_close(ctx.usb_handle);
-    ctx.usb_handle = nullptr;
-  }
-
-  lua_pushboolean(L, 1);
+  InputDecl removed = detach_input_device(dev_id);
+  lua_pushboolean(L, !removed.id.empty());
   return 1;
 }
 

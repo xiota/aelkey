@@ -1,11 +1,15 @@
-#include "aelkey_hid.h"
+#include "aelkey_usb.h"
 
+#include <algorithm>
 #include <cstring>
+#include <vector>
 
 #include <libusb-1.0/libusb.h>
 #include <lua.hpp>
 
+#include "aelkey_hid.h"
 #include "aelkey_state.h"
+#include "device_udev.h"
 #include "luacompat.h"
 
 // Map libusb_transfer_type enum → string
@@ -85,10 +89,47 @@ static void LIBUSB_CALL dispatch_libusb(libusb_transfer *transfer) {
     }
   }
 
-  // resubmit for continuous streaming
-  int rc = libusb_submit_transfer(transfer);
-  if (rc != 0) {
-    std::cerr << "libusb_submit_transfer error: " << libusb_error_name(rc) << std::endl;
+  // resubmit transfer based on status
+  switch (transfer->status) {
+    case LIBUSB_TRANSFER_COMPLETED:
+      if (libusb_submit_transfer(transfer) != 0) {
+        auto &vec = ctx->transfers;
+        vec.erase(std::remove(vec.begin(), vec.end(), transfer), vec.end());
+        libusb_free_transfer(transfer);
+      }
+      break;
+
+    case LIBUSB_TRANSFER_OVERFLOW:
+    case LIBUSB_TRANSFER_TIMED_OUT:
+      // transient errors, try resubmit
+      if (libusb_submit_transfer(transfer) != 0) {
+        auto &vec = ctx->transfers;
+        vec.erase(std::remove(vec.begin(), vec.end(), transfer), vec.end());
+        libusb_free_transfer(transfer);
+      }
+      break;
+
+    case LIBUSB_TRANSFER_NO_DEVICE:
+      detach_input_device(ctx->decl.id);
+      notify_state_change(L, ctx->decl, "remove");
+      break;
+
+    case LIBUSB_TRANSFER_CANCELLED:
+    case LIBUSB_TRANSFER_ERROR:
+    default:
+      libusb_device_descriptor desc;
+      int rc = libusb_get_device_descriptor(libusb_get_device(ctx->usb_handle), &desc);
+      if (rc != 0) {
+        // device is gone
+        detach_input_device(ctx->decl.id);
+        notify_state_change(L, ctx->decl, "remove");
+      } else {
+        // fatal or cancelled, just clean up this transfer
+        auto &vec = ctx->transfers;
+        vec.erase(std::remove(vec.begin(), vec.end(), transfer), vec.end());
+        libusb_free_transfer(transfer);
+      }
+      break;
   }
 }
 
@@ -457,6 +498,9 @@ static int lua_submit_transfer(lua_State *L) {
     lua_pushnil(L);
     return 1;
   }
+
+  // Track the transfer in the device context
+  ctx->transfers.push_back(xfer);
 
   // return a simple handle table with cancel/resubmit
   lua_newtable(L);

@@ -10,28 +10,6 @@
 #include "aelkey_state.h"
 #include "device_input.h"
 
-bool attach_input_device(const std::string &devnode, const InputDecl &decl) {
-  // already attached?
-  if (aelkey_state.input_map.find(decl.id) != aelkey_state.input_map.end()) {
-    std::cout << "Device already attached: " << decl.id << std::endl;
-    return false;
-  }
-
-  InputCtx ctx = attach_device(
-      devnode, decl, aelkey_state.input_map, aelkey_state.frames, aelkey_state.epfd
-  );
-
-  // failure check: neither fd nor usb_handle valid
-  if (ctx.fd < 0 && !ctx.usb_handle) {
-    std::cerr << "Failed to attach input: " << decl.id << " (" << devnode << ")" << std::endl;
-    return false;
-  }
-
-  // store context keyed by string id
-  aelkey_state.input_map[decl.id] = std::move(ctx);
-  return true;
-}
-
 int device_udev_init(lua_State *L) {
   if (aelkey_state.epfd >= 0) {
     return 0;  // already initialized
@@ -56,6 +34,7 @@ int device_udev_init(lua_State *L) {
 
   udev_monitor_filter_add_match_subsystem_devtype(aelkey_state.g_mon, "input", nullptr);
   udev_monitor_filter_add_match_subsystem_devtype(aelkey_state.g_mon, "hidraw", nullptr);
+  udev_monitor_filter_add_match_subsystem_devtype(aelkey_state.g_mon, "usb", nullptr);
   udev_monitor_enable_receiving(aelkey_state.g_mon);
 
   int mon_fd = udev_monitor_get_fd(aelkey_state.g_mon);
@@ -93,5 +72,90 @@ void notify_state_change(lua_State *L, const InputDecl &decl, const char *state)
   if (lua_pcall(L, 1, 0, 0) != LUA_OK) {
     std::cerr << "Lua state_callback error: " << lua_tostring(L, -1) << std::endl;
     lua_pop(L, 1);
+  }
+}
+
+void handle_udev_add(lua_State *L, struct udev_device *dev) {
+  const char *subsystem = udev_device_get_subsystem(dev);
+  const char *node = udev_device_get_devnode(dev);
+  std::string devnode = node ? node : "";
+
+  if (!subsystem) {
+    return;
+  }
+
+  for (auto &decl : aelkey_state.input_decls) {
+    // For all types, ask match_device to resolve the identifier
+    std::string matched = match_device(decl);
+
+    // For evdev/hidraw, compare against devnode from the event
+    if ((decl.type == "evdev" && std::string(subsystem) == "input") ||
+        (decl.type == "hidraw" && std::string(subsystem) == "hidraw")) {
+      if (matched == devnode) {
+        if (aelkey_state.input_map.find(decl.id) != aelkey_state.input_map.end()) {
+          std::cout << "Device already attached: " << decl.id << std::endl;
+          break;
+        }
+        if (attach_input_device(devnode, decl)) {
+          decl.devnode = devnode;  // cache identifier
+          notify_state_change(L, decl, "add");
+        }
+        break;
+      }
+    }
+    // For libusb, compare against syspath from the event
+    else if (decl.type == "libusb" && std::string(subsystem) == "usb") {
+      const char *syspath = udev_device_get_syspath(dev);
+      if (!syspath) {
+        continue;
+      }
+      if (matched == std::string(syspath)) {
+        if (aelkey_state.input_map.find(decl.id) != aelkey_state.input_map.end()) {
+          std::cout << "Device already attached: " << decl.id << std::endl;
+          break;
+        }
+        if (attach_input_device(matched, decl)) {
+          decl.devnode = matched;  // cache identifier
+          notify_state_change(L, decl, "add");
+        }
+        break;
+      }
+    }
+  }
+}
+
+void handle_udev_remove(lua_State *L, struct udev_device *dev) {
+  const char *subsystem = udev_device_get_subsystem(dev);
+  const char *node = udev_device_get_devnode(dev);
+  std::string devnode = node ? node : "";
+
+  if (!subsystem) {
+    return;
+  }
+
+  for (auto &decl : aelkey_state.input_decls) {
+    if (decl.type == "libusb" && std::string(subsystem) == "usb") {
+      const char *syspath = udev_device_get_syspath(dev);
+      if (!syspath) {
+        continue;
+      }
+
+      if (decl.devnode == std::string(syspath)) {
+        InputDecl removed = detach_input_device(decl.id);
+        if (!removed.id.empty()) {
+          notify_state_change(L, removed, "remove");
+        }
+        break;
+      }
+    } else if ((decl.type == "evdev" && std::string(subsystem) == "input") ||
+               (decl.type == "hidraw" && std::string(subsystem) == "hidraw")) {
+      if (decl.devnode == devnode) {
+        InputDecl removed = detach_input_device(decl.id);
+        if (!removed.id.empty()) {
+          notify_state_change(L, removed, "remove");
+        }
+        break;
+      }
+    }
   }
 }
