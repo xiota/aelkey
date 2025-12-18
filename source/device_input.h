@@ -21,6 +21,7 @@ struct InputDecl {
   bool writable = false;
   bool grab = false;
   std::vector<std::pair<int, int>> capabilities;
+  std::vector<std::string> uuids;
 
   std::string devnode;
 
