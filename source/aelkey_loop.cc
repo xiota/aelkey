@@ -2,6 +2,7 @@
 
 #include <csignal>
 #include <cstring>
+#include <format>
 #include <iostream>
 #include <string>
 
@@ -50,7 +51,8 @@ static void dispatch_hidraw(lua_State *L, int fd_ready, InputCtx &ctx) {
       }
 
       if (lua_pcall(L, 1, 0, 0) != LUA_OK) {
-        std::cerr << "Lua hidraw callback error: " << lua_tostring(L, -1) << std::endl;
+        std::string msg = std::format("Lua hidraw callback error: {}", lua_tostring(L, -1));
+        lua_warning(L, msg.c_str(), 0);
         lua_pop(L, 1);
       }
     } else {
@@ -119,7 +121,9 @@ static void dispatch_evdev(lua_State *L, InputCtx &ctx) {
             }
 
             if (lua_pcall(L, 1, 0, 0) != LUA_OK) {
-              std::cerr << "Lua event callback error: " << lua_tostring(L, -1) << std::endl;
+              std::string msg =
+                  std::format("Lua event callback error: {}", lua_tostring(L, -1));
+              lua_warning(L, msg.c_str(), 0);
               lua_pop(L, 1);
             }
           } else {
@@ -151,10 +155,9 @@ void handle_signal(int sig) {
 
 int lua_start(lua_State *L) {
   if (aelkey_state.active_mode == AelkeyState::ActiveMode::DAEMON) {
-    luaL_error(L, "cannot start event loop while daemon is running");
-    return 1;
+    return luaL_error(L, "cannot start event loop while daemon is running");
   } else if (aelkey_state.active_mode == AelkeyState::ActiveMode::LOOP) {
-    lua_warning(L, "event loop is already running");
+    lua_warning(L, "event loop is already running", 0);
     return 1;
   }
 
@@ -191,7 +194,9 @@ int lua_start(lua_State *L) {
         timeval tv{ 0, 0 };
         int rc = libusb_handle_events_timeout_completed(aelkey_state.g_libusb, &tv, nullptr);
         if (rc != 0) {
-          std::cerr << "libusb_handle_events error: " << libusb_error_name(rc) << std::endl;
+          std::string msg =
+              std::format("libusb_handle_events error: {}", libusb_error_name(rc));
+          lua_warning(L, msg.c_str(), 0);
         }
         continue;  // handled; go to next epoll event
       }

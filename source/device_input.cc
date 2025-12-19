@@ -2,6 +2,7 @@
 
 #include <climits>  // for PATH_MAX
 #include <cstring>
+#include <format>
 #include <fstream>
 #include <iostream>
 #include <string>
@@ -20,6 +21,7 @@
 
 #include "aelkey_state.h"
 #include "device_libusb.h"
+#include "luacompat.h"
 
 InputDecl parse_input(lua_State *L, int index) {
   InputDecl decl;
@@ -100,7 +102,7 @@ InputDecl parse_input(lua_State *L, int index) {
 static int get_interface_num(const std::string &devnode) {
   struct udev *udev = udev_new();
   if (!udev) {
-    std::cerr << "Failed to init udev\n";
+    lua_warning(aelkey_state.lua_vm, "Failed to init udev", 0);
     return -1;
   }
 
@@ -130,14 +132,17 @@ static int ensure_claimed(libusb_device_handle *devh, const InputDecl &in) {
   if (libusb_kernel_driver_active(devh, iface) == 1) {
     int d = libusb_detach_kernel_driver(devh, iface);
     if (d != 0) {
-      std::cerr << "Failed to detach kernel driver: " << libusb_error_name(d) << "\n";
+      std::string msg = std::format("Failed to detach kernel driver: {}", libusb_error_name(d));
+      lua_warning(aelkey_state.lua_vm, msg.c_str(), 0);
       return d;
     }
   }
 
   int r = libusb_claim_interface(devh, iface);
   if (r != 0) {
-    std::cerr << "Failed to claim interface " << iface << ": " << libusb_error_name(r) << "\n";
+    std::string msg =
+        std::format("Failed to claim interface {}: {}", iface, libusb_error_name(r));
+    lua_warning(aelkey_state.lua_vm, msg.c_str(), 0);
     return r;
   }
 
@@ -357,8 +362,9 @@ InputCtx attach_device(
     ctx.usb_handle =
         libusb_open_device_with_vid_pid(aelkey_state.g_libusb, in.vendor, in.product);
     if (!ctx.usb_handle) {
-      std::cerr << "Failed to open libusb device " << std::hex << in.vendor << ":" << in.product
-                << std::dec << "\n";
+      std::string msg =
+          std::format("Failed to open libusb device {:x}:{:x}", in.vendor, in.product);
+      lua_warning(aelkey_state.lua_vm, msg.c_str(), 0);
       return ctx;
     }
     std::cout << "Attached libusb device: " << in.id << std::endl;
@@ -376,7 +382,8 @@ InputCtx attach_device(
 
     struct libevdev *idev = nullptr;
     if (libevdev_new_from_fd(ctx.fd, &idev) < 0) {
-      std::cerr << "Failed to init libevdev for " << devnode << std::endl;
+      std::string msg = std::format("Failed to init libevdev for {}", devnode);
+      lua_warning(aelkey_state.lua_vm, msg.c_str(), 0);
       close(ctx.fd);
       ctx.fd = -1;
       return ctx;
@@ -388,7 +395,8 @@ InputCtx attach_device(
     if (in.grab) {
       int rc = libevdev_grab(idev, LIBEVDEV_GRAB);
       if (rc < 0) {
-        std::cerr << "Failed to grab device " << devnode << ": " << strerror(-rc) << std::endl;
+        std::string msg = std::format("Failed to grab device {}: {}", devnode, strerror(-rc));
+        lua_warning(aelkey_state.lua_vm, msg.c_str(), 0);
       } else {
         std::cout << "Grabbed device exclusively: " << devnode << std::endl;
       }
@@ -451,8 +459,10 @@ bool attach_input_device(const std::string &devnode, const InputDecl &decl) {
 
   // failure check: neither fd nor usb_handle valid
   if (ctx.fd < 0 && !ctx.usb_handle) {
-    std::cerr << "Failed to attach input: " << decl.id << " ("
-              << (devnode.empty() ? decl.type : devnode) << ")" << std::endl;
+    std::string msg = std::format(
+        "Failed to attach input: {} ({})", decl.id, devnode.empty() ? decl.type : devnode
+    );
+    lua_warning(aelkey_state.lua_vm, msg.c_str(), 0);
     return false;
   }
 

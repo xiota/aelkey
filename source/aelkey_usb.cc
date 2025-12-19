@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cstring>
+#include <format>
 #include <vector>
 
 #include <libusb-1.0/libusb.h>
@@ -81,7 +82,8 @@ static void LIBUSB_CALL dispatch_libusb(libusb_transfer *transfer) {
       lua_setfield(L, -2, "status");
 
       if (lua_pcall(L, 1, 0, 0) != LUA_OK) {
-        std::cerr << "Lua libusb callback error: " << lua_tostring(L, -1) << std::endl;
+        std::string msg = std::format("Lua libusb callback error: {}", lua_tostring(L, -1));
+        lua_warning(L, msg.c_str(), 0);
         lua_pop(L, 1);
       }
     } else {
@@ -491,7 +493,8 @@ static int lua_submit_transfer(lua_State *L) {
 
   int rc = libusb_submit_transfer(xfer);
   if (rc != 0) {
-    std::cerr << "libusb_submit_transfer error: " << libusb_error_name(rc) << std::endl;
+    std::string msg = std::format("libusb_submit_transfer error: {}", libusb_error_name(rc));
+    lua_warning(L, msg.c_str(), 0);
     free(buf);
     delete static_cast<std::pair<InputCtx *, lua_State *> *>(xfer->user_data);
     libusb_free_transfer(xfer);

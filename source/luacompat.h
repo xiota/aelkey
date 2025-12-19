@@ -12,7 +12,7 @@
 #endif
 
 #if LUA_VERSION_NUM < 504
-inline void lua_warning(lua_State *L, const char *msg, int tocont = 0) {
+inline void lua_warning(lua_State *L, const char *msg, int tocont) {
   if (msg) {
     std::cerr << "Lua warning: " << msg;
     if (!tocont) {

@@ -12,7 +12,7 @@ static int l_daemon_start(lua_State *L) {
     luaL_error(L, "cannot start event loop while daemon is running");
     return 1;
   } else if (aelkey_state.active_mode == AelkeyState::ActiveMode::DAEMON) {
-    lua_warning(L, "event loop is already running");
+    lua_warning(L, "event loop is already running", 0);
     return 1;
   }
 

@@ -1,5 +1,6 @@
 #include "device_udev.h"
 
+#include <format>
 #include <iostream>
 #include <string>
 
@@ -9,6 +10,7 @@
 
 #include "aelkey_state.h"
 #include "device_input.h"
+#include "luacompat.h"
 
 int ensure_udev_initialized(lua_State *L) {
   if (aelkey_state.epfd >= 0) {
@@ -70,7 +72,8 @@ void notify_state_change(lua_State *L, const InputDecl &decl, const char *state)
   lua_setfield(L, -2, "state");
 
   if (lua_pcall(L, 1, 0, 0) != LUA_OK) {
-    std::cerr << "Lua state_callback error: " << lua_tostring(L, -1) << std::endl;
+    std::string msg = std::format("Lua state_callback error: {}", lua_tostring(L, -1));
+    lua_warning(L, msg.c_str(), 0);
     lua_pop(L, 1);
   }
 }

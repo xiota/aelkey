@@ -1,5 +1,6 @@
 #include "device_output.h"
 
+#include <format>
 #include <iostream>
 #include <string>
 #include <vector>
@@ -9,6 +10,7 @@
 
 #include "aelkey_state.h"
 #include "device_capabilities.h"
+#include "luacompat.h"
 
 // Provide sensible max ranges for ABS axes
 // device_output.cc
@@ -134,7 +136,8 @@ void enable_capability(libevdev *dev, const std::string &cap) {
   if (code >= 0) {
     enable_codes(dev, evtype, std::vector{ code });
   } else {
-    std::cerr << "Unknown capability string: " << cap << std::endl;
+    std::string msg = std::format("Unknown capability string: {}", cap);
+    lua_warning(aelkey_state.lua_vm, msg.c_str(), 0);
   }
 }
 
@@ -195,7 +198,8 @@ libevdev_uinput *create_output_device(const OutputDecl &out) {
   struct libevdev_uinput *uidev = nullptr;
   int err = libevdev_uinput_create_from_device(dev, LIBEVDEV_UINPUT_OPEN_MANAGED, &uidev);
   if (err != 0) {
-    std::cerr << "Failed to create uinput device: " << out.name << std::endl;
+    std::string msg = std::format("Failed to create uinput device: {}", out.name);
+    lua_warning(aelkey_state.lua_vm, msg.c_str(), 0);
     libevdev_free(dev);
     return nullptr;
   }

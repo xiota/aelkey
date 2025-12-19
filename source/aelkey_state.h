@@ -15,6 +15,7 @@
 #include "tick_scheduler.h"
 
 struct AelkeyState {
+  lua_State *lua_vm = nullptr;
   TickScheduler *scheduler = nullptr;
 
   int epfd = -1;
