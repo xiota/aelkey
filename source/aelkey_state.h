@@ -5,6 +5,7 @@
 #include <unordered_set>
 #include <vector>
 
+#include <dbus/dbus.h>
 #include <libevdev/libevdev-uinput.h>
 #include <libudev.h>
 #include <libusb-1.0/libusb.h>
@@ -39,6 +40,9 @@ struct AelkeyState {
 
   libusb_context *g_libusb = nullptr;
   std::unordered_set<int> libusb_fd_set;
+
+  DBusConnection *g_dbus_conn = nullptr;
+  int g_dbus_fd = -1;
 
   void aelkey_set_mode(ActiveMode mode) {
     switch (mode) {

@@ -21,7 +21,9 @@ struct InputDecl {
   bool writable = false;
   bool grab = false;
   std::vector<std::pair<int, int>> capabilities;
-  std::vector<std::string> uuids;
+
+  int service = 0;
+  int characteristic = 0;
 
   std::string devnode;
 
@@ -37,19 +39,15 @@ struct InputCtx {
   std::vector<libusb_transfer *> transfers;
 
   bool active = false;
+
+  // The BlueZ device path, e.g. "/org/bluez/hci0/dev_XX_XX_XX_XX_XX_XX"
+  // This is the root under which all GATT services/characteristics live.
+  std::string gatt_path;
 };
 
 InputDecl parse_input(lua_State *L, int index);
 
 std::string match_device(const InputDecl &decl);
-
-InputCtx attach_device(
-    const std::string &devnode,
-    const InputDecl &in,
-    std::unordered_map<std::string, InputCtx> &input_map,
-    std::unordered_map<std::string, std::vector<struct input_event>> &frames,
-    int epfd
-);
 
 void parse_inputs_from_lua(lua_State *L);
 InputDecl detach_input_device(const std::string &dev_id);

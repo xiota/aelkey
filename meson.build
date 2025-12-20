@@ -7,6 +7,7 @@ project(
 )
 
 # depends
+dbus_dep = dependency('dbus-1')
 libevdev_dep = dependency('libevdev')
 libudev_dep  = dependency('libudev')
 libusb_dep  = dependency('libusb-1.0')
@@ -46,6 +47,7 @@ src_files = files(
   'source/aelkey_state.cc',
   'source/aelkey_usb.cc',
   'source/aelkey_util.cc',
+  'source/device_gatt.cc',
   'source/device_input.cc',
   'source/device_libusb.cc',
   'source/device_output.cc',
@@ -56,6 +58,7 @@ shared_library(
   meson.project_name(),
   src_files,
   dependencies: [
+    dbus_dep,
     libevdev_dep,
     libudev_dep,
     libusb_dep,

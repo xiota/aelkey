@@ -20,6 +20,7 @@
 #include <unistd.h>
 
 #include "aelkey_state.h"
+#include "device_gatt.h"
 #include "device_libusb.h"
 #include "luacompat.h"
 
@@ -79,15 +80,11 @@ InputDecl parse_input(lua_State *L, int index) {
         }
         lua_pop(L, 1);
       }
-    } else if (key == "uuid" && lua_istable(L, -1)) {
-      int len = lua_objlen(L, -1);
-      for (int i = 1; i <= len; i++) {
-        lua_rawgeti(L, -1, i);
-        if (lua_isstring(L, -1)) {
-          decl.uuids.emplace_back(lua_tostring(L, -1));
-        }
-        lua_pop(L, 1);
-      }
+    } else if (key == "service" && lua_isnumber(L, -1)) {
+      decl.service = lua_tointeger(L, -1);
+
+    } else if (key == "characteristic" && lua_isnumber(L, -1)) {
+      decl.characteristic = lua_tointeger(L, -1);
     } else if (key == "callback_events" && lua_isstring(L, -1)) {
       decl.callback_events = lua_tostring(L, -1);
     } else if (key == "callback_state" && lua_isstring(L, -1)) {
@@ -180,17 +177,7 @@ static std::string enumerate_and_match(
 }
 
 std::string match_device(const InputDecl &decl) {
-  if (decl.type == "libusb") {
-    return enumerate_and_match("usb", [&](struct udev_device *dev) {
-      const char *vid = udev_device_get_property_value(dev, "ID_VENDOR_ID");
-      const char *pid = udev_device_get_property_value(dev, "ID_MODEL_ID");
-      if (vid && pid && std::stoi(vid, nullptr, 16) == decl.vendor &&
-          std::stoi(pid, nullptr, 16) == decl.product) {
-        return std::string{ udev_device_get_syspath(dev) };
-      }
-      return std::string{};
-    });
-  } else if (decl.type == "hidraw") {
+  if (decl.type == "hidraw") {
     return enumerate_and_match("hidraw", [&](struct udev_device *dev) {
       const char *devnode = udev_device_get_devnode(dev);
       if (!devnode) {
@@ -260,10 +247,13 @@ std::string match_device(const InputDecl &decl) {
 
         if (match) {
           std::cout << "Matched " << decl.id << " → " << devnode << std::endl;
+          close(fd);
+          return std::string{ devnode };
         }
       }
+
       close(fd);
-      return std::string{ devnode };
+      return std::string{};
     });
   } else if (decl.type == "evdev") {
     return enumerate_and_match("input", [&](struct udev_device *dev) {
@@ -316,11 +306,24 @@ std::string match_device(const InputDecl &decl) {
       close(fd);
       return std::string{};
     });
+  } else if (decl.type == "libusb") {
+    return enumerate_and_match("usb", [&](struct udev_device *dev) {
+      const char *vid = udev_device_get_property_value(dev, "ID_VENDOR_ID");
+      const char *pid = udev_device_get_property_value(dev, "ID_MODEL_ID");
+      if (vid && pid && std::stoi(vid, nullptr, 16) == decl.vendor &&
+          std::stoi(pid, nullptr, 16) == decl.product) {
+        return std::string{ udev_device_get_syspath(dev) };
+      }
+      return std::string{};
+    });
+  } else if (decl.type == "gatt") {
+    return match_gatt_characteristic(decl);
   }
+
   return {};
 }
 
-InputCtx attach_device(
+static InputCtx attach_device_helper(
     const std::string &devnode,
     const InputDecl &in,
     std::unordered_map<std::string, InputCtx> &input_map,
@@ -375,8 +378,15 @@ InputCtx attach_device(
     ensure_claimed(ctx.usb_handle, in);
 
     // no ctx.fd, epoll integration handled by pollfd notifiers
-  } else {
-    // default: evdev
+  } else if (in.type == "gatt") {
+    ensure_gatt_initialized();
+
+    // devnode is the characteristic path discovered in match_device()
+    InputDecl decl_copy = in;
+    decl_copy.devnode = devnode;  // <- important
+
+    ctx = attach_gatt_device(decl_copy);
+  } else if (in.type == "evdev") {
     ctx.fd = ::open(devnode.c_str(), O_RDONLY | O_NONBLOCK);
     if (ctx.fd < 0) {
       perror("open");
@@ -421,11 +431,10 @@ InputCtx attach_device(
       ctx.fd = -1;
       ctx.active = false;
     }
-  }
-
-  // Save context keyed by string id if valid
-  if (!in.id.empty() && ctx.active) {
-    input_map[in.id] = ctx;
+  } else {
+    std::string msg = std::format("Unknown output type: {}", in.type);
+    lua_warning(aelkey_state.lua_vm, msg.c_str(), 0);
+    return ctx;
   }
 
   return ctx;
@@ -460,7 +469,7 @@ bool attach_input_device(const std::string &devnode, const InputDecl &decl) {
     return false;
   }
 
-  InputCtx ctx = attach_device(
+  InputCtx ctx = attach_device_helper(
       devnode, decl, aelkey_state.input_map, aelkey_state.frames, aelkey_state.epfd
   );
 
@@ -488,6 +497,11 @@ InputDecl detach_input_device(const std::string &dev_id) {
 
   InputCtx &ctx = im->second;
   decl = ctx.decl;
+
+  // Detach from gatt
+  if (ctx.decl.type == "gatt") {
+    detach_gatt_device(ctx);
+  }
 
   // Remove from epoll if fd is valid
   if (aelkey_state.epfd >= 0 && ctx.fd >= 0) {

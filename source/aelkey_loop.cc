@@ -16,6 +16,7 @@
 
 #include "aelkey_device.h"
 #include "aelkey_state.h"
+#include "device_gatt.h"
 #include "device_udev.h"
 #include "luacompat.h"
 
@@ -199,6 +200,12 @@ int lua_start(lua_State *L) {
           lua_warning(L, msg.c_str(), 0);
         }
         continue;  // handled; go to next epoll event
+      }
+
+      // D-Bus GATT notifications
+      if (fd_ready == aelkey_state.g_dbus_fd) {
+        dispatch_gatt(L);
+        continue;
       }
 
       // udev hotplug
