@@ -311,6 +311,54 @@ static void print_characteristic_inspect_line(const std::string &ch) {
             << ", flags=" << fl.str() << std::endl;
 }
 
+bool characteristic_supports_notify(DBusConnection *conn, const std::string &char_path) {
+  DBusMessage *msg;
+  DBusMessage *reply;
+  DBusMessageIter args;
+
+  msg = dbus_message_new_method_call(
+      "org.bluez", char_path.c_str(), "org.freedesktop.DBus.Properties", "Get"
+  );
+
+  const char *iface = "org.bluez.GattCharacteristic1";
+  const char *prop = "Flags";
+
+  dbus_message_append_args(
+      msg, DBUS_TYPE_STRING, &iface, DBUS_TYPE_STRING, &prop, DBUS_TYPE_INVALID
+  );
+
+  reply = dbus_connection_send_with_reply_and_block(conn, msg, -1, nullptr);
+  dbus_message_unref(msg);
+
+  if (!reply) {
+    return false;
+  }
+
+  dbus_message_iter_init(reply, &args);
+
+  // Flags is an array of strings
+  DBusMessageIter variant, array;
+  dbus_message_iter_recurse(&args, &variant);
+  dbus_message_iter_recurse(&variant, &array);
+
+  bool supports = false;
+
+  while (dbus_message_iter_get_arg_type(&array) == DBUS_TYPE_STRING) {
+    const char *flag;
+    dbus_message_iter_get_basic(&array, &flag);
+
+    if (strcmp(flag, "notify") == 0) {
+      supports = true;
+      break;
+    }
+
+    dbus_message_iter_next(&array);
+  }
+
+  dbus_message_unref(reply);
+  return supports;
+}
+
 InputCtx attach_gatt_device(const InputDecl &decl) {
   InputCtx ctx;
   ctx.decl = decl;
@@ -345,9 +393,26 @@ InputCtx attach_gatt_device(const InputDecl &decl) {
     match_gatt_device(decl, &found_characteristics);
 
     for (const auto &ch : found_characteristics) {
+      // Always print inspect info
       print_characteristic_inspect_line(ch);
+
+      // Only subscribe if characteristic supports notify
+      if (characteristic_supports_notify(conn, ch)) {
+        std::string rule =
+            "type='signal',interface='org.freedesktop.DBus.Properties',"
+            "member='PropertiesChanged',path='" +
+            ch + "'";
+
+        dbus_bus_add_match(conn, rule.c_str(), nullptr);
+
+        start_notify(conn, ch);
+      }
     }
+
+    dbus_connection_flush(conn);
   } else {
+    print_characteristic_inspect_line(decl.devnode);
+
     // Notify
     std::string rule =
         "type='signal',interface='org.freedesktop.DBus.Properties',"
