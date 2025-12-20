@@ -317,7 +317,7 @@ std::string match_device(const InputDecl &decl) {
       return std::string{};
     });
   } else if (decl.type == "gatt") {
-    return match_gatt_characteristic(decl);
+    return match_gatt_device(decl);
   }
 
   return {};

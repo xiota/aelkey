@@ -74,6 +74,18 @@ static std::string derive_device_path_from_char_path(const std::string &char_pat
   return char_path.substr(0, pos);
 }
 
+enum class GattPathType { Device, Service, Characteristic };
+
+static GattPathType classify_gatt_path(const std::string &path) {
+  if (path.find("/char") != std::string::npos) {
+    return GattPathType::Characteristic;
+  }
+  if (path.find("/service") != std::string::npos) {
+    return GattPathType::Service;
+  }
+  return GattPathType::Device;
+}
+
 InputCtx attach_gatt_device(const InputDecl &decl) {
   InputCtx ctx;
   ctx.decl = decl;
@@ -85,25 +97,44 @@ InputCtx attach_gatt_device(const InputDecl &decl) {
   }
 
   if (decl.devnode.empty()) {
-    std::cerr << "GATT: no characteristic path in devnode for " << decl.id << std::endl;
+    std::cerr << "GATT: no GATT path in devnode for " << decl.id << std::endl;
     return ctx;
   }
 
-  // Derive device GATT root path from the primary characteristic path.
-  ctx.gatt_path = derive_device_path_from_char_path(decl.devnode);
-  if (ctx.gatt_path.empty()) {
-    std::cerr << "GATT: failed to derive device path from " << decl.devnode << std::endl;
+  // Determine what kind of GATT path this is
+  GattPathType type = classify_gatt_path(decl.devnode);
+
+  // Determine the device root path
+  if (type == GattPathType::Characteristic) {
+    ctx.gatt_path = derive_device_path_from_char_path(decl.devnode);
+    if (ctx.gatt_path.empty()) {
+      std::cerr << "GATT: failed to derive device path from " << decl.devnode << std::endl;
+    }
+  } else {
+    // For device-level or service-level matches, the path itself is the root
+    ctx.gatt_path = decl.devnode;
   }
 
-  // Install DBus match rule for this characteristic
+  // Install DBus match rule
   {
     DBusError err;
     dbus_error_init(&err);
 
-    std::string rule =
-        "type='signal',interface='org.freedesktop.DBus.Properties',"
-        "member='PropertiesChanged',path='" +
-        decl.devnode + "'";
+    std::string rule;
+
+    if (type == GattPathType::Characteristic) {
+      // Exact characteristic path
+      rule =
+          "type='signal',interface='org.freedesktop.DBus.Properties',"
+          "member='PropertiesChanged',path='" +
+          decl.devnode + "'";
+    } else {
+      // Device or service: listen to everything under this subtree
+      rule =
+          "type='signal',interface='org.freedesktop.DBus.Properties',"
+          "sender='org.bluez',path_namespace='" +
+          decl.devnode + "'";
+    }
 
     dbus_bus_add_match(conn, rule.c_str(), &err);
     dbus_connection_flush(conn);
@@ -111,16 +142,21 @@ InputCtx attach_gatt_device(const InputDecl &decl) {
     if (dbus_error_is_set(&err)) {
       std::cerr << "GATT: Failed to add match rule: " << err.message << std::endl;
       dbus_error_free(&err);
+      return ctx;
     } else {
       std::cerr << "GATT: Added match rule for " << decl.devnode << std::endl;
     }
   }
 
-  start_notify(conn, decl.devnode);
+  // Only StartNotify for characteristics
+  if (type == GattPathType::Characteristic) {
+    start_notify(conn, decl.devnode);
+    std::cerr << "Attached GATT characteristic: " << decl.devnode << std::endl;
+  } else {
+    std::cerr << "Attached GATT device/service: " << decl.devnode << std::endl;
+  }
 
   ctx.active = true;
-  std::cerr << "Attached GATT characteristic: " << decl.devnode << std::endl;
-
   return ctx;
 }
 
@@ -258,53 +294,38 @@ void dispatch_gatt(lua_State *L) {
 }
 
 // ---------------------------------------------------------------------
-// Device + primary characteristic matching
+// Device matching
 // ---------------------------------------------------------------------
 
-std::string match_gatt_characteristic(const InputDecl &decl) {
-  ensure_gatt_initialized();
-
-  DBusMessage *reply = nullptr;
-  DBusMessageIter iter, dict;
-
-  // Query all BlueZ objects
-  reply = dbus_message_new_method_call(
+static DBusMessage *get_managed_objects() {
+  DBusMessage *msg = dbus_message_new_method_call(
       "org.bluez", "/", "org.freedesktop.DBus.ObjectManager", "GetManagedObjects"
   );
 
   DBusMessage *resp =
-      dbus_connection_send_with_reply_and_block(aelkey_state.g_dbus_conn, reply, -1, nullptr);
-  dbus_message_unref(reply);
+      dbus_connection_send_with_reply_and_block(aelkey_state.g_dbus_conn, msg, -1, nullptr);
 
-  if (!resp) {
-    std::cerr << "GATT match: DBus GetManagedObjects failed\n";
-    return {};
-  }
+  dbus_message_unref(msg);
+  return resp;
+}
 
-  if (!dbus_message_iter_init(resp, &iter)) {
-    std::cerr << "GATT match: empty DBus reply\n";
-    dbus_message_unref(resp);
-    return {};
-  }
+static std::vector<std::string>
+get_matching_devices(const InputDecl &decl, DBusMessageIter &array) {
+  std::vector<std::string> result;
 
-  dbus_message_iter_recurse(&iter, &dict);
+  DBusMessageIter it = array;
 
-  std::vector<std::string> candidate_devices;
-
-  // ------------------------------------------------------------
-  // PASS 1: Collect all matching devices
-  // ------------------------------------------------------------
-  while (dbus_message_iter_get_arg_type(&dict) != DBUS_TYPE_INVALID) {
+  while (dbus_message_iter_get_arg_type(&it) != DBUS_TYPE_INVALID) {
     DBusMessageIter entry, iface_dict;
     const char *object_path = nullptr;
 
-    dbus_message_iter_recurse(&dict, &entry);
+    dbus_message_iter_recurse(&it, &entry);
     dbus_message_iter_get_basic(&entry, &object_path);
     dbus_message_iter_next(&entry);
     dbus_message_iter_recurse(&entry, &iface_dict);
 
     bool is_device = false;
-    std::string dev_name, dev_alias, dev_address;
+    std::string name, alias, address;
 
     while (dbus_message_iter_get_arg_type(&iface_dict) != DBUS_TYPE_INVALID) {
       DBusMessageIter props;
@@ -332,15 +353,15 @@ std::string match_gatt_characteristic(const InputDecl &decl) {
           if (strcmp(key, "Name") == 0) {
             const char *v = nullptr;
             dbus_message_iter_get_basic(&var, &v);
-            dev_name = v ? v : "";
+            name = v ? v : "";
           } else if (strcmp(key, "Alias") == 0) {
             const char *v = nullptr;
             dbus_message_iter_get_basic(&var, &v);
-            dev_alias = v ? v : "";
+            alias = v ? v : "";
           } else if (strcmp(key, "Address") == 0) {
             const char *v = nullptr;
             dbus_message_iter_get_basic(&var, &v);
-            dev_address = v ? v : "";
+            address = v ? v : "";
           }
 
           dbus_message_iter_next(&prop_dict);
@@ -353,42 +374,40 @@ std::string match_gatt_characteristic(const InputDecl &decl) {
     if (is_device) {
       bool match = false;
 
-      if (!decl.uniq.empty() && dev_address == decl.uniq) {
+      if (!decl.uniq.empty() && address == decl.uniq) {
         match = true;
       }
 
-      if (!match && !decl.name.empty() && (dev_name == decl.name || dev_alias == decl.name)) {
+      if (!match && !decl.name.empty() && (name == decl.name || alias == decl.name)) {
         match = true;
       }
 
       if (match) {
-        candidate_devices.push_back(object_path);
+        result.push_back(object_path);
       }
     }
 
-    dbus_message_iter_next(&dict);
+    dbus_message_iter_next(&it);
   }
 
-  if (candidate_devices.empty()) {
-    std::cerr << "GATT match: no matching device found\n";
-    dbus_message_unref(resp);
-    return {};
-  }
+  return result;
+}
 
-  // ------------------------------------------------------------
-  // PASS 2: For each device, collect matching services
-  // ------------------------------------------------------------
-  std::vector<std::string> candidate_services;
+static std::vector<std::string> get_matching_services(
+    const InputDecl &decl,
+    const std::vector<std::string> &candidate_devices,
+    DBusMessageIter &array
+) {
+  std::vector<std::string> result;
 
   for (const auto &dev_path : candidate_devices) {
-    dbus_message_iter_init(resp, &iter);
-    dbus_message_iter_recurse(&iter, &dict);
+    DBusMessageIter it = array;
 
-    while (dbus_message_iter_get_arg_type(&dict) != DBUS_TYPE_INVALID) {
+    while (dbus_message_iter_get_arg_type(&it) != DBUS_TYPE_INVALID) {
       DBusMessageIter entry, iface_dict;
       const char *object_path = nullptr;
 
-      dbus_message_iter_recurse(&dict, &entry);
+      dbus_message_iter_recurse(&it, &entry);
       dbus_message_iter_get_basic(&entry, &object_path);
       dbus_message_iter_next(&entry);
       dbus_message_iter_recurse(&entry, &iface_dict);
@@ -406,8 +425,14 @@ std::string match_gatt_characteristic(const InputDecl &decl) {
           const char *p = strstr(object_path, "service");
           if (p) {
             int handle = strtoul(p + 7, nullptr, 16);
-            if (handle == decl.service) {
-              candidate_services.push_back(object_path);
+            if (decl.service == 0) {
+              // No specific service requested → return all services under the device
+              result.push_back(object_path);
+            } else {
+              // Match specific service handle
+              if (handle == decl.service) {
+                result.push_back(object_path);
+              }
             }
           }
         }
@@ -415,28 +440,28 @@ std::string match_gatt_characteristic(const InputDecl &decl) {
         dbus_message_iter_next(&iface_dict);
       }
 
-      dbus_message_iter_next(&dict);
+      dbus_message_iter_next(&it);
     }
   }
 
-  if (candidate_services.empty()) {
-    std::cerr << "GATT match: no matching service found\n";
-    dbus_message_unref(resp);
-    return {};
-  }
+  return result;
+}
 
-  // ------------------------------------------------------------
-  // PASS 3: For each service, find matching characteristic
-  // ------------------------------------------------------------
+static std::vector<std::string> get_matching_characteristic(
+    const InputDecl &decl,
+    const std::vector<std::string> &candidate_services,
+    DBusMessageIter &array
+) {
+  std::vector<std::string> result;
+
   for (const auto &svc_path : candidate_services) {
-    dbus_message_iter_init(resp, &iter);
-    dbus_message_iter_recurse(&iter, &dict);
+    DBusMessageIter it = array;  // fresh scan for each service
 
-    while (dbus_message_iter_get_arg_type(&dict) != DBUS_TYPE_INVALID) {
+    while (dbus_message_iter_get_arg_type(&it) != DBUS_TYPE_INVALID) {
       DBusMessageIter entry, iface_dict;
       const char *object_path = nullptr;
 
-      dbus_message_iter_recurse(&dict, &entry);
+      dbus_message_iter_recurse(&it, &entry);
       dbus_message_iter_get_basic(&entry, &object_path);
       dbus_message_iter_next(&entry);
       dbus_message_iter_recurse(&entry, &iface_dict);
@@ -454,10 +479,13 @@ std::string match_gatt_characteristic(const InputDecl &decl) {
           const char *p = strstr(object_path, "char");
           if (p) {
             int handle = strtoul(p + 4, nullptr, 16);
-            if (handle == decl.characteristic) {
-              std::string result = object_path;
-              dbus_message_unref(resp);
-              return result;
+            if (decl.characteristic == 0) {
+              // No specific characteristic requested → collect all
+              result.push_back(object_path);
+            } else {
+              if (handle == decl.characteristic) {
+                result.push_back(object_path);
+              }
             }
           }
         }
@@ -465,13 +493,67 @@ std::string match_gatt_characteristic(const InputDecl &decl) {
         dbus_message_iter_next(&iface_dict);
       }
 
-      dbus_message_iter_next(&dict);
+      dbus_message_iter_next(&it);
     }
   }
 
-  std::cerr << "GATT match: no matching characteristic found\n";
+  return result;
+}
+
+std::string match_gatt_device(const InputDecl &decl) {
+  ensure_gatt_initialized();
+
+  DBusMessage *resp = get_managed_objects();
+  if (!resp) {
+    return {};
+  }
+
+  DBusMessageIter iter, dict;
+
+  // 1. devices
+  dbus_message_iter_init(resp, &iter);
+  dbus_message_iter_recurse(&iter, &dict);
+
+  auto devices = get_matching_devices(decl, dict);
+  if (devices.empty()) {
+    dbus_message_unref(resp);
+    return {};
+  }
+
+  if (!decl.service) {
+    dbus_message_unref(resp);
+    return devices[0];
+  }
+
+  // 2. services
+  dbus_message_iter_init(resp, &iter);
+  dbus_message_iter_recurse(&iter, &dict);
+
+  auto services = get_matching_services(decl, devices, dict);
+  if (services.empty()) {
+    dbus_message_unref(resp);
+    return {};
+  }
+
+  if (!decl.characteristic) {
+    dbus_message_unref(resp);
+    return services[0];
+  }
+
+  // 3. characteristics
+  dbus_message_iter_init(resp, &iter);
+  dbus_message_iter_recurse(&iter, &dict);
+
+  auto characteristics = get_matching_characteristic(decl, services, dict);
+
   dbus_message_unref(resp);
-  return {};
+
+  if (characteristics.empty()) {
+    std::cerr << "GATT match: no matching characteristic found\n";
+    return {};
+  }
+
+  return characteristics[0];
 }
 
 // ---------------------------------------------------------------------
