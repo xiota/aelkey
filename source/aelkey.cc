@@ -4,6 +4,7 @@
 #include "aelkey_core.h"
 #include "aelkey_daemon.h"
 #include "aelkey_device.h"
+#include "aelkey_gatt.h"
 #include "aelkey_hid.h"
 #include "aelkey_loop.h"
 #include "aelkey_usb.h"
@@ -45,6 +46,10 @@ extern "C" int luaopen_aelkey(lua_State *L) {
   // daemon submodule
   luaopen_aelkey_daemon(L);
   lua_setfield(L, -2, "daemon");
+
+  // gatt submodule
+  luaopen_aelkey_gatt(L);
+  lua_setfield(L, -2, "gatt");
 
   // hid submodule
   luaopen_aelkey_hid(L);
