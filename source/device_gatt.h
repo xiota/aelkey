@@ -14,7 +14,10 @@ InputCtx attach_gatt_device(const InputDecl &decl);
 void detach_gatt_device(InputCtx &ctx);
 void dispatch_gatt(lua_State *L);
 
-std::string match_gatt_device(const InputDecl &decl);
+std::string match_gatt_device(
+    const InputDecl &decl,
+    std::vector<std::string> *found_characteristics = nullptr
+);
 
 bool gatt_read_characteristic(const std::string &char_path, std::vector<uint8_t> &out_data);
 
