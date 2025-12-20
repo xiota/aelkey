@@ -271,12 +271,14 @@ int lua_start(lua_State *L) {
     if (ctx.fd >= 0) {
       close(ctx.fd);
       ctx.fd = -1;
+      ctx.active = false;
     }
 
     // Libusb cleanup
     if (ctx.usb_handle) {
       libusb_close(ctx.usb_handle);
       ctx.usb_handle = nullptr;
+      ctx.active = false;
     }
   }
   aelkey_state.input_map.clear();

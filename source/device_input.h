@@ -35,6 +35,8 @@ struct InputCtx {
   int fd = -1;
   libusb_device_handle *usb_handle = nullptr;
   std::vector<libusb_transfer *> transfers;
+
+  bool active = false;
 };
 
 InputDecl parse_input(lua_State *L, int index);

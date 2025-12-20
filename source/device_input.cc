@@ -339,6 +339,7 @@ InputCtx attach_device(
     }
 
     std::cout << "Attached hidraw: " << devnode << std::endl;
+    ctx.active = true;
 
     if (in.grab) {
       int flags = fcntl(ctx.fd, F_GETFL, 0);
@@ -355,6 +356,7 @@ InputCtx attach_device(
       perror("epoll_ctl EPOLL_CTL_ADD hidraw");
       close(ctx.fd);
       ctx.fd = -1;
+      ctx.active = false;
     }
   } else if (in.type == "libusb") {
     ensure_libusb_initialized();
@@ -368,6 +370,7 @@ InputCtx attach_device(
       return ctx;
     }
     std::cout << "Attached libusb device: " << in.id << std::endl;
+    ctx.active = true;
 
     ensure_claimed(ctx.usb_handle, in);
 
@@ -386,11 +389,14 @@ InputCtx attach_device(
       lua_warning(aelkey_state.lua_vm, msg.c_str(), 0);
       close(ctx.fd);
       ctx.fd = -1;
+      ctx.active = false;
       return ctx;
     }
     ctx.idev = idev;
     frames[in.id] = {};  // keyed by string id now
+
     std::cout << "Attached evdev: " << libevdev_get_name(idev) << std::endl;
+    ctx.active = true;
 
     if (in.grab) {
       int rc = libevdev_grab(idev, LIBEVDEV_GRAB);
@@ -413,11 +419,12 @@ InputCtx attach_device(
       ctx.idev = nullptr;
       close(ctx.fd);
       ctx.fd = -1;
+      ctx.active = false;
     }
   }
 
   // Save context keyed by string id if valid
-  if (!in.id.empty() && (ctx.fd >= 0 || ctx.usb_handle)) {
+  if (!in.id.empty() && ctx.active) {
     input_map[in.id] = ctx;
   }
 
@@ -457,8 +464,8 @@ bool attach_input_device(const std::string &devnode, const InputDecl &decl) {
       devnode, decl, aelkey_state.input_map, aelkey_state.frames, aelkey_state.epfd
   );
 
-  // failure check: neither fd nor usb_handle valid
-  if (ctx.fd < 0 && !ctx.usb_handle) {
+  // failure check
+  if (!ctx.active) {
     std::string msg = std::format(
         "Failed to attach input: {} ({})", decl.id, devnode.empty() ? decl.type : devnode
     );
@@ -498,6 +505,7 @@ InputDecl detach_input_device(const std::string &dev_id) {
   if (ctx.fd >= 0) {
     close(ctx.fd);
     ctx.fd = -1;
+    ctx.active = false;
   }
 
   // Close libusb handle if present
@@ -511,6 +519,7 @@ InputDecl detach_input_device(const std::string &dev_id) {
 
     libusb_close(ctx.usb_handle);
     ctx.usb_handle = nullptr;
+    ctx.active = false;
   }
 
   // Erase from maps keyed by string id
