@@ -378,76 +378,59 @@ void detach_gatt_device(InputCtx &ctx) {
   std::cerr << "Detached GATT characteristic: " << ctx.decl.devnode << std::endl;
 }
 
-void dispatch_gatt(lua_State *L) {
-  DBusConnection *conn = aelkey_state.g_dbus_conn;
-  if (!conn) {
-    return;
-  }
-
-  dbus_connection_read_write(conn, 0);
-
-  DBusMessage *msg = dbus_connection_pop_message(conn);
-  if (!msg) {
-    return;
-  }
-
-  if (!dbus_message_is_signal(msg, "org.freedesktop.DBus.Properties", "PropertiesChanged")) {
-    dbus_message_unref(msg);
-    return;
-  }
-
+static void process_one_gatt_message(lua_State *L, DBusMessage *msg) {
   const char *path = dbus_message_get_path(msg);
   if (!path) {
-    dbus_message_unref(msg);
     return;
   }
 
-  // Extract "Value" bytes
   std::vector<uint8_t> bytes;
-  {
-    DBusMessageIter args;
-    dbus_message_iter_init(msg, &args);
 
-    const char *iface = nullptr;
-    dbus_message_iter_get_basic(&args, &iface);
+  DBusMessageIter args;
+  dbus_message_iter_init(msg, &args);
 
-    if (!iface || std::strcmp(iface, "org.bluez.GattCharacteristic1") != 0) {
-      dbus_message_unref(msg);
-      return;
+  const char *iface = nullptr;
+  dbus_message_iter_get_basic(&args, &iface);
+
+  if (!iface || strcmp(iface, "org.bluez.GattCharacteristic1") != 0) {
+    return;
+  }
+
+  dbus_message_iter_next(&args);
+  DBusMessageIter dict;
+  dbus_message_iter_recurse(&args, &dict);
+
+  while (dbus_message_iter_get_arg_type(&dict) == DBUS_TYPE_DICT_ENTRY) {
+    DBusMessageIter entry;
+    dbus_message_iter_recurse(&dict, &entry);
+
+    const char *key = nullptr;
+    if (dbus_message_iter_get_arg_type(&entry) == DBUS_TYPE_STRING) {
+      dbus_message_iter_get_basic(&entry, &key);
     }
 
-    dbus_message_iter_next(&args);
-    DBusMessageIter dict;
-    dbus_message_iter_recurse(&args, &dict);
-
-    while (dbus_message_iter_get_arg_type(&dict) != DBUS_TYPE_INVALID) {
-      DBusMessageIter entry;
-      dbus_message_iter_recurse(&dict, &entry);
-
-      const char *key = nullptr;
-      dbus_message_iter_get_basic(&entry, &key);
-
-      dbus_message_iter_next(&entry);
+    dbus_message_iter_next(&entry);
+    if (dbus_message_iter_get_arg_type(&entry) == DBUS_TYPE_VARIANT) {
       DBusMessageIter variant;
       dbus_message_iter_recurse(&entry, &variant);
 
-      if (key && std::strcmp(key, "Value") == 0) {
-        DBusMessageIter array;
-        dbus_message_iter_recurse(&variant, &array);
+      if (key && strcmp(key, "Value") == 0) {
+        if (dbus_message_iter_get_arg_type(&variant) == DBUS_TYPE_ARRAY) {
+          DBusMessageIter array;
+          dbus_message_iter_recurse(&variant, &array);
 
-        while (dbus_message_iter_get_arg_type(&array) == DBUS_TYPE_BYTE) {
-          uint8_t b;
-          dbus_message_iter_get_basic(&array, &b);
-          bytes.push_back(b);
-          dbus_message_iter_next(&array);
+          while (dbus_message_iter_get_arg_type(&array) == DBUS_TYPE_BYTE) {
+            uint8_t b;
+            dbus_message_iter_get_basic(&array, &b);
+            bytes.push_back(b);
+            dbus_message_iter_next(&array);
+          }
         }
       }
-
-      dbus_message_iter_next(&dict);
     }
-  }
 
-  dbus_message_unref(msg);
+    dbus_message_iter_next(&dict);
+  }
 
   // Route to correct InputCtx
   for (auto &kv : aelkey_state.input_map) {
@@ -457,12 +440,6 @@ void dispatch_gatt(lua_State *L) {
       continue;
     }
 
-    // Match by primary characteristic path
-    if (ctx.decl.devnode != path) {
-      continue;
-    }
-
-    // Build Lua callback table
     if (!ctx.decl.callback_events.empty()) {
       lua_getglobal(L, ctx.decl.callback_events.c_str());
       if (lua_isfunction(L, -1)) {
@@ -494,6 +471,27 @@ void dispatch_gatt(lua_State *L) {
     }
 
     break;
+  }
+}
+
+void dispatch_gatt(lua_State *L) {
+  DBusConnection *conn = aelkey_state.g_dbus_conn;
+  if (!conn) {
+    return;
+  }
+
+  // Non-blocking read
+  dbus_connection_read_write(conn, 0);
+
+  // Process ALL pending messages
+  while (true) {
+    DBusMessage *msg = dbus_connection_pop_message(conn);
+    if (!msg) {
+      break;
+    }
+
+    process_one_gatt_message(L, msg);
+    dbus_message_unref(msg);
   }
 }
 
