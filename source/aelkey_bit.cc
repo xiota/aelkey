@@ -136,6 +136,19 @@ static int lua_tobit(lua_State *L) {
 }
 
 int luaopen_aelkey_bit(lua_State *L) {
+  // If running under LuaJIT, return the built-in bit library
+  lua_getglobal(L, "jit");
+  if (!lua_isnil(L, -1)) {
+    lua_pop(L, 1);  // pop jit
+    // require("bit") and return it
+    lua_getglobal(L, "require");
+    lua_pushliteral(L, "bit");
+    lua_call(L, 1, 1);
+    return 1;
+  }
+  lua_pop(L, 1);  // pop nil
+
+  // Otherwise return C implementation
   // clang-format off
   static const luaL_Reg funcs[] = {
     {"band", lua_band},
