@@ -72,8 +72,8 @@ shared_library(
 
 install_data(
   [
-    'data/60-aelkey-general-group.rules',
-    'data/60-aelkey-general-uaccess.rules',
+    'data/72-aelkey-general-group.rules',
+    'data/72-aelkey-general-uaccess.rules',
   ],
   install_dir: get_option('datadir') / meson.project_name(),
 )
