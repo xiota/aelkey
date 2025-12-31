@@ -300,7 +300,6 @@ int lua_start(lua_State *L) {
   // Tear down global monitoring state
   if (aelkey_state.udev_fd >= 0) {
     epoll_ctl(aelkey_state.epfd, EPOLL_CTL_DEL, aelkey_state.udev_fd, nullptr);
-    close(aelkey_state.udev_fd);
     aelkey_state.udev_fd = -1;
   }
   if (aelkey_state.g_mon) {
