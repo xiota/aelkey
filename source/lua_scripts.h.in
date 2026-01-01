@@ -3,14 +3,14 @@
 
 #pragma once
 
-inline const char *aelkey_click_script = R"LUA(
+constexpr const char *aelkey_click_script = R"LUA(
 @AELKEY_CLICK_SCRIPT@
 )LUA";
 
-inline const char *aelkey_daemon_script = R"LUA(
+constexpr const char *aelkey_daemon_script = R"LUA(
 @AELKEY_DAEMON_SCRIPT@
 )LUA";
 
-inline const char *aelkey_util_script = R"LUA(
+constexpr const char *aelkey_util_script = R"LUA(
 @AELKEY_UTIL_SCRIPT@
 )LUA";

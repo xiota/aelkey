@@ -13,6 +13,8 @@ libudev_dep  = dependency('libudev')
 libusb_dep  = dependency('libusb-1.0')
 luajit_dep   = dependency('luajit')
 
+sol2_dep = dependency('sol2', fallback: ['sol2', 'sol2_dep'], default_options: ['use_luajit=true'])
+
 # config.h
 conf_data = configuration_data()
 conf_data.set('VERSION', '"' + meson.project_version() + '"')
@@ -64,6 +66,7 @@ shared_library(
     libudev_dep,
     libusb_dep,
     luajit_dep,
+    sol2_dep,
   ],
   name_prefix: '',
   install: true,
