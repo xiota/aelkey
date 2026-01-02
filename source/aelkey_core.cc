@@ -86,10 +86,13 @@ sol::object core_syn_report(sol::this_state ts, sol::optional<std::string> dev_i
 sol::object core_tick(sol::this_state ts, int ms, sol::object cb_obj) {
   sol::state_view lua(ts);
 
-  // tick(0) with no callback → stop all
-  if (ms == 0 && cb_obj.is<sol::nil_t>()) {
-    aelkey_state.scheduler->cancel_all();
-    return sol::make_object(lua, sol::lua_nil);
+  // tick(0, nil) → cancel all timers
+  if (cb_obj.is<sol::nil_t>()) {
+    if (ms == 0) {
+      aelkey_state.scheduler->cancel_all();
+    }
+    // nil callback with non-zero ms → do nothing
+    return sol::lua_nil;
   }
 
   // Parse callback key
@@ -100,8 +103,6 @@ sol::object core_tick(sol::this_state ts, int ms, sol::object cb_obj) {
   } else if (cb_obj.is<sol::function>()) {
     key.is_function = true;
     key.fn = cb_obj.as<sol::function>();
-  } else {
-    throw sol::error("tick callback must be string or function");
   }
 
   // Cancel existing timers for this key
