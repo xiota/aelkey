@@ -24,11 +24,6 @@ struct CModule {
   int (*open_func)(lua_State *);
 };
 
-struct TopFunc {
-  const char *name;
-  sol::function (*fn)(lua_State *);
-};
-
 // clang-format off
 constexpr ScriptModule script_modules[] = {
   { "click", aelkey_click_script },
@@ -51,17 +46,21 @@ extern "C" int luaopen_aelkey(lua_State *L) {
 
   sol::table mod = lua.create_table();
 
+  // Core functions
   mod.set_function("emit", core_emit);
-  mod.set_function("start", lua_start);
-  mod.set_function("stop", lua_stop);
   mod.set_function("syn_report", core_syn_report);
   mod.set_function("tick", core_tick);
 
-  mod.set_function("open_device", lua_open_device);
-  mod.set_function("close_device", lua_close_device);
-  mod.set_function("get_device_info", lua_get_device_info);
+  // Loop control
+  mod.set_function("start", loop_start);
+  mod.set_function("stop", loop_stop);
 
-  // script modules
+  // Device lifecycle
+  mod.set_function("open_device", device_open);
+  mod.set_function("close_device", device_close);
+  mod.set_function("get_device_info", device_get_info);
+
+  // Script modules
   for (auto &sm : script_modules) {
     try {
       sol::table module = lua.script(sm.script);
@@ -76,7 +75,7 @@ extern "C" int luaopen_aelkey(lua_State *L) {
   // C modules
   for (auto &cm : c_modules) {
     try {
-      cm.open_func(L);  // pushes table on stack
+      cm.open_func(L);
       sol::table module = sol::stack::pop<sol::table>(L);
       mod[cm.name] = module;
     } catch (const sol::error &err) {
