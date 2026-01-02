@@ -3,25 +3,23 @@
 #include <string>
 #include <vector>
 
-#include <lua.hpp>
+#include <sol/sol.hpp>
 
 #include "aelkey_state.h"
 #include "device_gatt.h"
-#include "luacompat.h"
 
 // Lookup InputCtx by device id
-static InputCtx *get_ctx(lua_State *L, const char *dev_id) {
+static InputCtx *get_ctx(sol::state_view lua, const std::string &dev_id) {
   auto it = aelkey_state.input_map.find(dev_id);
   if (it == aelkey_state.input_map.end()) {
-    luaL_error(L, "Unknown device id '%s'", dev_id);
-    return nullptr;
+    throw sol::error("Unknown device id '" + dev_id + "'");
   }
   return &it->second;
 }
 
 // Resolve characteristic path using optional service/characteristic overrides
 static std::string
-resolve_char_path(lua_State *L, InputCtx *ctx, int service, int characteristic) {
+resolve_char_path(sol::state_view lua, InputCtx *ctx, int service, int characteristic) {
   // No overrides → use primary characteristic
   if (service <= 0 && characteristic <= 0) {
     return ctx->decl.devnode;
@@ -29,8 +27,7 @@ resolve_char_path(lua_State *L, InputCtx *ctx, int service, int characteristic) 
 
   // Overrides must both be provided
   if (service <= 0 || characteristic <= 0) {
-    luaL_error(L, "GATT: both 'service' and 'characteristic' must be provided for override");
-    return {};
+    throw sol::error("GATT: both 'service' and 'characteristic' must be provided for override");
   }
 
   // Construct BlueZ object path:
@@ -49,92 +46,72 @@ resolve_char_path(lua_State *L, InputCtx *ctx, int service, int characteristic) 
 }
 
 // gatt.read{ device="id", service=0x0021, characteristic=0x0036 }
-static int lua_gatt_read(lua_State *L) {
-  luaL_checktype(L, 1, LUA_TTABLE);
+// Returns raw data string
+sol::object gatt_read(sol::this_state ts, sol::table opts) {
+  lua_State *L = ts;
+  sol::state_view lua(L);
 
   // device (required)
-  lua_getfield(L, 1, "device");
-  const char *dev_id = luaL_checkstring(L, -1);
-  lua_pop(L, 1);
-
-  InputCtx *ctx = get_ctx(L, dev_id);
+  std::string dev_id = opts.get<std::string>("device");
+  InputCtx *ctx = get_ctx(lua, dev_id);
 
   // service (optional)
-  lua_getfield(L, 1, "service");
-  int service = lua_isnil(L, -1) ? -1 : lua_tointeger(L, -1);
-  lua_pop(L, 1);
+  int service = opts.get_or("service", -1);
 
   // characteristic (optional)
-  lua_getfield(L, 1, "characteristic");
-  int characteristic = lua_isnil(L, -1) ? -1 : lua_tointeger(L, -1);
-  lua_pop(L, 1);
+  int characteristic = opts.get_or("characteristic", -1);
 
-  std::string char_path = resolve_char_path(L, ctx, service, characteristic);
+  std::string char_path = resolve_char_path(lua, ctx, service, characteristic);
 
   std::vector<uint8_t> data;
   bool ok = gatt_read_characteristic(char_path, data);
   if (!ok) {
-    return luaL_error(L, "GATT read failed");
+    throw sol::error("GATT read failed");
   }
 
-  lua_pushlstring(L, reinterpret_cast<const char *>(data.data()), data.size());
-  return 1;
+  return sol::make_object(
+      lua, std::string(reinterpret_cast<const char *>(data.data()), data.size())
+  );
 }
 
 // gatt.write{ device="id", data="...", response=true, service=0x0021, characteristic=0x0036 }
-static int lua_gatt_write(lua_State *L) {
-  luaL_checktype(L, 1, LUA_TTABLE);
+// Returns boolean success
+sol::object gatt_write(sol::this_state ts, sol::table opts) {
+  lua_State *L = ts;
+  sol::state_view lua(L);
 
   // device (required)
-  lua_getfield(L, 1, "device");
-  const char *dev_id = luaL_checkstring(L, -1);
-  lua_pop(L, 1);
-
-  InputCtx *ctx = get_ctx(L, dev_id);
+  std::string dev_id = opts.get<std::string>("device");
+  InputCtx *ctx = get_ctx(lua, dev_id);
 
   // data (required)
-  lua_getfield(L, 1, "data");
-  size_t len = 0;
-  const char *bytes = luaL_checklstring(L, -1, &len);
-  lua_pop(L, 1);
+  std::string bytes = opts.get<std::string>("data");
 
   // response (optional)
-  bool with_resp = false;
-  lua_getfield(L, 1, "response");
-  if (!lua_isnil(L, -1)) {
-    with_resp = lua_toboolean(L, -1);
-  }
-  lua_pop(L, 1);
+  bool with_resp = opts.get_or("response", false);
 
   // service (optional)
-  lua_getfield(L, 1, "service");
-  int service = lua_isnil(L, -1) ? -1 : lua_tointeger(L, -1);
-  lua_pop(L, 1);
+  int service = opts.get_or("service", -1);
 
   // characteristic (optional)
-  lua_getfield(L, 1, "characteristic");
-  int characteristic = lua_isnil(L, -1) ? -1 : lua_tointeger(L, -1);
-  lua_pop(L, 1);
+  int characteristic = opts.get_or("characteristic", -1);
 
-  std::string char_path = resolve_char_path(L, ctx, service, characteristic);
+  std::string char_path = resolve_char_path(lua, ctx, service, characteristic);
 
   bool ok = gatt_write_characteristic(
-      char_path, reinterpret_cast<const uint8_t *>(bytes), len, with_resp
+      char_path, reinterpret_cast<const uint8_t *>(bytes.data()), bytes.size(), with_resp
   );
 
-  lua_pushboolean(L, ok);
-  return 1;
+  return sol::make_object(lua, ok);
 }
 
 extern "C" int luaopen_aelkey_gatt(lua_State *L) {
-  // clang-format off
-  static const luaL_Reg funcs[] = {
-    {"read",  lua_gatt_read},
-    {"write", lua_gatt_write},
-    {nullptr, nullptr}
-  };
-  // clang-format on
+  sol::state_view lua(L);
 
-  luaL_newlib(L, funcs);
-  return 1;
+  sol::table mod = lua.create_table();
+
+  mod.set_function("read", gatt_read);
+  mod.set_function("write", gatt_write);
+
+  return sol::stack::push(L, mod);
 }
