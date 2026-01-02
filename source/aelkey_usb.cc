@@ -6,12 +6,11 @@
 #include <vector>
 
 #include <libusb-1.0/libusb.h>
-#include <lua.hpp>
+#include <sol/sol.hpp>
 
 #include "aelkey_hid.h"
 #include "aelkey_state.h"
 #include "device_udev.h"
-#include "luacompat.h"
 
 // Map libusb_transfer_type enum → string
 static const char *transfer_type_to_string(uint8_t type) {
@@ -51,65 +50,53 @@ static const char *transfer_status_to_string(libusb_transfer_status status) {
   }
 }
 
+// libusb async callback → Lua
 static void LIBUSB_CALL dispatch_libusb(libusb_transfer *transfer) {
   auto *ud = static_cast<std::pair<InputCtx *, lua_State *> *>(transfer->user_data);
   InputCtx *ctx = ud->first;
   lua_State *L = ud->second;
 
+  sol::state_view lua(L);
+
   if (!ctx->decl.callback_events.empty()) {
-    lua_getglobal(L, ctx->decl.callback_events.c_str());
-    if (lua_isfunction(L, -1)) {
-      lua_newtable(L);
+    sol::object cb_obj = lua[ctx->decl.callback_events];
+    if (cb_obj.is<sol::function>()) {
+      sol::function cb = cb_obj.as<sol::function>();
 
-      lua_pushstring(L, ctx->decl.id.c_str());
-      lua_setfield(L, -2, "device");
+      sol::table ev = lua.create_table();
 
-      lua_pushlstring(
-          L, reinterpret_cast<const char *>(transfer->buffer), transfer->actual_length
+      ev["device"] = ctx->decl.id;
+      ev["data"] = std::string(
+          reinterpret_cast<const char *>(transfer->buffer),
+          static_cast<std::size_t>(transfer->actual_length)
       );
-      lua_setfield(L, -2, "data");
+      ev["size"] = static_cast<int>(transfer->actual_length);
+      ev["endpoint"] = static_cast<int>(transfer->endpoint);
+      ev["transfer"] = transfer_type_to_string(transfer->type);
+      ev["status"] = transfer_status_to_string(transfer->status);
 
-      lua_pushinteger(L, transfer->actual_length);
-      lua_setfield(L, -2, "size");
-
-      lua_pushinteger(L, transfer->endpoint);
-      lua_setfield(L, -2, "endpoint");
-
-      lua_pushstring(L, transfer_type_to_string(transfer->type));
-      lua_setfield(L, -2, "transfer");
-
-      lua_pushstring(L, transfer_status_to_string(transfer->status));
-      lua_setfield(L, -2, "status");
-
-      if (lua_pcall(L, 1, 0, 0) != LUA_OK) {
-        std::string msg = std::format("Lua libusb callback error: {}", lua_tostring(L, -1));
-        lua_warning(L, msg.c_str(), 0);
-        lua_pop(L, 1);
+      sol::protected_function pcb = cb;
+      sol::protected_function_result r = pcb(ev);
+      if (!r.valid()) {
+        sol::error err = r;
+        std::fprintf(stderr, "Lua libusb callback error: %s\n", err.what());
       }
-    } else {
-      lua_pop(L, 1);
     }
   }
 
   // resubmit transfer based on status
   switch (transfer->status) {
     case LIBUSB_TRANSFER_COMPLETED:
-      if (libusb_submit_transfer(transfer) != 0) {
-        auto &vec = ctx->transfers;
-        vec.erase(std::remove(vec.begin(), vec.end(), transfer), vec.end());
-        libusb_free_transfer(transfer);
-      }
-      break;
-
     case LIBUSB_TRANSFER_OVERFLOW:
-    case LIBUSB_TRANSFER_TIMED_OUT:
-      // transient errors, try resubmit
+    case LIBUSB_TRANSFER_TIMED_OUT: {
+      // transient / normal: try resubmit
       if (libusb_submit_transfer(transfer) != 0) {
         auto &vec = ctx->transfers;
         vec.erase(std::remove(vec.begin(), vec.end(), transfer), vec.end());
         libusb_free_transfer(transfer);
       }
       break;
+    }
 
     case LIBUSB_TRANSFER_NO_DEVICE:
       detach_input_device(ctx->decl.id);
@@ -118,7 +105,7 @@ static void LIBUSB_CALL dispatch_libusb(libusb_transfer *transfer) {
 
     case LIBUSB_TRANSFER_CANCELLED:
     case LIBUSB_TRANSFER_ERROR:
-    default:
+    default: {
       libusb_device_descriptor desc;
       int rc = libusb_get_device_descriptor(libusb_get_device(ctx->usb_handle), &desc);
       if (rc != 0) {
@@ -132,147 +119,132 @@ static void LIBUSB_CALL dispatch_libusb(libusb_transfer *transfer) {
         libusb_free_transfer(transfer);
       }
       break;
+    }
   }
 }
 
-static int lua_bulk_transfer(lua_State *L) {
-  luaL_checktype(L, 1, LUA_TTABLE);
+// bulk_transfer{device, endpoint, size, [timeout]}
+// Returns {device, data, size, status}
+sol::object usb_bulk_transfer(sol::this_state ts, sol::table opts) {
+  lua_State *L = ts;
+  sol::state_view lua(L);
 
   // device id
-  lua_getfield(L, 1, "device");
-  const char *dev_id = luaL_checkstring(L, -1);
-  lua_pop(L, 1);
+  std::string dev_id = opts.get<std::string>("device");
 
   auto it = aelkey_state.input_map.find(dev_id);
   if (it == aelkey_state.input_map.end() || !it->second.usb_handle) {
-    lua_pushnil(L);
-    return 1;
+    sol::table result = lua.create_table();
+    result["device"] = dev_id;
+    result["data"] = "";
+    result["size"] = 0;
+    result["status"] = LIBUSB_ERROR_NO_DEVICE;
+    return sol::make_object(lua, result);
   }
   libusb_device_handle *handle = it->second.usb_handle;
 
   // endpoint
-  lua_getfield(L, 1, "endpoint");
-  int endpoint = luaL_checkinteger(L, -1);
-  lua_pop(L, 1);
+  int endpoint = opts.get<int>("endpoint");
 
   // size
-  lua_getfield(L, 1, "size");
-  int size = luaL_checkinteger(L, -1);
-  lua_pop(L, 1);
+  int size = opts.get<int>("size");
 
-  // timeout (optional)
-  lua_getfield(L, 1, "timeout");
-  int timeout = lua_isnil(L, -1) ? 0 : luaL_checkinteger(L, -1);
-  lua_pop(L, 1);
+  // timeout (optional, default 0)
+  int timeout = opts.get_or("timeout", 0);
 
-  // Direction: IN if endpoint has LIBUSB_ENDPOINT_IN bit set
   bool is_in = (endpoint & LIBUSB_ENDPOINT_IN) != 0;
 
   int status = 0;
   int transferred = 0;
 
-  lua_newtable(L);
+  sol::table result = lua.create_table();
 
   if (is_in) {
     // IN transfer: read from device
     std::vector<unsigned char> buf(size);
     status = libusb_bulk_transfer(handle, endpoint, buf.data(), size, &transferred, timeout);
 
-    lua_pushlstring(L, reinterpret_cast<const char *>(buf.data()), transferred);
-    lua_setfield(L, -2, "data");
+    result["data"] = std::string(
+        reinterpret_cast<const char *>(buf.data()), static_cast<std::size_t>(transferred)
+    );
   } else {
     // OUT transfer: send data from Lua
-    lua_getfield(L, 1, "data");
-    size_t out_len = 0;
-    const char *out_data = luaL_optlstring(L, -1, nullptr, &out_len);
-    lua_pop(L, 1);
+    sol::optional<std::string> data_opt = opts.get<sol::optional<std::string>>("data");
+    std::string out_data = data_opt.value_or(std::string());
 
-    if (!out_data) {
-      out_len = 0;
-    }
-    if (out_len > static_cast<size_t>(size)) {
-      out_len = size;  // clamp to requested size
+    if (out_data.size() > static_cast<std::size_t>(size)) {
+      out_data.resize(static_cast<std::size_t>(size));  // clamp to requested size
     }
 
     status = libusb_bulk_transfer(
         handle,
         endpoint,
-        reinterpret_cast<unsigned char *>(const_cast<char *>(out_data)),
-        static_cast<int>(out_len),
+        reinterpret_cast<unsigned char *>(out_data.data()),
+        static_cast<int>(out_data.size()),
         &transferred,
         timeout
     );
 
-    // optional: echo back what was sent
-    lua_pushlstring(L, out_data, transferred);
-    lua_setfield(L, -2, "data");
+    // echo back what was sent (matching original behavior)
+    result["data"] = out_data.substr(0, static_cast<std::size_t>(transferred));
   }
 
   // common fields
-  lua_pushstring(L, dev_id);
-  lua_setfield(L, -2, "device");
-  lua_pushinteger(L, transferred);
-  lua_setfield(L, -2, "size");
-  lua_pushinteger(L, status);
-  lua_setfield(L, -2, "status");
+  result["device"] = dev_id;
+  result["size"] = transferred;
+  result["status"] = status;
 
-  return 1;
+  return sol::make_object(lua, result);
 }
 
-static int lua_control_transfer(lua_State *L) {
-  luaL_checktype(L, 1, LUA_TTABLE);
+// control_transfer{device, request_type, request, value, index, length, [timeout]}
+// Returns {device, data, size, status}
+sol::object usb_control_transfer(sol::this_state ts, sol::table opts) {
+  lua_State *L = ts;
+  sol::state_view lua(L);
 
   // device id
-  lua_getfield(L, 1, "device");
-  const char *dev_id = luaL_checkstring(L, -1);
-  lua_pop(L, 1);
+  std::string dev_id = opts.get<std::string>("device");
 
   auto it = aelkey_state.input_map.find(dev_id);
   if (it == aelkey_state.input_map.end() || !it->second.usb_handle) {
-    lua_pushnil(L);
-    return 1;
+    sol::table result = lua.create_table();
+    result["device"] = dev_id;
+    result["data"] = "";
+    result["size"] = 0;
+    result["status"] = LIBUSB_ERROR_NO_DEVICE;
+    return sol::make_object(lua, result);
   }
   libusb_device_handle *handle = it->second.usb_handle;
 
   // request_type (bmRequestType)
-  lua_getfield(L, 1, "request_type");
-  int request_type = luaL_checkinteger(L, -1);
-  lua_pop(L, 1);
+  int request_type = opts.get<int>("request_type");
 
   // request (bRequest)
-  lua_getfield(L, 1, "request");
-  int request = luaL_checkinteger(L, -1);
-  lua_pop(L, 1);
+  int request = opts.get<int>("request");
 
   // value (wValue)
-  lua_getfield(L, 1, "value");
-  int value = luaL_checkinteger(L, -1);
-  lua_pop(L, 1);
+  int value = opts.get<int>("value");
 
   // index (wIndex)
-  lua_getfield(L, 1, "index");
-  int index = luaL_checkinteger(L, -1);
-  lua_pop(L, 1);
+  int index = opts.get<int>("index");
 
   // length (wLength)
-  lua_getfield(L, 1, "length");
-  int length = luaL_checkinteger(L, -1);
-  lua_pop(L, 1);
+  int length = opts.get<int>("length");
 
-  // timeout (optional)
-  lua_getfield(L, 1, "timeout");
-  int timeout = lua_isnil(L, -1) ? 0 : luaL_checkinteger(L, -1);
-  lua_pop(L, 1);
+  // timeout (optional, default 0)
+  int timeout = opts.get_or("timeout", 0);
 
-  // Direction bit: 0 = OUT, 1 = IN
   bool is_in = (request_type & LIBUSB_ENDPOINT_IN) != 0;
 
-  std::vector<unsigned char> buf(length);
   int status = 0;
   int transferred = 0;
 
+  sol::table result = lua.create_table();
+
   if (is_in) {
     // IN transfer: read from device
+    std::vector<unsigned char> buf(static_cast<std::size_t>(length));
     status = libusb_control_transfer(
         handle,
         static_cast<uint8_t>(request_type),
@@ -285,18 +257,18 @@ static int lua_control_transfer(lua_State *L) {
     );
 
     transferred = (status >= 0) ? status : 0;
+
+    result["data"] = std::string(
+        reinterpret_cast<const char *>(buf.data()), static_cast<std::size_t>(transferred)
+    );
   } else {
     // OUT transfer: send data from Lua
-    lua_getfield(L, 1, "data");
-    size_t out_len = 0;
-    const char *out_data = luaL_optlstring(L, -1, nullptr, &out_len);
-    lua_pop(L, 1);
+    sol::optional<std::string> data_opt = opts.get<sol::optional<std::string>>("data");
+    std::string out_data = data_opt.value_or(std::string());
 
-    if (!out_data) {
-      out_len = 0;
-    }
-    if (out_len > static_cast<size_t>(length)) {
-      out_len = length;  // clamp to wLength
+    std::size_t out_len = out_data.size();
+    if (out_len > static_cast<std::size_t>(length)) {
+      out_len = static_cast<std::size_t>(length);  // clamp to wLength
     }
 
     status = libusb_control_transfer(
@@ -305,74 +277,60 @@ static int lua_control_transfer(lua_State *L) {
         static_cast<uint8_t>(request),
         static_cast<uint16_t>(value),
         static_cast<uint16_t>(index),
-        reinterpret_cast<unsigned char *>(const_cast<char *>(out_data)),
+        reinterpret_cast<unsigned char *>(out_data.data()),
         static_cast<uint16_t>(out_len),
         static_cast<unsigned int>(timeout)
     );
 
     transferred = (status >= 0) ? status : 0;
-  }
 
-  // return {data, size, status}
-  lua_newtable(L);
-
-  if (is_in) {
-    lua_pushlstring(L, reinterpret_cast<const char *>(buf.data()), transferred);
-    lua_setfield(L, -2, "data");
-  } else {
-    // For OUT, echo back the sent data (optional)
-    lua_pushlstring(L, reinterpret_cast<const char *>(buf.data()), 0);
-    lua_setfield(L, -2, "data");
+    // original code returned an empty string for OUT
+    result["data"] = std::string();
   }
 
   // common fields
-  lua_pushstring(L, dev_id);
-  lua_setfield(L, -2, "device");
-  lua_pushinteger(L, transferred);
-  lua_setfield(L, -2, "size");
-  lua_pushinteger(L, status);
-  lua_setfield(L, -2, "status");
+  result["device"] = dev_id;
+  result["size"] = transferred;
+  result["status"] = status;
 
-  return 1;
+  return sol::make_object(lua, result);
 }
 
-static int lua_interrupt_transfer(lua_State *L) {
-  luaL_checktype(L, 1, LUA_TTABLE);
+// interrupt_transfer{device, endpoint, size, [timeout]}
+// Returns {device, data, size, status}
+sol::object usb_interrupt_transfer(sol::this_state ts, sol::table opts) {
+  lua_State *L = ts;
+  sol::state_view lua(L);
 
   // device id
-  lua_getfield(L, 1, "device");
-  const char *dev_id = luaL_checkstring(L, -1);
-  lua_pop(L, 1);
+  std::string dev_id = opts.get<std::string>("device");
 
   auto it = aelkey_state.input_map.find(dev_id);
   if (it == aelkey_state.input_map.end() || !it->second.usb_handle) {
-    lua_pushnil(L);
-    return 1;
+    sol::table result = lua.create_table();
+    result["device"] = dev_id;
+    result["data"] = "";
+    result["size"] = 0;
+    result["status"] = LIBUSB_ERROR_NO_DEVICE;
+    return sol::make_object(lua, result);
   }
   libusb_device_handle *handle = it->second.usb_handle;
 
   // endpoint
-  lua_getfield(L, 1, "endpoint");
-  int endpoint = luaL_checkinteger(L, -1);
-  lua_pop(L, 1);
+  int endpoint = opts.get<int>("endpoint");
 
   // size
-  lua_getfield(L, 1, "size");
-  int size = luaL_checkinteger(L, -1);
-  lua_pop(L, 1);
+  int size = opts.get<int>("size");
 
-  // timeout (optional)
-  lua_getfield(L, 1, "timeout");
-  int timeout = lua_isnil(L, -1) ? 0 : luaL_checkinteger(L, -1);
-  lua_pop(L, 1);
+  // timeout (optional, default 0)
+  int timeout = opts.get_or("timeout", 0);
 
-  // Direction: IN if endpoint has LIBUSB_ENDPOINT_IN bit set
   bool is_in = (endpoint & LIBUSB_ENDPOINT_IN) != 0;
 
   int status = 0;
   int transferred = 0;
 
-  lua_newtable(L);
+  sol::table result = lua.create_table();
 
   if (is_in) {
     // IN transfer: read from device
@@ -380,181 +338,167 @@ static int lua_interrupt_transfer(lua_State *L) {
     status =
         libusb_interrupt_transfer(handle, endpoint, buf.data(), size, &transferred, timeout);
 
-    lua_pushlstring(L, reinterpret_cast<const char *>(buf.data()), transferred);
-    lua_setfield(L, -2, "data");
+    result["data"] = std::string(
+        reinterpret_cast<const char *>(buf.data()), static_cast<std::size_t>(transferred)
+    );
   } else {
     // OUT transfer: send data from Lua
-    lua_getfield(L, 1, "data");
-    size_t out_len = 0;
-    const char *out_data = luaL_optlstring(L, -1, nullptr, &out_len);
-    lua_pop(L, 1);
+    sol::optional<std::string> data_opt = opts.get<sol::optional<std::string>>("data");
+    std::string out_data = data_opt.value_or(std::string());
 
-    if (!out_data) {
-      out_len = 0;
-    }
-    if (out_len > static_cast<size_t>(size)) {
-      out_len = size;  // clamp to requested size
+    if (out_data.size() > static_cast<std::size_t>(size)) {
+      out_data.resize(static_cast<std::size_t>(size));
     }
 
     status = libusb_interrupt_transfer(
         handle,
         endpoint,
-        reinterpret_cast<unsigned char *>(const_cast<char *>(out_data)),
-        static_cast<int>(out_len),
+        reinterpret_cast<unsigned char *>(out_data.data()),
+        static_cast<int>(out_data.size()),
         &transferred,
         timeout
     );
 
-    // optional: echo back what was sent
-    lua_pushlstring(L, out_data, transferred);
-    lua_setfield(L, -2, "data");
+    // echo back what was sent
+    result["data"] = out_data.substr(0, static_cast<std::size_t>(transferred));
   }
 
   // common fields
-  lua_pushstring(L, dev_id);
-  lua_setfield(L, -2, "device");
-  lua_pushinteger(L, transferred);
-  lua_setfield(L, -2, "size");
-  lua_pushinteger(L, status);
-  lua_setfield(L, -2, "status");
+  result["device"] = dev_id;
+  result["size"] = transferred;
+  result["status"] = status;
 
-  return 1;
+  return sol::make_object(lua, result);
 }
 
-static int lua_submit_transfer(lua_State *L) {
-  luaL_checktype(L, 1, LUA_TTABLE);
+// submit_transfer{device, endpoint, type, size, [timeout]}
+// Returns {device, endpoint, transfer, status}
+sol::object usb_submit_transfer(sol::this_state ts, sol::table opts) {
+  lua_State *L = ts;
+  sol::state_view lua(L);
 
   // device id
-  lua_getfield(L, 1, "device");
-  const char *dev_id = luaL_checkstring(L, -1);
-  lua_pop(L, 1);
+  std::string dev_id = opts.get<std::string>("device");
 
   auto it = aelkey_state.input_map.find(dev_id);
   if (it == aelkey_state.input_map.end() || !it->second.usb_handle) {
-    lua_pushnil(L);
-    return 1;
+    sol::table result = lua.create_table();
+    result["device"] = dev_id;
+    result["endpoint"] = opts.get<int>("endpoint");
+    result["transfer"] = sol::lua_nil;
+    result["status"] = LIBUSB_ERROR_NO_DEVICE;
+    return sol::make_object(lua, result);
   }
-  libusb_device_handle *handle = it->second.usb_handle;
+
+  libusb_device_handle *dev_handle = it->second.usb_handle;
   InputCtx *ctx = &it->second;
 
   // endpoint
-  lua_getfield(L, 1, "endpoint");
-  int endpoint = luaL_checkinteger(L, -1);
-  lua_pop(L, 1);
+  int endpoint = opts.get<int>("endpoint");
 
   // type string
-  lua_getfield(L, 1, "type");
-  const char *type_str = luaL_checkstring(L, -1);
-  lua_pop(L, 1);
+  std::string type_str = opts.get<std::string>("type");
   int type = LIBUSB_TRANSFER_TYPE_INTERRUPT;
-  if (strcmp(type_str, "bulk") == 0) {
+  if (type_str == "bulk") {
     type = LIBUSB_TRANSFER_TYPE_BULK;
-  } else if (strcmp(type_str, "control") == 0) {
+  } else if (type_str == "control") {
     type = LIBUSB_TRANSFER_TYPE_CONTROL;
-  } else if (strcmp(type_str, "iso") == 0) {
+  } else if (type_str == "iso") {
     type = LIBUSB_TRANSFER_TYPE_ISOCHRONOUS;
-  } else {
-    type = LIBUSB_TRANSFER_TYPE_INTERRUPT;
   }
 
   // size
-  lua_getfield(L, 1, "size");
-  int size = luaL_checkinteger(L, -1);
-  lua_pop(L, 1);
+  int size = opts.get<int>("size");
 
   // timeout (optional)
-  lua_getfield(L, 1, "timeout");
-  unsigned int timeout = lua_isnil(L, -1) ? 0u : (unsigned int)luaL_checkinteger(L, -1);
-  lua_pop(L, 1);
+  unsigned int timeout = static_cast<unsigned int>(opts.get_or("timeout", 0));
 
   // allocate transfer + buffer
   libusb_transfer *xfer = libusb_alloc_transfer(0);
   if (!xfer) {
-    lua_pushnil(L);
-    return 1;
+    sol::table result = lua.create_table();
+    result["device"] = dev_id;
+    result["endpoint"] = endpoint;
+    result["transfer"] = sol::lua_nil;
+    result["status"] = LIBUSB_ERROR_NO_MEM;
+    return sol::make_object(lua, result);
   }
-  unsigned char *buf = (unsigned char *)malloc(size);
+
+  unsigned char *buf =
+      static_cast<unsigned char *>(std::malloc(static_cast<std::size_t>(size)));
   if (!buf) {
     libusb_free_transfer(xfer);
-    lua_pushnil(L);
-    return 1;
+    sol::table result = lua.create_table();
+    result["device"] = dev_id;
+    result["endpoint"] = endpoint;
+    result["transfer"] = sol::lua_nil;
+    result["status"] = LIBUSB_ERROR_NO_MEM;
+    return sol::make_object(lua, result);
   }
 
   // fill transfer
-  xfer->dev_handle = handle;
-  xfer->endpoint = (uint8_t)endpoint;
-  xfer->type = (uint8_t)type;
+  xfer->dev_handle = dev_handle;
+  xfer->endpoint = static_cast<uint8_t>(endpoint);
+  xfer->type = static_cast<uint8_t>(type);
   xfer->timeout = timeout;
   xfer->buffer = buf;
   xfer->length = size;
-  // user_data carries InputCtx* and lua_State*
   xfer->user_data = new std::pair<InputCtx *, lua_State *>(ctx, L);
   xfer->callback = dispatch_libusb;
 
   int rc = libusb_submit_transfer(xfer);
   if (rc != 0) {
-    std::string msg = std::format("libusb_submit_transfer error: {}", libusb_error_name(rc));
-    lua_warning(L, msg.c_str(), 0);
-    free(buf);
+    std::fprintf(stderr, "libusb_submit_transfer error: %s\n", libusb_error_name(rc));
+    std::free(buf);
     delete static_cast<std::pair<InputCtx *, lua_State *> *>(xfer->user_data);
     libusb_free_transfer(xfer);
-    lua_pushnil(L);
-    return 1;
+
+    sol::table result = lua.create_table();
+    result["device"] = dev_id;
+    result["endpoint"] = endpoint;
+    result["transfer"] = sol::lua_nil;
+    result["status"] = rc;
+    return sol::make_object(lua, result);
   }
 
   // Track the transfer in the device context
   ctx->transfers.push_back(xfer);
 
   // return a simple handle table with cancel/resubmit
-  lua_newtable(L);
+  sol::table t = lua.create_table();
 
-  lua_pushcfunction(L, [](lua_State *Lh) -> int {
-    luaL_checktype(Lh, 1, LUA_TTABLE);
-    lua_getfield(Lh, 1, "_xfer");
-    libusb_transfer *x = (libusb_transfer *)lua_touserdata(Lh, -1);
-    lua_pop(Lh, 1);
-    if (x) {
-      libusb_cancel_transfer(x);
+  // store raw transfer pointer (preserve _xfer behavior)
+  t["_xfer"] = sol::light(xfer);
+
+  // cancel()
+  t.set_function("cancel", [xfer]() {
+    if (xfer) {
+      libusb_cancel_transfer(xfer);
     }
-    lua_pushboolean(Lh, 1);
-    return 1;
+    return true;
   });
-  lua_setfield(L, -2, "cancel");
 
-  lua_pushcfunction(L, [](lua_State *Lh) -> int {
-    luaL_checktype(Lh, 1, LUA_TTABLE);
-    lua_getfield(Lh, 1, "_xfer");
-    libusb_transfer *x = (libusb_transfer *)lua_touserdata(Lh, -1);
-    lua_pop(Lh, 1);
-    if (!x) {
-      lua_pushboolean(Lh, 0);
-      return 1;
+  // resubmit()
+  t.set_function("resubmit", [xfer]() {
+    if (!xfer) {
+      return false;
     }
-    int rc = libusb_submit_transfer(x);
-    lua_pushboolean(Lh, rc == 0);
-    return 1;
+    int rc2 = libusb_submit_transfer(xfer);
+    return rc2 == 0;
   });
-  lua_setfield(L, -2, "resubmit");
 
-  // stash raw transfer pointer inside handle table
-  lua_pushlightuserdata(L, xfer);
-  lua_setfield(L, -2, "_xfer");
-
-  return 1;
+  return sol::make_object(lua, t);
 }
 
 extern "C" int luaopen_aelkey_usb(lua_State *L) {
-  // clang-format off
-  static const luaL_Reg funcs[] = {
-    {"bulk_transfer", lua_bulk_transfer},
-    {"control_transfer", lua_control_transfer},
-    {"interrupt_transfer", lua_interrupt_transfer},
-    {"submit_transfer", lua_submit_transfer},
-    {nullptr, nullptr}
-  };
-  // clang-format on
+  sol::state_view lua(L);
 
-  luaL_newlib(L, funcs);
+  sol::table mod = lua.create_table();
 
-  return 1;
+  mod.set_function("bulk_transfer", usb_bulk_transfer);
+  mod.set_function("control_transfer", usb_control_transfer);
+  mod.set_function("interrupt_transfer", usb_interrupt_transfer);
+  mod.set_function("submit_transfer", usb_submit_transfer);
+
+  return sol::stack::push(L, mod);
 }
