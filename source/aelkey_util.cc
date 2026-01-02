@@ -5,11 +5,10 @@
 #include <cstring>
 #include <string>
 
-#include <lua.hpp>
+#include <sol/sol.hpp>
 #include <time.h>
 
 #include "lua_scripts.h"
-#include "luacompat.h"
 
 // Compute one CRC32 entry
 constexpr uint32_t crc32_entry(int i) {
@@ -44,53 +43,47 @@ uint32_t crc32(const uint8_t *data, size_t len, uint32_t seed = 0) {
 }
 
 // crc32(data, seed)
-static int lua_crc32(lua_State *L) {
-  size_t len;
-  const char *data = luaL_checklstring(L, 1, &len);
-  unsigned int seed = (unsigned int)luaL_optinteger(L, 2, 0);
-
-  uint32_t result = crc32(reinterpret_cast<const uint8_t *>(data), len, seed);
-
-  lua_pushinteger(L, result);
-  return 1;
+uint32_t util_crc32(const std::string &data, uint32_t seed = 0) {
+  return crc32(reinterpret_cast<const uint8_t *>(data.data()), data.size(), seed);
 }
 
-static int lua_now(lua_State *L) {
-  const char *res = luaL_optstring(L, 1, "ms");  // default to ms
+// now("ms"|"us"|"ns")
+uint64_t util_now(const std::string &unit = "ms") {
   struct timespec ts;
   clock_gettime(CLOCK_MONOTONIC, &ts);
 
-  uint64_t val;
-  if (strcmp(res, "us") == 0) {
-    val = ts.tv_sec * 1000000ULL + ts.tv_nsec / 1000ULL;
-  } else if (strcmp(res, "ns") == 0) {
-    val = ts.tv_sec * 1000000000ULL + ts.tv_nsec;
+  if (unit == "us") {
+    return ts.tv_sec * 1000000ULL + ts.tv_nsec / 1000ULL;
+  } else if (unit == "ns") {
+    return ts.tv_sec * 1000000000ULL + ts.tv_nsec;
   } else {  // default ms
-    val = ts.tv_sec * 1000ULL + ts.tv_nsec / 1000000ULL;
+    return ts.tv_sec * 1000ULL + ts.tv_nsec / 1000000ULL;
   }
-
-  lua_pushinteger(L, val);
-  return 1;
 }
 
 extern "C" int luaopen_aelkey_util(lua_State *L) {
-  // clang-format off
-  static const luaL_Reg funcs[] = {
-    {"crc32", lua_crc32},
-    {"now", lua_now},
-    {nullptr, nullptr}
-  };
-  // clang-format on
+  sol::state_view lua(L);
 
-  luaL_newlib(L, funcs);
+  sol::table mod = lua.create_table();
 
-  // lua scripts
-  if (luaL_loadstring(L, aelkey_util_script) == 0) {
-    lua_pushvalue(L, -2);
-    lua_call(L, 1, 0);
-  } else {
-    lua_error(L);
+  mod.set_function("crc32", util_crc32);
+  mod.set_function("now", util_now);
+
+  // Load script
+  sol::load_result chunk = lua.load(aelkey_util_script);
+  if (!chunk.valid()) {
+    throw sol::error(
+        "aelkey.util script load error: " + std::string(chunk.get<sol::error>().what())
+    );
   }
 
-  return 1;
+  // Execute script with module table
+  sol::protected_function_result result = chunk(mod);
+  if (!result.valid()) {
+    throw sol::error(
+        "aelkey.util script runtime error: " + std::string(result.get<sol::error>().what())
+    );
+  }
+
+  return sol::stack::push(L, mod);
 }
