@@ -46,7 +46,7 @@ sol::object daemon_watch(sol::this_state ts, const std::string &ref, sol::table 
     sol::object entry = decls_tbl[i];
     if (entry.is<sol::table>()) {
       sol::table t = entry.as<sol::table>();
-      InputDecl decl = parse_input(L, t.push());
+      InputDecl decl = parse_input(t);
       decls.push_back(decl);
     }
   }
