@@ -14,7 +14,7 @@
 #include <libudev.h>
 #include <libusb-1.0/libusb.h>
 #include <linux/hidraw.h>
-#include <lua.hpp>
+#include <sol/sol.hpp>
 #include <sys/epoll.h>
 #include <sys/ioctl.h>
 #include <unistd.h>
@@ -22,84 +22,130 @@
 #include "aelkey_state.h"
 #include "device_gatt.h"
 #include "device_libusb.h"
-#include "luacompat.h"
 
-InputDecl parse_input(lua_State *L, int index) {
+// Parse a single InputDecl from a Lua table.
+InputDecl parse_input(sol::table tbl) {
   InputDecl decl;
-  lua_pushnil(L);
-  while (lua_next(L, index)) {
-    std::string key = lua_tostring(L, -2);
 
-    if (key == "id" && lua_isstring(L, -1)) {
-      decl.id = lua_tostring(L, -1);
-    } else if (key == "type" && lua_isstring(L, -1)) {
-      decl.type = lua_tostring(L, -1);
-    } else if (key == "writable" && lua_isboolean(L, -1)) {
-      decl.writable = lua_toboolean(L, -1);
-    } else if (key == "grab" && lua_isboolean(L, -1)) {
-      decl.grab = lua_toboolean(L, -1);
-    } else if (key == "vendor" && lua_isnumber(L, -1)) {
-      decl.vendor = (int)lua_tointeger(L, -1);
-    } else if (key == "product" && lua_isnumber(L, -1)) {
-      decl.product = (int)lua_tointeger(L, -1);
-    } else if (key == "bus" && lua_isstring(L, -1)) {
-      std::string busstr = lua_tostring(L, -1);
-      if (busstr == "usb") {
-        decl.bus = BUS_USB;
-      } else if (busstr == "bluetooth") {
-        decl.bus = BUS_BLUETOOTH;
-      } else if (busstr == "pci") {
-        decl.bus = BUS_PCI;
-      }
-    } else if (key == "interface" && lua_isnumber(L, -1)) {
-      decl.interface = (int)lua_tointeger(L, -1);
-    } else if (key == "name" && lua_isstring(L, -1)) {
-      decl.name = lua_tostring(L, -1);
-    } else if (key == "phys" && lua_isstring(L, -1)) {
-      decl.phys = lua_tostring(L, -1);
-    } else if (key == "uniq" && lua_isstring(L, -1)) {
-      decl.uniq = lua_tostring(L, -1);
-    } else if (key == "capabilities" && lua_istable(L, -1)) {
-      int len = lua_objlen(L, -1);
-      for (int i = 1; i <= len; i++) {
-        lua_rawgeti(L, -1, i);
-        if (lua_istable(L, -1)) {
-          lua_getfield(L, -1, "type");
-          std::string type = lua_tostring(L, -1);
-          lua_pop(L, 1);
-
-          lua_getfield(L, -1, "code");
-          std::string code = lua_tostring(L, -1);
-          lua_pop(L, 1);
-
-          int type_id = libevdev_event_type_from_name(type.c_str());
-          int code_id = libevdev_event_code_from_name(type_id, code.c_str());
-          if (type_id >= 0 && code_id >= 0) {
-            decl.capabilities.emplace_back(type_id, code_id);
-          }
-        }
-        lua_pop(L, 1);
-      }
-    } else if (key == "service" && lua_isnumber(L, -1)) {
-      decl.service = lua_tointeger(L, -1);
-
-    } else if (key == "characteristic" && lua_isnumber(L, -1)) {
-      decl.characteristic = lua_tointeger(L, -1);
-    } else if (key == "callback_events" && lua_isstring(L, -1)) {
-      decl.callback_events = lua_tostring(L, -1);
-    } else if (key == "callback_state" && lua_isstring(L, -1)) {
-      decl.callback_state = lua_tostring(L, -1);
-    }
-
-    lua_pop(L, 1);
+  // id
+  if (sol::object v = tbl["id"]; v.valid() && v.is<std::string>()) {
+    decl.id = v.as<std::string>();
   }
+
+  // type
+  if (sol::object v = tbl["type"]; v.valid() && v.is<std::string>()) {
+    decl.type = v.as<std::string>();
+  }
+
+  // writable
+  if (sol::object v = tbl["writable"]; v.valid() && v.is<bool>()) {
+    decl.writable = v.as<bool>();
+  }
+
+  // grab
+  if (sol::object v = tbl["grab"]; v.valid() && v.is<bool>()) {
+    decl.grab = v.as<bool>();
+  }
+
+  // vendor
+  if (sol::object v = tbl["vendor"]; v.valid() && v.is<int>()) {
+    decl.vendor = v.as<int>();
+  }
+
+  // product
+  if (sol::object v = tbl["product"]; v.valid() && v.is<int>()) {
+    decl.product = v.as<int>();
+  }
+
+  // bus
+  if (sol::object v = tbl["bus"]; v.valid() && v.is<std::string>()) {
+    std::string busstr = v.as<std::string>();
+    if (busstr == "usb") {
+      decl.bus = BUS_USB;
+    } else if (busstr == "bluetooth") {
+      decl.bus = BUS_BLUETOOTH;
+    } else if (busstr == "pci") {
+      decl.bus = BUS_PCI;
+    }
+  }
+
+  // interface
+  if (sol::object v = tbl["interface"]; v.valid() && v.is<int>()) {
+    decl.interface = v.as<int>();
+  }
+
+  // name
+  if (sol::object v = tbl["name"]; v.valid() && v.is<std::string>()) {
+    decl.name = v.as<std::string>();
+  }
+
+  // phys
+  if (sol::object v = tbl["phys"]; v.valid() && v.is<std::string>()) {
+    decl.phys = v.as<std::string>();
+  }
+
+  // uniq
+  if (sol::object v = tbl["uniq"]; v.valid() && v.is<std::string>()) {
+    decl.uniq = v.as<std::string>();
+  }
+
+  // capabilities: array of { type = "EV_KEY", code = "KEY_A" }
+  if (sol::object caps_obj = tbl["capabilities"];
+      caps_obj.valid() && caps_obj.is<sol::table>()) {
+    sol::table caps = caps_obj.as<sol::table>();
+    caps.for_each([&](sol::object /*k*/, sol::object v) {
+      if (!v.is<sol::table>()) {
+        return;
+      }
+      sol::table cap_tbl = v.as<sol::table>();
+
+      std::string type_str;
+      std::string code_str;
+
+      if (sol::object t = cap_tbl["type"]; t.valid() && t.is<std::string>()) {
+        type_str = t.as<std::string>();
+      }
+      if (sol::object c = cap_tbl["code"]; c.valid() && c.is<std::string>()) {
+        code_str = c.as<std::string>();
+      }
+
+      if (!type_str.empty() && !code_str.empty()) {
+        int type_id = libevdev_event_type_from_name(type_str.c_str());
+        int code_id = libevdev_event_code_from_name(type_id, code_str.c_str());
+        if (type_id >= 0 && code_id >= 0) {
+          decl.capabilities.emplace_back(type_id, code_id);
+        }
+      }
+    });
+  }
+
+  // service
+  if (sol::object v = tbl["service"]; v.valid() && v.is<int>()) {
+    decl.service = v.as<int>();
+  }
+
+  // characteristic
+  if (sol::object v = tbl["characteristic"]; v.valid() && v.is<int>()) {
+    decl.characteristic = v.as<int>();
+  }
+
+  // callback_events
+  if (sol::object v = tbl["callback_events"]; v.valid() && v.is<std::string>()) {
+    decl.callback_events = v.as<std::string>();
+  }
+
+  // callback_state
+  if (sol::object v = tbl["callback_state"]; v.valid() && v.is<std::string>()) {
+    decl.callback_state = v.as<std::string>();
+  }
+
   return decl;
 }
 
 static int get_interface_num(const std::string &devnode) {
   struct udev *udev = udev_new();
   if (!udev) {
-    lua_warning(aelkey_state.lua_vm, "Failed to init udev", 0);
+    std::fprintf(stderr, "Failed to init udev\n");
     return -1;
   }
 
@@ -130,7 +176,7 @@ static int ensure_claimed(libusb_device_handle *devh, const InputDecl &in) {
     int d = libusb_detach_kernel_driver(devh, iface);
     if (d != 0) {
       std::string msg = std::format("Failed to detach kernel driver: {}", libusb_error_name(d));
-      lua_warning(aelkey_state.lua_vm, msg.c_str(), 0);
+      std::fprintf(stderr, "%s\n", msg.c_str());
       return d;
     }
   }
@@ -139,7 +185,7 @@ static int ensure_claimed(libusb_device_handle *devh, const InputDecl &in) {
   if (r != 0) {
     std::string msg =
         std::format("Failed to claim interface {}: {}", iface, libusb_error_name(r));
-    lua_warning(aelkey_state.lua_vm, msg.c_str(), 0);
+    std::fprintf(stderr, "%s\n", msg.c_str());
     return r;
   }
 
@@ -183,7 +229,6 @@ std::string match_device(const InputDecl &decl) {
       if (!devnode) {
         return std::string{};
       }
-      // keep your existing ioctl checks here
       int fd = open(devnode, O_RDONLY | O_NONBLOCK);
       if (fd < 0) {
         return std::string{};
@@ -265,6 +310,7 @@ std::string match_device(const InputDecl &decl) {
       if (fd < 0) {
         return std::string{};
       }
+
       struct libevdev *evdev = nullptr;
       if (libevdev_new_from_fd(fd, &evdev) == 0) {
         bool match = true;
@@ -369,7 +415,7 @@ static InputCtx attach_device_helper(
     if (!ctx.usb_handle) {
       std::string msg =
           std::format("Failed to open libusb device {:x}:{:x}", in.vendor, in.product);
-      lua_warning(aelkey_state.lua_vm, msg.c_str(), 0);
+      std::fprintf(stderr, "%s\n", msg.c_str());
       return ctx;
     }
     std::cout << "Attached libusb device: " << in.id << std::endl;
@@ -396,7 +442,7 @@ static InputCtx attach_device_helper(
     struct libevdev *idev = nullptr;
     if (libevdev_new_from_fd(ctx.fd, &idev) < 0) {
       std::string msg = std::format("Failed to init libevdev for {}", devnode);
-      lua_warning(aelkey_state.lua_vm, msg.c_str(), 0);
+      std::fprintf(stderr, "%s\n", msg.c_str());
       close(ctx.fd);
       ctx.fd = -1;
       ctx.active = false;
@@ -412,7 +458,7 @@ static InputCtx attach_device_helper(
       int rc = libevdev_grab(idev, LIBEVDEV_GRAB);
       if (rc < 0) {
         std::string msg = std::format("Failed to grab device {}: {}", devnode, strerror(-rc));
-        lua_warning(aelkey_state.lua_vm, msg.c_str(), 0);
+        std::fprintf(stderr, "%s\n", msg.c_str());
       } else {
         std::cout << "Grabbed device exclusively: " << devnode << std::endl;
       }
@@ -432,34 +478,34 @@ static InputCtx attach_device_helper(
       ctx.active = false;
     }
   } else {
-    std::string msg = std::format("Unknown output type: {}", in.type);
-    lua_warning(aelkey_state.lua_vm, msg.c_str(), 0);
+    std::string msg = std::format("Unknown input type: {}", in.type);
+    std::fprintf(stderr, "%s\n", msg.c_str());
     return ctx;
   }
 
   return ctx;
 }
 
-void parse_inputs_from_lua(lua_State *L) {
+void parse_inputs_from_lua(sol::this_state ts) {
+  sol::state_view lua(ts);
+
   aelkey_state.input_decls.clear();
 
-  lua_getglobal(L, "inputs");
-  if (!lua_istable(L, -1)) {
-    lua_pop(L, 1);
+  sol::object obj = lua["inputs"];
+  if (!obj.valid() || !obj.is<sol::table>()) {
     return;
   }
 
-  lua_pushnil(L);
-  while (lua_next(L, -2) != 0) {
-    if (lua_istable(L, -1)) {
-      InputDecl decl = parse_input(L, lua_gettop(L));
+  sol::table inputs = obj.as<sol::table>();
+
+  inputs.for_each([&](sol::object /*k*/, sol::object v) {
+    if (v.is<sol::table>()) {
+      InputDecl decl = parse_input(v.as<sol::table>());
       if (!decl.id.empty()) {
         aelkey_state.input_decls.push_back(decl);
       }
     }
-    lua_pop(L, 1);  // pop value, keep key
-  }
-  lua_pop(L, 1);  // pop inputs table
+  });
 }
 
 bool attach_input_device(const std::string &devnode, const InputDecl &decl) {
@@ -478,7 +524,7 @@ bool attach_input_device(const std::string &devnode, const InputDecl &decl) {
     std::string msg = std::format(
         "Failed to attach input: {} ({})", decl.id, devnode.empty() ? decl.type : devnode
     );
-    lua_warning(aelkey_state.lua_vm, msg.c_str(), 0);
+    std::fprintf(stderr, "%s\n", msg.c_str());
     return false;
   }
 
