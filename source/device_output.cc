@@ -1,6 +1,5 @@
 #include "device_output.h"
 
-#include <format>
 #include <iostream>
 #include <string>
 #include <vector>
@@ -135,8 +134,7 @@ void enable_capability(libevdev *dev, const std::string &cap) {
   if (code >= 0) {
     enable_codes(dev, evtype, std::vector{ code });
   } else {
-    std::string msg = std::format("Unknown capability string: {}", cap);
-    std::fprintf(stderr, "%s\n", msg.c_str());
+    std::fprintf(stderr, "Unknown capability string: %s\n", cap.c_str());
   }
 }
 
@@ -197,8 +195,7 @@ libevdev_uinput *create_output_device(const OutputDecl &out) {
   struct libevdev_uinput *uidev = nullptr;
   int err = libevdev_uinput_create_from_device(dev, LIBEVDEV_UINPUT_OPEN_MANAGED, &uidev);
   if (err != 0) {
-    std::string msg = std::format("Failed to create uinput device: {}", out.name);
-    std::fprintf(stderr, "%s\n", msg.c_str());
+    std::fprintf(stderr, "Failed to create uinput device: %s\n", out.name.c_str());
     libevdev_free(dev);
     return nullptr;
   }

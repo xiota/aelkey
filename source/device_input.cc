@@ -2,7 +2,6 @@
 
 #include <climits>  // for PATH_MAX
 #include <cstring>
-#include <format>
 #include <fstream>
 #include <iostream>
 #include <string>
@@ -175,17 +174,14 @@ static int ensure_claimed(libusb_device_handle *devh, const InputDecl &in) {
   if (libusb_kernel_driver_active(devh, iface) == 1) {
     int d = libusb_detach_kernel_driver(devh, iface);
     if (d != 0) {
-      std::string msg = std::format("Failed to detach kernel driver: {}", libusb_error_name(d));
-      std::fprintf(stderr, "%s\n", msg.c_str());
+      std::fprintf(stderr, "Failed to detach kernel driver: %s\n", libusb_error_name(d));
       return d;
     }
   }
 
   int r = libusb_claim_interface(devh, iface);
   if (r != 0) {
-    std::string msg =
-        std::format("Failed to claim interface {}: {}", iface, libusb_error_name(r));
-    std::fprintf(stderr, "%s\n", msg.c_str());
+    std::fprintf(stderr, "Failed to claim interface %d: %s\n", iface, libusb_error_name(r));
     return r;
   }
 
@@ -413,9 +409,7 @@ static InputCtx attach_device_helper(
     ctx.usb_handle =
         libusb_open_device_with_vid_pid(aelkey_state.g_libusb, in.vendor, in.product);
     if (!ctx.usb_handle) {
-      std::string msg =
-          std::format("Failed to open libusb device {:x}:{:x}", in.vendor, in.product);
-      std::fprintf(stderr, "%s\n", msg.c_str());
+      std::fprintf(stderr, "Failed to open libusb device %04x:%04x\n", in.vendor, in.product);
       return ctx;
     }
     std::cout << "Attached libusb device: " << in.id << std::endl;
@@ -441,8 +435,7 @@ static InputCtx attach_device_helper(
 
     struct libevdev *idev = nullptr;
     if (libevdev_new_from_fd(ctx.fd, &idev) < 0) {
-      std::string msg = std::format("Failed to init libevdev for {}", devnode);
-      std::fprintf(stderr, "%s\n", msg.c_str());
+      std::fprintf(stderr, "Failed to init libevdev for %s\n", devnode.c_str());
       close(ctx.fd);
       ctx.fd = -1;
       ctx.active = false;
@@ -457,8 +450,7 @@ static InputCtx attach_device_helper(
     if (in.grab) {
       int rc = libevdev_grab(idev, LIBEVDEV_GRAB);
       if (rc < 0) {
-        std::string msg = std::format("Failed to grab device {}: {}", devnode, strerror(-rc));
-        std::fprintf(stderr, "%s\n", msg.c_str());
+        std::fprintf(stderr, "Failed to grab device %s: %s\n", devnode.c_str(), strerror(-rc));
       } else {
         std::cout << "Grabbed device exclusively: " << devnode << std::endl;
       }
@@ -478,8 +470,7 @@ static InputCtx attach_device_helper(
       ctx.active = false;
     }
   } else {
-    std::string msg = std::format("Unknown input type: {}", in.type);
-    std::fprintf(stderr, "%s\n", msg.c_str());
+    std::fprintf(stderr, "Unknown input type: %s\n", in.type.c_str());
     return ctx;
   }
 
@@ -521,10 +512,12 @@ bool attach_input_device(const std::string &devnode, const InputDecl &decl) {
 
   // failure check
   if (!ctx.active) {
-    std::string msg = std::format(
-        "Failed to attach input: {} ({})", decl.id, devnode.empty() ? decl.type : devnode
+    std::fprintf(
+        stderr,
+        "Failed to attach input: %s (%s)\n",
+        decl.id.c_str(),
+        devnode.empty() ? decl.type.c_str() : devnode.c_str()
     );
-    std::fprintf(stderr, "%s\n", msg.c_str());
     return false;
   }
 

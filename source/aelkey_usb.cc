@@ -2,7 +2,6 @@
 
 #include <algorithm>
 #include <cstring>
-#include <format>
 #include <vector>
 
 #include <libusb-1.0/libusb.h>

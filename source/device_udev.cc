@@ -1,6 +1,5 @@
 #include "device_udev.h"
 
-#include <format>
 #include <iostream>
 #include <string>
 
@@ -75,8 +74,7 @@ void notify_state_change(sol::this_state ts, const InputDecl &decl, const char *
   sol::protected_function_result result = pf(tbl);
   if (!result.valid()) {
     sol::error err = result;
-    std::string msg = std::format("Lua state_callback error: {}", err.what());
-    std::fprintf(stderr, "%s\n", msg.c_str());
+    std::fprintf(stderr, "Lua state_callback error: %s\n", err.what());
   }
 }
 

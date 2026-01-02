@@ -1,6 +1,5 @@
 #include "aelkey_hid.h"
 
-#include <iostream>
 #include <vector>
 
 #include <linux/hidraw.h>

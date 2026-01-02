@@ -1,7 +1,6 @@
 #include "device_gatt.h"
 
 #include <cstring>
-#include <format>
 #include <iostream>
 #include <string>
 #include <vector>
@@ -43,14 +42,14 @@ void ensure_gatt_initialized() {
 
   aelkey_state.g_dbus_conn = dbus_bus_get(DBUS_BUS_SYSTEM, nullptr);
   if (!aelkey_state.g_dbus_conn) {
-    std::cerr << "GATT: failed to connect to system D-Bus\n";
+    std::fprintf(stderr, "GATT: failed to connect to system D-Bus\n");
     return;
   }
 
   dbus_connection_set_exit_on_disconnect(aelkey_state.g_dbus_conn, false);
 
   if (!dbus_connection_get_unix_fd(aelkey_state.g_dbus_conn, &aelkey_state.g_dbus_fd)) {
-    std::cerr << "GATT: failed to get D-Bus fd\n";
+    std::fprintf(stderr, "GATT: failed to get D-Bus fd\n");
     return;
   }
 
@@ -58,7 +57,7 @@ void ensure_gatt_initialized() {
   ev.events = EPOLLIN;
   ev.data.fd = aelkey_state.g_dbus_fd;
   if (epoll_ctl(aelkey_state.epfd, EPOLL_CTL_ADD, aelkey_state.g_dbus_fd, &ev) != 0) {
-    std::cerr << "GATT: epoll_ctl failed for D-Bus fd\n";
+    std::fprintf(stderr, "GATT: epoll_ctl failed for D-Bus fd\n");
   }
 }
 
@@ -365,12 +364,12 @@ InputCtx attach_gatt_device(const InputDecl &decl) {
 
   DBusConnection *conn = aelkey_state.g_dbus_conn;
   if (!conn) {
-    std::cerr << "GATT: no D-Bus connection\n";
+    std::fprintf(stderr, "GATT: no D-Bus connection\n");
     return ctx;
   }
 
   if (decl.devnode.empty()) {
-    std::cerr << "GATT: no GATT path in devnode for " << decl.id << std::endl;
+    std::fprintf(stderr, "GATT: no GATT path in devnode for %s\n", decl.id.c_str());
     return ctx;
   }
 
@@ -381,7 +380,9 @@ InputCtx attach_gatt_device(const InputDecl &decl) {
   if (type == GattPathType::Characteristic) {
     ctx.gatt_path = derive_device_path_from_char_path(decl.devnode);
     if (ctx.gatt_path.empty()) {
-      std::cerr << "GATT: failed to derive device path from " << decl.devnode << std::endl;
+      std::fprintf(
+          stderr, "GATT: failed to derive device path from %s\n", decl.devnode.c_str()
+      );
     }
   } else {
     // For device-level or service-level matches, the path itself is the root
@@ -440,7 +441,7 @@ void detach_gatt_device(InputCtx &ctx) {
   }
 
   ctx.active = false;
-  std::cerr << "Detached GATT characteristic: " << ctx.decl.devnode << std::endl;
+  std::fprintf(stderr, "Detached GATT characteristic: %s\n", ctx.decl.devnode.c_str());
 }
 
 static void process_one_gatt_message(sol::this_state ts, DBusMessage *msg) {
@@ -526,8 +527,7 @@ static void process_one_gatt_message(sol::this_state ts, DBusMessage *msg) {
       sol::protected_function_result res = pf(tbl);
       if (!res.valid()) {
         sol::error err = res;
-        std::string emsg = std::format("Lua gatt_callback error: {}", err.what());
-        std::fprintf(stderr, "%s\n", emsg.c_str());
+        std::fprintf(stderr, "Lua gatt_callback error: %s\n", err.what());
       }
     }
 
@@ -813,7 +813,7 @@ match_gatt_device(const InputDecl &decl, std::vector<std::string> *found_charact
   }
 
   if (characteristics.empty()) {
-    std::cerr << "GATT match: no matching characteristic found\n";
+    std::fprintf(stderr, "GATT match: no matching characteristic found\n");
     return {};
   }
 
@@ -829,7 +829,7 @@ bool gatt_read_characteristic(const std::string &char_path, std::vector<uint8_t>
 
   DBusConnection *conn = aelkey_state.g_dbus_conn;
   if (!conn) {
-    std::cerr << "GATT read: no D-Bus connection\n";
+    std::fprintf(stderr, "GATT read: no D-Bus connection\n");
     return false;
   }
 
@@ -848,7 +848,7 @@ bool gatt_read_characteristic(const std::string &char_path, std::vector<uint8_t>
   dbus_message_unref(msg);
 
   if (!reply) {
-    std::cerr << "GATT read: ReadValue failed\n";
+    std::fprintf(stderr, "GATT read: ReadValue failed\n");
     return false;
   }
 
@@ -880,7 +880,7 @@ bool gatt_write_characteristic(
 ) {
   DBusConnection *conn = aelkey_state.g_dbus_conn;
   if (!conn) {
-    std::cerr << "GATT write: no D-Bus connection\n";
+    std::fprintf(stderr, "GATT write: no D-Bus connection\n");
     return false;
   }
 
@@ -928,7 +928,7 @@ bool gatt_write_characteristic(
   dbus_message_unref(msg);
 
   if (!reply) {
-    std::cerr << "GATT write: WriteValue failed\n";
+    std::fprintf(stderr, "GATT write: WriteValue failed\n");
     return false;
   }
 

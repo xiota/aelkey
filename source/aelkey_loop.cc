@@ -2,8 +2,6 @@
 
 #include <csignal>
 #include <cstring>
-#include <format>
-#include <iostream>
 #include <string>
 
 #include <libevdev/libevdev-uinput.h>
@@ -55,8 +53,7 @@ static void dispatch_hidraw(sol::this_state ts, int fd_ready, InputCtx &ctx) {
   sol::protected_function_result res = pf(tbl);
   if (!res.valid()) {
     sol::error err = res;
-    std::string msg = std::format("Lua hidraw callback error: {}", err.what());
-    std::fprintf(stderr, "%s\n", msg.c_str());
+    std::fprintf(stderr, "Lua hidraw callback error: %s\n", err.what());
   }
 }
 
@@ -112,8 +109,7 @@ static void dispatch_evdev(sol::this_state ts, InputCtx &ctx) {
             sol::protected_function_result res = pf(events_tbl);
             if (!res.valid()) {
               sol::error err = res;
-              std::string msg = std::format("Lua event callback error: {}", err.what());
-              std::fprintf(stderr, "%s\n", msg.c_str());
+              std::fprintf(stderr, "Lua event callback error: %s\n", err.what());
             }
           }
         }
@@ -184,9 +180,7 @@ sol::object loop_start(sol::this_state ts) {
         timeval tv{ 0, 0 };
         int rc = libusb_handle_events_timeout_completed(aelkey_state.g_libusb, &tv, nullptr);
         if (rc != 0) {
-          std::string msg =
-              std::format("libusb_handle_events error: {}", libusb_error_name(rc));
-          std::fprintf(stderr, "%s\n", msg.c_str());
+          std::fprintf(stderr, "libusb_handle_events error: %s\n", libusb_error_name(rc));
         }
         continue;  // handled; go to next epoll event
       }
