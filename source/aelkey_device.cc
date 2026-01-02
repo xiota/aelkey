@@ -1,13 +1,15 @@
 #include "aelkey_device.h"
 
-#include <lua.hpp>
+#include <sol/sol.hpp>
 #include <sys/epoll.h>
 #include <unistd.h>
 
 #include "aelkey_state.h"
 #include "device_input.h"
+#include "device_output.h"
 #include "device_udev.h"
 
+// Create all uinput output devices declared in aelkey_state.output_decls
 static void create_outputs_from_decls() {
   for (auto &out : aelkey_state.output_decls) {
     if (out.id.empty()) {
@@ -16,6 +18,7 @@ static void create_outputs_from_decls() {
     if (aelkey_state.uinput_devices.count(out.id)) {
       continue;
     }
+
     libevdev_uinput *uidev = create_output_device(out);
     if (uidev) {
       aelkey_state.uinput_devices[out.id] = uidev;
@@ -23,7 +26,8 @@ static void create_outputs_from_decls() {
   }
 }
 
-static void attach_inputs_from_decls(lua_State *L) {
+// Attach all input devices declared in aelkey_state.input_decls
+static void attach_inputs_from_decls(sol::this_state ts) {
   for (auto &decl : aelkey_state.input_decls) {
     std::string devnode = match_device(decl);
     if (devnode.empty()) {
@@ -32,62 +36,53 @@ static void attach_inputs_from_decls(lua_State *L) {
 
     if (attach_input_device(devnode, decl)) {
       decl.devnode = devnode;
-      notify_state_change(L, decl, "add");
+      notify_state_change(ts, decl, "add");
     }
   }
 }
 
-int lua_open_device(lua_State *L) {
-  int nargs = lua_gettop(L);  // how many arguments Lua passed
+// Lua: open_device([dev_id])
+// Ret: boolean
+sol::object device_open(sol::this_state ts, sol::optional<std::string> dev_id_opt) {
+  sol::state_view lua(ts);
 
-  // --- GLOBAL MODE: no arguments ---
-  if (nargs == 0) {
+  // GLOBAL MODE: no argument → open all devices
+  if (!dev_id_opt.has_value()) {
     // If devices already attached, skip
     if (!aelkey_state.input_map.empty() || !aelkey_state.uinput_devices.empty()) {
-      lua_pushboolean(L, 1);
-      return 1;
+      return sol::make_object(lua, true);
     }
 
-    // Ensure init is done (epoll + udev monitor)
+    // Ensure udev + epoll initialized
     if (aelkey_state.epfd < 0 || aelkey_state.udev_fd < 0 || !aelkey_state.g_udev ||
         !aelkey_state.g_mon) {
-      int rc = ensure_udev_initialized(L);
-      if (rc != 0) {
-        // lua_init already pushed an error or returned an error code
-        return rc;
-      }
+      ensure_udev_initialized(ts);
     }
 
-    // Parse declarations from Lua and perform initial setup
-    // These helpers should read from the script's tables and fill:
-    //   aelkey_state.output_decls and aelkey_state.input_decls
-    parse_outputs_from_lua(L);
-    parse_inputs_from_lua(L);
+    // Parse declarations from Lua
+    parse_outputs_from_lua(ts);
+    parse_inputs_from_lua(ts);
 
+    // Create output devices and attach input devices
     create_outputs_from_decls();
-    attach_inputs_from_decls(L);
+    attach_inputs_from_decls(ts);
 
-    lua_pushboolean(L, 1);
-    return 1;
+    return sol::make_object(lua, true);
   }
 
-  // --- SINGLE DEVICE MODE: one argument (device ID) ---
-  const char *dev_id_cstr = luaL_checkstring(L, 1);
-  std::string dev_id(dev_id_cstr);
+  // SINGLE DEVICE MODE
+  std::string dev_id = dev_id_opt.value();
 
-  // Ensure init is done if not already
+  // Ensure init
   if (aelkey_state.epfd < 0 || aelkey_state.udev_fd < 0 || !aelkey_state.g_udev ||
       !aelkey_state.g_mon) {
-    int rc = ensure_udev_initialized(L);
-    if (rc != 0) {
-      return rc;
-    }
+    ensure_udev_initialized(ts);
   }
 
   // Parse declarations if not already parsed
   if (aelkey_state.input_decls.empty() && aelkey_state.output_decls.empty()) {
-    parse_outputs_from_lua(L);
-    parse_inputs_from_lua(L);
+    parse_outputs_from_lua(ts);
+    parse_inputs_from_lua(ts);
     create_outputs_from_decls();
   }
 
@@ -95,73 +90,56 @@ int lua_open_device(lua_State *L) {
   bool ok = false;
   for (auto &decl : aelkey_state.input_decls) {
     if (decl.id != dev_id) {
-      continue;  // only match the requested device
+      continue;
     }
 
     std::string devnode = match_device(decl);
     decl.devnode = devnode;
+
     if (!devnode.empty() && attach_input_device(devnode, decl)) {
-      notify_state_change(L, decl, "add");
+      notify_state_change(ts, decl, "add");
       ok = true;
     }
-    break;  // stop after first match
+    break;
   }
 
-  lua_pushboolean(L, ok ? 1 : 0);
-  return 1;
+  return sol::make_object(lua, ok);
 }
 
-int lua_close_device(lua_State *L) {
-  const char *dev_id_cstr = luaL_checkstring(L, 1);
-  std::string dev_id(dev_id_cstr);
+// Lua: close_device([dev_id])
+// Ret: boolean
+sol::object device_close(sol::this_state ts, const std::string &dev_id) {
+  sol::state_view lua(ts);
 
   InputDecl removed = detach_input_device(dev_id);
-  lua_pushboolean(L, !removed.id.empty());
-  return 1;
+  bool ok = !removed.id.empty();
+
+  return sol::make_object(lua, ok);
 }
 
-int lua_get_device_info(lua_State *L) {
-  const char *dev_id_cstr = luaL_checkstring(L, 1);
-  std::string dev_id(dev_id_cstr);
+// Lua: get_device_info(dev_id)
+// Ret: table or nil
+sol::object device_get_info(sol::this_state ts, const std::string &dev_id) {
+  sol::state_view lua(ts);
 
   auto it = aelkey_state.input_map.find(dev_id);
   if (it == aelkey_state.input_map.end()) {
-    lua_pushnil(L);
-    return 1;
+    return sol::make_object(lua, sol::nil);
   }
 
   const InputDecl &decl = it->second.decl;
 
-  lua_newtable(L);
-  lua_pushstring(L, decl.id.c_str());
-  lua_setfield(L, -2, "id");
+  sol::table tbl = lua.create_table();
+  tbl["id"] = decl.id;
+  tbl["type"] = decl.type;
+  tbl["vendor"] = decl.vendor;
+  tbl["product"] = decl.product;
+  tbl["bus"] = decl.bus;
+  tbl["name"] = decl.name;
+  tbl["phys"] = decl.phys;
+  tbl["uniq"] = decl.uniq;
+  tbl["writable"] = decl.writable;
+  tbl["grab"] = decl.grab;
 
-  lua_pushstring(L, decl.type.c_str());
-  lua_setfield(L, -2, "type");
-
-  lua_pushinteger(L, decl.vendor);
-  lua_setfield(L, -2, "vendor");
-
-  lua_pushinteger(L, decl.product);
-  lua_setfield(L, -2, "product");
-
-  lua_pushinteger(L, decl.bus);
-  lua_setfield(L, -2, "bus");
-
-  lua_pushstring(L, decl.name.c_str());
-  lua_setfield(L, -2, "name");
-
-  lua_pushstring(L, decl.phys.c_str());
-  lua_setfield(L, -2, "phys");
-
-  lua_pushstring(L, decl.uniq.c_str());
-  lua_setfield(L, -2, "uniq");
-
-  lua_pushboolean(L, decl.writable);
-  lua_setfield(L, -2, "writable");
-
-  lua_pushboolean(L, decl.grab);
-  lua_setfield(L, -2, "grab");
-
-  return 1;
+  return tbl;
 }
