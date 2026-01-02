@@ -13,8 +13,7 @@
 
 // emit{ device=?, type=?, code=?, value=? }
 sol::object core_emit(sol::this_state ts, sol::table opts) {
-  lua_State *L = ts;
-  sol::state_view lua(L);
+  sol::state_view lua(ts);
 
   // device (optional)
   sol::optional<std::string> dev_id_opt = opts["device"];
@@ -64,8 +63,7 @@ sol::object core_emit(sol::this_state ts, sol::table opts) {
 
 // syn_report([device])
 sol::object core_syn_report(sol::this_state ts, sol::optional<std::string> dev_id_opt) {
-  lua_State *L = ts;
-  sol::state_view lua(L);
+  sol::state_view lua(ts);
 
   if (dev_id_opt) {
     const std::string &dev_id = *dev_id_opt;
@@ -86,8 +84,7 @@ sol::object core_syn_report(sol::this_state ts, sol::optional<std::string> dev_i
 // tick(ms, callback)
 // callback = string name OR function
 sol::object core_tick(sol::this_state ts, int ms, sol::object cb_obj) {
-  lua_State *L = ts;
-  sol::state_view lua(L);
+  sol::state_view lua(ts);
 
   // tick(0) with no callback → stop all
   if (ms == 0 && cb_obj.is<sol::nil_t>()) {
@@ -101,10 +98,8 @@ sol::object core_tick(sol::this_state ts, int ms, sol::object cb_obj) {
     key.name = cb_obj.as<std::string>();
     key.is_function = false;
   } else if (cb_obj.is<sol::function>()) {
-    sol::function fn = cb_obj.as<sol::function>();
-    fn.push();  // push function onto stack
-    key.ref = luaL_ref(L, LUA_REGISTRYINDEX);
     key.is_function = true;
+    key.fn = cb_obj.as<sol::function>();
   } else {
     throw sol::error("tick callback must be string or function");
   }
@@ -114,23 +109,15 @@ sol::object core_tick(sol::this_state ts, int ms, sol::object cb_obj) {
 
   // If ms == 0, we were just canceling
   if (ms == 0) {
-    if (key.is_function && key.ref != LUA_NOREF) {
-      luaL_unref(L, LUA_REGISTRYINDEX, key.ref);
-    }
     return sol::make_object(lua, sol::lua_nil);
   }
 
   // Schedule new repeating timer
   int fd = aelkey_state.scheduler->schedule(ms, key);
   if (fd < 0) {
-    // schedule failed; clean up
-    if (key.is_function && key.ref != LUA_NOREF) {
-      luaL_unref(L, LUA_REGISTRYINDEX, key.ref);
-    }
     return sol::make_object(lua, sol::lua_nil);
   }
 
-  // feature parity: no handle returned
   return sol::make_object(lua, sol::lua_nil);
 }
 
