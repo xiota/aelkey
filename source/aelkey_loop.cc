@@ -9,60 +9,60 @@
 #include <libevdev/libevdev-uinput.h>
 #include <libudev.h>
 #include <libusb-1.0/libusb.h>
-#include <lua.hpp>
 #include <sys/epoll.h>
 #include <sys/timerfd.h>
 #include <unistd.h>
 
+#include <sol/sol.hpp>
+
 #include "aelkey_device.h"
 #include "aelkey_state.h"
 #include "device_gatt.h"
+#include "device_input.h"
 #include "device_udev.h"
-#include "luacompat.h"
 
-static void dispatch_hidraw(lua_State *L, int fd_ready, InputCtx &ctx) {
+static void dispatch_hidraw(sol::this_state ts, int fd_ready, InputCtx &ctx) {
+  sol::state_view lua(ts);
+
   uint8_t buf[4096];
   ssize_t r = read(fd_ready, buf, sizeof(buf));
 
-  if (!ctx.decl.callback_events.empty()) {
-    lua_getglobal(L, ctx.decl.callback_events.c_str());
-    if (lua_isfunction(L, -1)) {
-      lua_newtable(L);
+  if (ctx.decl.callback_events.empty()) {
+    return;
+  }
 
-      lua_pushstring(L, ctx.decl.id.c_str());
-      lua_setfield(L, -2, "device");
+  sol::object obj = lua[ctx.decl.callback_events];
+  if (!obj.is<sol::function>()) {
+    return;
+  }
 
-      if (r > 0) {
-        lua_pushlstring(L, (const char *)buf, r);
-        lua_setfield(L, -2, "data");
+  sol::function cb = obj.as<sol::function>();
 
-        lua_pushinteger(L, r);
-        lua_setfield(L, -2, "size");
+  sol::table tbl = lua.create_table();
+  tbl["device"] = ctx.decl.id;
 
-        lua_pushstring(L, "ok");
-        lua_setfield(L, -2, "status");
-      } else if (r == 0) {
-        // EOF / disconnect
-        lua_pushstring(L, "disconnect");
-        lua_setfield(L, -2, "status");
-      } else {
-        // error
-        lua_pushstring(L, strerror(errno));
-        lua_setfield(L, -2, "status");
-      }
+  if (r > 0) {
+    tbl["data"] = std::string(reinterpret_cast<const char *>(buf), static_cast<std::size_t>(r));
+    tbl["size"] = static_cast<int>(r);
+    tbl["status"] = std::string("ok");
+  } else if (r == 0) {
+    tbl["status"] = std::string("disconnect");
+  } else {
+    tbl["status"] = std::string(strerror(errno));
+  }
 
-      if (lua_pcall(L, 1, 0, 0) != LUA_OK) {
-        std::string msg = std::format("Lua hidraw callback error: {}", lua_tostring(L, -1));
-        lua_warning(L, msg.c_str(), 0);
-        lua_pop(L, 1);
-      }
-    } else {
-      lua_pop(L, 1);
-    }
+  sol::protected_function pf = cb;
+  sol::protected_function_result res = pf(tbl);
+  if (!res.valid()) {
+    sol::error err = res;
+    std::string msg = std::format("Lua hidraw callback error: {}", err.what());
+    std::fprintf(stderr, "%s\n", msg.c_str());
   }
 }
 
-static void dispatch_evdev(lua_State *L, InputCtx &ctx) {
+static void dispatch_evdev(sol::this_state ts, InputCtx &ctx) {
+  sol::state_view lua(ts);
+
   if (!ctx.idev) {
     return;
   }
@@ -83,52 +83,38 @@ static void dispatch_evdev(lua_State *L, InputCtx &ctx) {
       // On SYN_REPORT, flush frame to callback_events
       if (ev.type == EV_SYN && ev.code == SYN_REPORT) {
         if (!ctx.decl.callback_events.empty()) {
-          lua_getglobal(L, ctx.decl.callback_events.c_str());
-          if (lua_isfunction(L, -1)) {
-            // Build events array
-            lua_newtable(L);
+          sol::object obj = lua[ctx.decl.callback_events];
+          if (obj.is<sol::function>()) {
+            sol::function cb = obj.as<sol::function>();
+
+            sol::table events_tbl = lua.create_table();
             int idx = 1;
             for (const auto &e : frame) {
-              lua_newtable(L);
+              sol::table evt = lua.create_table();
 
-              lua_pushstring(L, ctx.decl.id.c_str());
-              lua_setfield(L, -2, "device");
+              evt["device"] = ctx.decl.id;
 
               const char *tname = libevdev_event_type_get_name(e.type);
               const char *cname = libevdev_event_code_get_name(e.type, e.code);
 
-              lua_pushstring(L, tname ? tname : "");
-              lua_setfield(L, -2, "type_name");
+              evt["type_name"] = std::string(tname ? tname : "");
+              evt["code_name"] = std::string(cname ? cname : "");
+              evt["type"] = e.type;
+              evt["code"] = e.code;
+              evt["value"] = e.value;
+              evt["sec"] = static_cast<int>(e.time.tv_sec);
+              evt["usec"] = static_cast<int>(e.time.tv_usec);
 
-              lua_pushstring(L, cname ? cname : "");
-              lua_setfield(L, -2, "code_name");
-
-              lua_pushinteger(L, e.type);
-              lua_setfield(L, -2, "type");
-
-              lua_pushinteger(L, e.code);
-              lua_setfield(L, -2, "code");
-
-              lua_pushinteger(L, e.value);
-              lua_setfield(L, -2, "value");
-
-              lua_pushinteger(L, e.time.tv_sec);
-              lua_setfield(L, -2, "sec");
-
-              lua_pushinteger(L, e.time.tv_usec);
-              lua_setfield(L, -2, "usec");
-
-              lua_rawseti(L, -2, idx++);
+              events_tbl[idx++] = evt;
             }
 
-            if (lua_pcall(L, 1, 0, 0) != LUA_OK) {
-              std::string msg =
-                  std::format("Lua event callback error: {}", lua_tostring(L, -1));
-              lua_warning(L, msg.c_str(), 0);
-              lua_pop(L, 1);
+            sol::protected_function pf = cb;
+            sol::protected_function_result res = pf(events_tbl);
+            if (!res.valid()) {
+              sol::error err = res;
+              std::string msg = std::format("Lua event callback error: {}", err.what());
+              std::fprintf(stderr, "%s\n", msg.c_str());
             }
-          } else {
-            lua_pop(L, 1);
           }
         }
         frame.clear();
@@ -145,21 +131,24 @@ static void dispatch_evdev(lua_State *L, InputCtx &ctx) {
   }
 }
 
-int lua_stop(lua_State *L) {
+sol::object loop_stop(sol::this_state ts) {
+  sol::state_view lua(ts);
   aelkey_state.loop_should_stop = true;
-  return 0;
+  return sol::make_object(lua, sol::nil);
 }
 
-void handle_signal(int sig) {
+void handle_signal(int /*sig*/) {
   aelkey_state.loop_should_stop = true;
 }
 
-int lua_start(lua_State *L) {
+sol::object loop_start(sol::this_state ts) {
+  sol::state_view lua(ts);
+
   if (aelkey_state.active_mode == AelkeyState::ActiveMode::DAEMON) {
-    return luaL_error(L, "cannot start event loop while daemon is running");
+    throw sol::error("cannot start event loop while daemon is running");
   } else if (aelkey_state.active_mode == AelkeyState::ActiveMode::LOOP) {
-    lua_warning(L, "event loop is already running", 0);
-    return 1;
+    std::fprintf(stderr, "event loop is already running\n");
+    return sol::make_object(lua, false);
   }
 
   aelkey_state.aelkey_set_mode(AelkeyState::ActiveMode::LOOP);
@@ -169,8 +158,8 @@ int lua_start(lua_State *L) {
   std::signal(SIGINT, handle_signal);   // interactive interrupt (Ctrl+C)
   std::signal(SIGTERM, handle_signal);  // termination request (kill, systemd stop)
 
-  // open inputs and outputs tables
-  lua_open_device(L);
+  // open inputs and outputs tables (open all devices)
+  device_open(ts, sol::optional<std::string>{});  // equivalent to old lua_open_device(L)
 
   // Blocking epoll loop
   constexpr int MAX_EVENTS = 64;
@@ -197,14 +186,14 @@ int lua_start(lua_State *L) {
         if (rc != 0) {
           std::string msg =
               std::format("libusb_handle_events error: {}", libusb_error_name(rc));
-          lua_warning(L, msg.c_str(), 0);
+          std::fprintf(stderr, "%s\n", msg.c_str());
         }
         continue;  // handled; go to next epoll event
       }
 
       // D-Bus GATT notifications
       if (fd_ready == aelkey_state.g_dbus_fd) {
-        dispatch_gatt(L);
+        dispatch_gatt(ts);
         continue;
       }
 
@@ -218,13 +207,14 @@ int lua_start(lua_State *L) {
         const char *action = udev_device_get_action(dev);
         if (action) {
           if (strcmp(action, "add") == 0) {
-            handle_udev_add(L, dev);
+            handle_udev_add(ts, dev);
           } else if (strcmp(action, "remove") == 0) {
-            handle_udev_remove(L, dev);
+            handle_udev_remove(ts, dev);
           }
         }
 
         udev_device_unref(dev);
+        continue;
       }
 
       // timerfd ticks
@@ -249,7 +239,7 @@ int lua_start(lua_State *L) {
       if ((evmask & (EPOLLHUP | EPOLLERR)) != 0) {
         InputDecl decl = detach_input_device(ctx_ptr->decl.id);
         if (!decl.id.empty()) {
-          notify_state_change(L, decl, "remove");
+          notify_state_change(ts, decl, "remove");
         }
         continue;
       }
@@ -258,9 +248,9 @@ int lua_start(lua_State *L) {
       }
 
       if (ctx_ptr->decl.type == "hidraw") {
-        dispatch_hidraw(L, fd_ready, *ctx_ptr);
+        dispatch_hidraw(ts, fd_ready, *ctx_ptr);
       } else if (ctx_ptr->decl.type == "evdev") {
-        dispatch_evdev(L, *ctx_ptr);
+        dispatch_evdev(ts, *ctx_ptr);
       }
     }
   }
@@ -326,6 +316,5 @@ int lua_start(lua_State *L) {
   // Reset mode
   aelkey_state.aelkey_set_mode(AelkeyState::ActiveMode::NONE);
 
-  lua_pushboolean(L, 1);
-  return 1;
+  return sol::make_object(lua, true);
 }

@@ -1,6 +1,6 @@
 #pragma once
 
-#include <lua.hpp>
+#include <sol/sol.hpp>
 
-int lua_start(lua_State *L);
-int lua_stop(lua_State *L);
+sol::object loop_start(sol::this_state ts);
+sol::object loop_stop(sol::this_state ts);
