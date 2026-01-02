@@ -4,7 +4,7 @@
 #include <unordered_map>
 #include <vector>
 
-#include <lua.hpp>
+#include <sol/sol.hpp>
 
 #include "device_input.h"
 
@@ -12,7 +12,10 @@ void ensure_gatt_initialized();
 
 InputCtx attach_gatt_device(const InputDecl &decl);
 void detach_gatt_device(InputCtx &ctx);
-void dispatch_gatt(lua_State *L);
+
+// Lua: dispatch_gatt()
+// Ret: nil
+void dispatch_gatt(sol::this_state ts);
 
 std::string match_gatt_device(
     const InputDecl &decl,

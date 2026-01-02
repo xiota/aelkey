@@ -7,10 +7,10 @@
 #include <vector>
 
 #include <dbus/dbus.h>
+#include <sol/sol.hpp>
 #include <sys/epoll.h>
 
 #include "aelkey_state.h"
-#include "luacompat.h"
 
 static void start_notify(DBusConnection *conn, const std::string &char_path) {
   DBusMessage *msg = dbus_message_new_method_call(
@@ -443,7 +443,9 @@ void detach_gatt_device(InputCtx &ctx) {
   std::cerr << "Detached GATT characteristic: " << ctx.decl.devnode << std::endl;
 }
 
-static void process_one_gatt_message(lua_State *L, DBusMessage *msg) {
+static void process_one_gatt_message(sol::this_state ts, DBusMessage *msg) {
+  sol::state_view lua(ts);
+
   const char *path = dbus_message_get_path(msg);
   if (!path) {
     return;
@@ -506,32 +508,26 @@ static void process_one_gatt_message(lua_State *L, DBusMessage *msg) {
     }
 
     if (!ctx.decl.callback_events.empty()) {
-      lua_getglobal(L, ctx.decl.callback_events.c_str());
-      if (lua_isfunction(L, -1)) {
-        lua_newtable(L);
+      sol::object obj = lua[ctx.decl.callback_events];
+      if (!obj.is<sol::function>()) {
+        continue;
+      }
 
-        lua_pushstring(L, ctx.decl.id.c_str());
-        lua_setfield(L, -2, "device");
+      sol::function cb = obj.as<sol::function>();
 
-        lua_pushstring(L, path);
-        lua_setfield(L, -2, "path");
+      sol::table tbl = lua.create_table();
+      tbl["device"] = ctx.decl.id;
+      tbl["path"] = std::string(path);
+      tbl["data"] = std::string(reinterpret_cast<const char *>(bytes.data()), bytes.size());
+      tbl["size"] = static_cast<int>(bytes.size());
+      tbl["status"] = std::string("ok");
 
-        lua_pushlstring(L, reinterpret_cast<const char *>(bytes.data()), bytes.size());
-        lua_setfield(L, -2, "data");
-
-        lua_pushinteger(L, bytes.size());
-        lua_setfield(L, -2, "size");
-
-        lua_pushstring(L, "ok");
-        lua_setfield(L, -2, "status");
-
-        if (lua_pcall(L, 1, 0, 0) != LUA_OK) {
-          std::string emsg = std::format("Lua gatt_callback error: {}", lua_tostring(L, -1));
-          lua_warning(L, emsg.c_str(), 0);
-          lua_pop(L, 1);
-        }
-      } else {
-        lua_pop(L, 1);
+      sol::protected_function pf = cb;
+      sol::protected_function_result res = pf(tbl);
+      if (!res.valid()) {
+        sol::error err = res;
+        std::string emsg = std::format("Lua gatt_callback error: {}", err.what());
+        std::fprintf(stderr, "%s\n", emsg.c_str());
       }
     }
 
@@ -539,7 +535,7 @@ static void process_one_gatt_message(lua_State *L, DBusMessage *msg) {
   }
 }
 
-void dispatch_gatt(lua_State *L) {
+void dispatch_gatt(sol::this_state ts) {
   DBusConnection *conn = aelkey_state.g_dbus_conn;
   if (!conn) {
     return;
@@ -555,7 +551,7 @@ void dispatch_gatt(lua_State *L) {
       break;
     }
 
-    process_one_gatt_message(L, msg);
+    process_one_gatt_message(ts, msg);
     dbus_message_unref(msg);
   }
 }
