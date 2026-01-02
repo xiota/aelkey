@@ -3,7 +3,7 @@
 #include <ctime>
 
 #include <libevdev/libevdev-uinput.h>
-#include <lua.hpp>
+#include <sol/sol.hpp>
 #include <sys/epoll.h>
 #include <sys/timerfd.h>
 #include <unistd.h>
@@ -11,119 +11,137 @@
 #include "aelkey_state.h"
 #include "tick_scheduler.h"
 
-int lua_emit(lua_State *L) {
-  luaL_checktype(L, 1, LUA_TTABLE);
+// emit{ device=?, type=?, code=?, value=? }
+sol::object core_emit(sol::this_state ts, sol::table opts) {
+  lua_State *L = ts;
+  sol::state_view lua(L);
 
-  const char *dev_id = nullptr;
-  int type = 0, code = 0, value = 0;
+  // device (optional)
+  sol::optional<std::string> dev_id_opt = opts["device"];
+  const char *dev_id = dev_id_opt ? dev_id_opt->c_str() : nullptr;
 
-  lua_getfield(L, 1, "device");
-  if (lua_isstring(L, -1)) {
-    dev_id = lua_tostring(L, -1);
+  // type
+  int type = 0;
+  sol::object type_obj = opts["type"];
+  if (type_obj.is<int>()) {
+    type = type_obj.as<int>();
+  } else if (type_obj.is<std::string>()) {
+    std::string tname = type_obj.as<std::string>();
+    type = libevdev_event_type_from_name(tname.c_str());
   }
-  lua_pop(L, 1);
 
-  // TYPE
-  lua_getfield(L, 1, "type");
-  if (lua_isnumber(L, -1)) {
-    type = lua_tointeger(L, -1);
-  } else if (lua_isstring(L, -1)) {
-    const char *tname = lua_tostring(L, -1);
-    type = libevdev_event_type_from_name(tname);
+  // code
+  int code = 0;
+  sol::object code_obj = opts["code"];
+  if (code_obj.is<int>()) {
+    code = code_obj.as<int>();
+  } else if (code_obj.is<std::string>()) {
+    std::string cname = code_obj.as<std::string>();
+    code = libevdev_event_code_from_name(type, cname.c_str());
   }
-  lua_pop(L, 1);
 
-  // CODE
-  lua_getfield(L, 1, "code");
-  if (lua_isnumber(L, -1)) {
-    code = lua_tointeger(L, -1);
-  } else if (lua_isstring(L, -1)) {
-    const char *cname = lua_tostring(L, -1);
-    code = libevdev_event_code_from_name(type, cname);
-  }
-  lua_pop(L, 1);
+  // value (required)
+  int value = opts.get<int>("value");
 
-  lua_getfield(L, 1, "value");
-  value = luaL_checkinteger(L, -1);
-  lua_pop(L, 1);
-
+  // device selection logic
   if (!dev_id) {
     if (aelkey_state.uinput_devices.size() == 1) {
       auto it = aelkey_state.uinput_devices.begin();
       libevdev_uinput_write_event(it->second, type, code, value);
     } else {
-      return luaL_error(L, "emit requires 'device' when multiple output devices are present");
+      throw sol::error("emit requires 'device' when multiple output devices are present");
     }
   } else {
     auto it = aelkey_state.uinput_devices.find(dev_id);
     if (it == aelkey_state.uinput_devices.end()) {
-      return luaL_error(L, "Unknown device id: %s", dev_id);
+      throw sol::error("Unknown device id: " + std::string(dev_id));
     }
     libevdev_uinput_write_event(it->second, type, code, value);
   }
-  return 0;
+
+  return sol::make_object(lua, sol::lua_nil);
 }
 
-int lua_syn_report(lua_State *L) {
-  const char *dev_id = luaL_optstring(L, 1, nullptr);
-  if (dev_id) {
+// syn_report([device])
+sol::object core_syn_report(sol::this_state ts, sol::optional<std::string> dev_id_opt) {
+  lua_State *L = ts;
+  sol::state_view lua(L);
+
+  if (dev_id_opt) {
+    const std::string &dev_id = *dev_id_opt;
     auto it = aelkey_state.uinput_devices.find(dev_id);
-    if (it != aelkey_state.uinput_devices.end()) {
-      libevdev_uinput_write_event(it->second, EV_SYN, SYN_REPORT, 0);
-    } else {
-      return luaL_error(L, "Unknown device id: %s", dev_id);
+    if (it == aelkey_state.uinput_devices.end()) {
+      throw sol::error("Unknown device id: " + dev_id);
     }
+    libevdev_uinput_write_event(it->second, EV_SYN, SYN_REPORT, 0);
   } else {
     for (auto &kv : aelkey_state.uinput_devices) {
       libevdev_uinput_write_event(kv.second, EV_SYN, SYN_REPORT, 0);
     }
   }
-  return 0;
+
+  return sol::make_object(lua, sol::lua_nil);
 }
 
-// Assume aelkey_state.scheduler is a TickScheduler*
-int lua_tick(lua_State *L) {
-  int ms = luaL_checkinteger(L, 1);
+// tick(ms, callback)
+// callback = string name OR function
+sol::object core_tick(sol::this_state ts, int ms, sol::object cb_obj) {
+  lua_State *L = ts;
+  sol::state_view lua(L);
 
-  // Case: tick(0) with no callback → stop all
-  if (ms == 0 && lua_gettop(L) < 2) {
+  // tick(0) with no callback → stop all
+  if (ms == 0 && cb_obj.is<sol::nil_t>()) {
     aelkey_state.scheduler->cancel_all();
-    return 0;
+    return sol::make_object(lua, sol::lua_nil);
   }
 
-  // Parse callback key (string name OR function)
+  // Parse callback key
   TickCb key{};
-  if (lua_isstring(L, 2)) {
-    key.name = lua_tostring(L, 2);
+  if (cb_obj.is<std::string>()) {
+    key.name = cb_obj.as<std::string>();
     key.is_function = false;
-  } else if (lua_isfunction(L, 2)) {
-    lua_pushvalue(L, 2);
+  } else if (cb_obj.is<sol::function>()) {
+    sol::function fn = cb_obj.as<sol::function>();
+    fn.push();  // push function onto stack
     key.ref = luaL_ref(L, LUA_REGISTRYINDEX);
     key.is_function = true;
   } else {
-    return luaL_error(L, "tick callback must be string or function");
+    throw sol::error("tick callback must be string or function");
   }
 
-  // Cancel existing timer(s) for this callback key (feature parity)
+  // Cancel existing timers for this key
   aelkey_state.scheduler->cancel_matching(key);
 
-  // If ms == 0, we were just canceling (feature parity)
+  // If ms == 0, we were just canceling
   if (ms == 0) {
     if (key.is_function && key.ref != LUA_NOREF) {
       luaL_unref(L, LUA_REGISTRYINDEX, key.ref);
     }
-    return 0;
+    return sol::make_object(lua, sol::lua_nil);
   }
 
   // Schedule new repeating timer
   int fd = aelkey_state.scheduler->schedule(ms, key);
   if (fd < 0) {
-    // schedule failed; clean up function ref if any
+    // schedule failed; clean up
     if (key.is_function && key.ref != LUA_NOREF) {
       luaL_unref(L, LUA_REGISTRYINDEX, key.ref);
     }
-    return 0;
+    return sol::make_object(lua, sol::lua_nil);
   }
 
-  return 0;  // feature parity: no handle returned
+  // feature parity: no handle returned
+  return sol::make_object(lua, sol::lua_nil);
+}
+
+extern "C" int luaopen_aelkey_core(lua_State *L) {
+  sol::state_view lua(L);
+
+  sol::table mod = lua.create_table();
+
+  mod.set_function("emit", core_emit);
+  mod.set_function("syn_report", core_syn_report);
+  mod.set_function("tick", core_tick);
+
+  return sol::stack::push(L, mod);
 }

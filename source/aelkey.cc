@@ -51,11 +51,11 @@ extern "C" int luaopen_aelkey(lua_State *L) {
 
   sol::table mod = lua.create_table();
 
-  mod.set_function("emit", lua_emit);
+  mod.set_function("emit", core_emit);
   mod.set_function("start", lua_start);
   mod.set_function("stop", lua_stop);
-  mod.set_function("syn_report", lua_syn_report);
-  mod.set_function("tick", lua_tick);
+  mod.set_function("syn_report", core_syn_report);
+  mod.set_function("tick", core_tick);
 
   mod.set_function("open_device", lua_open_device);
   mod.set_function("close_device", lua_close_device);

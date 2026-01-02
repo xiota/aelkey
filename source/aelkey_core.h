@@ -3,14 +3,8 @@
 #include <filesystem>
 #include <string>
 
-#include <lua.hpp>
+#include <sol/sol.hpp>
 
-struct TickCallback {
-  bool is_function = false;
-  int ref = LUA_NOREF;
-  std::string name;
-};
-
-int lua_emit(lua_State *L);
-int lua_syn_report(lua_State *L);
-int lua_tick(lua_State *L);
+sol::object core_emit(sol::this_state ts, sol::table opts);
+sol::object core_syn_report(sol::this_state ts, sol::optional<std::string> dev_id);
+sol::object core_tick(sol::this_state ts, int ms, sol::object cb_obj);

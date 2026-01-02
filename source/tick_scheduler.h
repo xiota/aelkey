@@ -13,7 +13,7 @@
 
 struct TickCb {
   bool is_function = false;      // Lua function flag
-  int ref = LUA_NOREF;           // Lua registry reference
+  int ref;                       // Lua registry reference
   std::string name;              // Lua global name
   std::function<void()> native;  // native C++ callback
   bool oneshot = false;
