@@ -4,7 +4,7 @@
 #include <vector>
 
 #include <libevdev/libevdev-uinput.h>
-#include <lua.hpp>
+#include <sol/sol.hpp>
 
 struct OutputDecl {
   std::string id;
@@ -18,4 +18,10 @@ struct OutputDecl {
 };
 
 libevdev_uinput *create_output_device(const OutputDecl &out);
-void parse_outputs_from_lua(lua_State *L);
+
+// Parse global "outputs" table from the given Lua state.
+// Fills aelkey_state.output_decls.
+void parse_outputs_from_lua(sol::this_state ts);
+
+// Parse a single output declaration from a Lua table.
+OutputDecl parse_output(sol::table tbl);

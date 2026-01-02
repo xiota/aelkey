@@ -6,14 +6,12 @@
 #include <vector>
 
 #include <libevdev/libevdev.h>
-#include <lua.hpp>
+#include <sol/sol.hpp>
 
 #include "aelkey_state.h"
 #include "device_capabilities.h"
-#include "luacompat.h"
 
 // Provide sensible max ranges for ABS axes
-// device_output.cc
 static input_absinfo pos_default = { 0, 0, 65535, 0, 0, 0 };
 static input_absinfo stick_default = { 0, -32767, 32767, 0, 0, 0 };
 static input_absinfo trigger_default = { 0, 0, 255, 0, 0, 0 };
@@ -109,7 +107,8 @@ static const input_absinfo *default_absinfo_for(int code) {
   }
 }
 
-static void enable_codes(libevdev *dev, unsigned int type, const auto &codes) {
+template <typename Codes>
+static void enable_codes(libevdev *dev, unsigned int type, const Codes &codes) {
   libevdev_enable_event_type(dev, type);
   for (int code : codes) {
     const input_absinfo *absinfo = (type == EV_ABS) ? default_absinfo_for(code) : nullptr;
@@ -137,7 +136,7 @@ void enable_capability(libevdev *dev, const std::string &cap) {
     enable_codes(dev, evtype, std::vector{ code });
   } else {
     std::string msg = std::format("Unknown capability string: {}", cap);
-    lua_warning(aelkey_state.lua_vm, msg.c_str(), 0);
+    std::fprintf(stderr, "%s\n", msg.c_str());
   }
 }
 
@@ -199,7 +198,7 @@ libevdev_uinput *create_output_device(const OutputDecl &out) {
   int err = libevdev_uinput_create_from_device(dev, LIBEVDEV_UINPUT_OPEN_MANAGED, &uidev);
   if (err != 0) {
     std::string msg = std::format("Failed to create uinput device: {}", out.name);
-    lua_warning(aelkey_state.lua_vm, msg.c_str(), 0);
+    std::fprintf(stderr, "%s\n", msg.c_str());
     libevdev_free(dev);
     return nullptr;
   }
@@ -211,69 +210,89 @@ libevdev_uinput *create_output_device(const OutputDecl &out) {
   return uidev;
 }
 
-OutputDecl parse_output(lua_State *L, int index) {
+OutputDecl parse_output(sol::table tbl) {
   OutputDecl decl;
-  lua_pushnil(L);
-  while (lua_next(L, index)) {
-    std::string key = lua_tostring(L, -2);
-    if (key == "id" && lua_isstring(L, -1)) {
-      decl.id = lua_tostring(L, -1);
-    } else if (key == "type" && lua_isstring(L, -1)) {
-      decl.type = lua_tostring(L, -1);
-    } else if (key == "vendor" && lua_isnumber(L, -1)) {
-      decl.vendor = (int)lua_tointeger(L, -1);
-    } else if (key == "product" && lua_isnumber(L, -1)) {
-      decl.product = (int)lua_tointeger(L, -1);
-    } else if (key == "version" && lua_isnumber(L, -1)) {
-      decl.version = (int)lua_tointeger(L, -1);
-    } else if (key == "bus" && lua_isstring(L, -1)) {
-      std::string busstr = lua_tostring(L, -1);
-      if (busstr == "usb") {
-        decl.bus = BUS_USB;
-      } else if (busstr == "bluetooth") {
-        decl.bus = BUS_BLUETOOTH;
-      } else if (busstr == "pci") {
-        decl.bus = BUS_PCI;
-      }
-    } else if (key == "name" && lua_isstring(L, -1)) {
-      decl.name = lua_tostring(L, -1);
-    } else if (key == "capabilities" && lua_istable(L, -1)) {
-      int capIndex = lua_gettop(L);
-      lua_pushnil(L);
-      while (lua_next(L, capIndex)) {
-        if (lua_isstring(L, -1)) {
-          decl.capabilities.push_back(lua_tostring(L, -1));
-        }
-        lua_pop(L, 1);
-      }
-    }
-    lua_pop(L, 1);
+
+  // id
+  if (sol::object v = tbl["id"]; v.valid() && v.is<std::string>()) {
+    decl.id = v.as<std::string>();
   }
+
+  // type
+  if (sol::object v = tbl["type"]; v.valid() && v.is<std::string>()) {
+    decl.type = v.as<std::string>();
+  }
+
+  // vendor
+  if (sol::object v = tbl["vendor"]; v.valid() && v.is<int>()) {
+    decl.vendor = v.as<int>();
+  }
+
+  // product
+  if (sol::object v = tbl["product"]; v.valid() && v.is<int>()) {
+    decl.product = v.as<int>();
+  }
+
+  // version
+  if (sol::object v = tbl["version"]; v.valid() && v.is<int>()) {
+    decl.version = v.as<int>();
+  }
+
+  // bus
+  if (sol::object v = tbl["bus"]; v.valid() && v.is<std::string>()) {
+    std::string busstr = v.as<std::string>();
+    if (busstr == "usb") {
+      decl.bus = BUS_USB;
+    } else if (busstr == "bluetooth") {
+      decl.bus = BUS_BLUETOOTH;
+    } else if (busstr == "pci") {
+      decl.bus = BUS_PCI;
+    }
+  }
+
+  // name
+  if (sol::object v = tbl["name"]; v.valid() && v.is<std::string>()) {
+    decl.name = v.as<std::string>();
+  }
+
+  // capabilities
+  if (sol::object caps_obj = tbl["capabilities"];
+      caps_obj.valid() && caps_obj.is<sol::table>()) {
+    sol::table caps = caps_obj.as<sol::table>();
+    caps.for_each([&](sol::object /*k*/, sol::object v) {
+      if (v.is<std::string>()) {
+        decl.capabilities.push_back(v.as<std::string>());
+      }
+    });
+  }
+
   return decl;
 }
 
-void parse_outputs_from_lua(lua_State *L) {
+void parse_outputs_from_lua(sol::this_state ts) {
+  sol::state_view lua(ts);
+
   aelkey_state.output_decls.clear();
 
-  lua_getglobal(L, "outputs");
-  if (!lua_istable(L, -1)) {
-    lua_pop(L, 1);
+  sol::object obj = lua["outputs"];
+  if (!obj.valid() || !obj.is<sol::table>()) {
     return;
   }
 
-  lua_pushnil(L);
-  while (lua_next(L, -2) != 0) {
-    if (lua_istable(L, -1)) {
-      OutputDecl decl = parse_output(L, lua_gettop(L));
+  sol::table outputs = obj.as<sol::table>();
+
+  outputs.for_each([&](sol::object /*k*/, sol::object v) {
+    if (v.is<sol::table>()) {
+      OutputDecl decl = parse_output(v.as<sol::table>());
       if (!decl.id.empty()) {
         aelkey_state.output_decls.push_back(decl);
       }
     }
-    lua_pop(L, 1);  // pop value, keep key
-  }
-  lua_pop(L, 1);  // pop outputs table
+  });
 }
 
+// This helper is still pure C++ and can be used from elsewhere
+// once aelkey_state.output_decls has been filled.
 void create_outputs_from_decls() {
   for (auto &out : aelkey_state.output_decls) {
     if (out.id.empty()) {
