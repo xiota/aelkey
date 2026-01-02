@@ -4,169 +4,103 @@
 #include <iomanip>
 #include <sstream>
 
-#include <lua.hpp>
+#include <sol/sol.hpp>
 
-#include "luacompat.h"
-
-static inline uint32_t to_u32(lua_Integer x) {
-  return static_cast<uint32_t>(x);
-}
-
-// bitwise AND of all arguments
-static int lua_band(lua_State *L) {
-  int n = lua_gettop(L);
-  uint32_t r = to_u32(luaL_checkinteger(L, 1));
-  for (int i = 2; i <= n; i++) {
-    r &= to_u32(luaL_checkinteger(L, i));
+uint32_t band(sol::variadic_args va) {
+  uint32_t r = va.get<uint32_t>(0);
+  for (size_t i = 1; i < va.size(); ++i) {
+    r &= va.get<uint32_t>(i);
   }
-  lua_pushinteger(L, static_cast<lua_Integer>(r));
-  return 1;
+  return r;
 }
 
-// bitwise OR of all arguments
-static int lua_bor(lua_State *L) {
-  int n = lua_gettop(L);
+uint32_t bor(sol::variadic_args va) {
   uint32_t r = 0;
-  for (int i = 1; i <= n; i++) {
-    r |= to_u32(luaL_checkinteger(L, i));
+  for (auto v : va) {
+    r |= v.as<uint32_t>();
   }
-  lua_pushinteger(L, static_cast<lua_Integer>(r));
-  return 1;
+  return r;
 }
 
-// bitwise XOR of all arguments
-static int lua_bxor(lua_State *L) {
-  int n = lua_gettop(L);
+uint32_t bxor(sol::variadic_args va) {
   uint32_t r = 0;
-  for (int i = 1; i <= n; i++) {
-    r ^= to_u32(luaL_checkinteger(L, i));
+  for (auto v : va) {
+    r ^= v.as<uint32_t>();
   }
-  lua_pushinteger(L, static_cast<lua_Integer>(r));
-  return 1;
+  return r;
 }
 
-// bitwise NOT of one argument
-static int lua_bnot(lua_State *L) {
-  uint32_t x = to_u32(luaL_checkinteger(L, 1));
-  lua_pushinteger(L, static_cast<lua_Integer>(~x));
-  return 1;
+uint32_t bnot(uint32_t x) {
+  return ~x;
 }
 
-// logical left shift (mask count to 0–31)
-static int lua_lshift(lua_State *L) {
-  uint32_t x = to_u32(luaL_checkinteger(L, 1));
-  int n = luaL_checkinteger(L, 2) & 31;  // mask to 0–31
-  lua_pushinteger(L, static_cast<lua_Integer>(x << n));
-  return 1;
+uint32_t lshift(uint32_t x, int n) {
+  return x << (n & 31);
 }
 
-// logical right shift (mask count to 0–31)
-static int lua_rshift(lua_State *L) {
-  uint32_t x = to_u32(luaL_checkinteger(L, 1));
-  int n = luaL_checkinteger(L, 2) & 31;  // mask to 0–31
-  lua_pushinteger(L, static_cast<lua_Integer>(x >> n));
-  return 1;
+uint32_t rshift(uint32_t x, int n) {
+  return x >> (n & 31);
 }
 
-// arithmetic right shift (preserves sign bit)
-static int lua_arshift(lua_State *L) {
-  int32_t x = static_cast<int32_t>(luaL_checkinteger(L, 1));
-  int n = luaL_checkinteger(L, 2) & 31;  // mask to 0–31
-  lua_pushinteger(L, static_cast<lua_Integer>(x >> n));
-  return 1;
+int32_t arshift(int32_t x, int n) {
+  return x >> (n & 31);
 }
 
-// rotate bits left by n (0–31)
-static int lua_rol(lua_State *L) {
-  uint32_t x = to_u32(luaL_checkinteger(L, 1));
-  int n = luaL_checkinteger(L, 2) & 31;
-  uint32_t r = (x << n) | (x >> (32 - n));
-  lua_pushinteger(L, static_cast<lua_Integer>(r));
-  return 1;
+uint32_t rol(uint32_t x, int n) {
+  n &= 31;
+  return (x << n) | (x >> (32 - n));
 }
 
-// rotate bits right by n (0–31)
-static int lua_ror(lua_State *L) {
-  uint32_t x = to_u32(luaL_checkinteger(L, 1));
-  int n = luaL_checkinteger(L, 2) & 31;
-  uint32_t r = (x >> n) | (x << (32 - n));
-  lua_pushinteger(L, static_cast<lua_Integer>(r));
-  return 1;
+uint32_t ror(uint32_t x, int n) {
+  n &= 31;
+  return (x >> n) | (x << (32 - n));
 }
 
-// Convert a 32‑bit integer to a hex string.
-// Args:
-//   1: value (forced into signed 32‑bit range via tobit)
-//   2: width (optional, default = 8 digits, zero‑padded)
-//   3: case flag (optional, -1 = lowercase [default], 1 = uppercase)
-// Returns: string representation of the value in hex
-static int lua_tohex(lua_State *L) {
-  int32_t x = static_cast<int32_t>(luaL_checkinteger(L, 1));
-  int width = luaL_optinteger(L, 2, 8);
-  int caseflag = luaL_optinteger(L, 3, -1);  // -1 = lowercase, 1 = uppercase
-
+std::string tohex(int32_t x, int width = 8, int caseflag = -1) {
   std::ostringstream oss;
   oss << std::hex << std::setw(width) << std::setfill('0');
-
   if (caseflag == 1) {
     oss << std::uppercase;
-  } else {
-    oss << std::nouppercase;
   }
-
   oss << static_cast<uint32_t>(x);
-  lua_pushstring(L, oss.str().c_str());
-  return 1;
+  return oss.str();
 }
 
-// byte‑swap 32‑bit value (endian reversal)
-static int lua_bswap(lua_State *L) {
-  uint32_t x = to_u32(luaL_checkinteger(L, 1));
-  uint32_t r = ((x & 0x000000FF) << 24) | ((x & 0x0000FF00) << 8) | ((x & 0x00FF0000) >> 8) |
-               ((x & 0xFF000000) >> 24);
-  lua_pushinteger(L, static_cast<lua_Integer>(r));
-  return 1;
+uint32_t bswap(uint32_t x) {
+  return ((x & 0x000000FF) << 24) | ((x & 0x0000FF00) << 8) | ((x & 0x00FF0000) >> 8) |
+         ((x & 0xFF000000) >> 24);
 }
 
-// force value into signed 32‑bit range
-static int lua_tobit(lua_State *L) {
-  int32_t x = static_cast<int32_t>(luaL_checkinteger(L, 1));
-  lua_pushinteger(L, static_cast<lua_Integer>(x));
-  return 1;
+int32_t tobit(int32_t x) {
+  return x;
 }
 
-int luaopen_aelkey_bit(lua_State *L) {
-  // If running under LuaJIT, return the built-in bit library
-  lua_getglobal(L, "jit");
-  if (!lua_isnil(L, -1)) {
-    lua_pop(L, 1);  // pop jit
-    // require("bit") and return it
-    lua_getglobal(L, "require");
-    lua_pushliteral(L, "bit");
-    lua_call(L, 1, 1);
-    return 1;
+extern "C" int luaopen_aelkey_bit(lua_State *L) {
+  sol::state_view lua(L);
+
+  // LuaJIT fallback: return the built-in bit module
+  sol::object jit = lua["jit"];
+  if (jit.valid() && jit.get_type() == sol::type::table) {
+    sol::function require = lua["require"];
+    sol::object bit = require("bit");
+    return sol::stack::push(L, bit);
   }
-  lua_pop(L, 1);  // pop nil
 
-  // Otherwise return C implementation
-  // clang-format off
-  static const luaL_Reg funcs[] = {
-    {"band", lua_band},
-    {"bor", lua_bor},
-    {"bxor", lua_bxor},
-    {"bnot", lua_bnot},
-    {"lshift", lua_lshift},
-    {"rshift", lua_rshift},
-    {"arshift", lua_arshift},
-    {"rol", lua_rol},
-    {"ror", lua_ror},
-    {"tohex", lua_tohex},
-    {"bswap", lua_bswap},
-    {"tobit", lua_tobit},
-    {nullptr, nullptr}
-  };
-  // clang-format on
+  // Build module table
+  sol::table mod = lua.create_table();
 
-  luaL_newlib(L, funcs);
-  return 1;
+  mod.set_function("band", band);
+  mod.set_function("bor", bor);
+  mod.set_function("bxor", bxor);
+  mod.set_function("bnot", bnot);
+  mod.set_function("lshift", lshift);
+  mod.set_function("rshift", rshift);
+  mod.set_function("arshift", arshift);
+  mod.set_function("rol", rol);
+  mod.set_function("ror", ror);
+  mod.set_function("tohex", tohex);
+  mod.set_function("bswap", bswap);
+  mod.set_function("tobit", tobit);
+
+  return sol::stack::push(L, mod);
 }
