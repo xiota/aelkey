@@ -87,6 +87,34 @@ void handle_udev_add(sol::this_state ts, struct udev_device *dev) {
     return;
   }
 
+  // watchlist, notify only
+  for (auto &entry : aelkey_state.watch_map) {
+    for (auto &decl : entry.second) {
+      std::string matched = match_device(decl);
+
+      if ((decl.type == "evdev" && std::string(subsystem) == "input") ||
+          (decl.type == "hidraw" && std::string(subsystem) == "hidraw")) {
+        if (matched == devnode) {
+          decl.devnode = devnode;
+          decl.callback_state = aelkey_state.callback_watchlist;
+          notify_state_change(ts, decl, "add");
+        }
+      } else if (decl.type == "libusb" && std::string(subsystem) == "usb") {
+        const char *syspath = udev_device_get_syspath(dev);
+        if (!syspath) {
+          continue;
+        }
+
+        if (matched == std::string(syspath)) {
+          decl.devnode = syspath;
+          decl.callback_state = aelkey_state.callback_watchlist;
+          notify_state_change(ts, decl, "add");
+        }
+      }
+    }
+  }
+
+  // normal devices, attach and notify
   for (auto &decl : aelkey_state.input_decls) {
     // For all types, ask match_device to resolve the identifier.
     std::string matched = match_device(decl);
@@ -136,6 +164,32 @@ void handle_udev_remove(sol::this_state ts, struct udev_device *dev) {
     return;
   }
 
+  // watchlist, notify only
+  for (auto &entry : aelkey_state.watch_map) {
+    for (auto &decl : entry.second) {
+      if (decl.type == "libusb" && std::string(subsystem) == "usb") {
+        const char *syspath = udev_device_get_syspath(dev);
+        if (!syspath) {
+          continue;
+        }
+
+        if (decl.devnode == std::string(syspath)) {
+          decl.callback_state = aelkey_state.callback_watchlist;
+          notify_state_change(ts, decl, "remove");
+          decl.devnode.clear();
+        }
+      } else if ((decl.type == "evdev" && std::string(subsystem) == "input") ||
+                 (decl.type == "hidraw" && std::string(subsystem) == "hidraw")) {
+        if (decl.devnode == devnode) {
+          decl.callback_state = aelkey_state.callback_watchlist;
+          notify_state_change(ts, decl, "remove");
+          decl.devnode.clear();
+        }
+      }
+    }
+  }
+
+  // normal devices, detach and notify
   for (auto &decl : aelkey_state.input_decls) {
     if (decl.type == "libusb" && std::string(subsystem) == "usb") {
       const char *syspath = udev_device_get_syspath(dev);
