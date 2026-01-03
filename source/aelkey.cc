@@ -27,6 +27,7 @@ struct CModule {
 // clang-format off
 constexpr ScriptModule script_modules[] = {
   { "click", aelkey_click_script },
+  { "log", aelkey_log_script },
 };
 
 constexpr CModule c_modules[] = {
