@@ -6,11 +6,29 @@
 #include "device_input.h"
 #include "lua_scripts.h"
 
+// set_callback(cb)
+// Returns true on success, false on invalid input
+sol::object daemon_set_callback(sol::this_state ts, sol::object cb_obj) {
+  sol::state_view lua(ts);
+
+  if (cb_obj.is<std::string>()) {
+    aelkey_state.callback_watchlist = cb_obj.as<std::string>();
+    return sol::make_object(lua, true);
+  }
+
+  if (cb_obj.is<sol::nil_t>()) {
+    aelkey_state.callback_watchlist.clear();
+    return sol::make_object(lua, true);
+  }
+
+  std::fprintf(stderr, "aelkey.daemon: set_callback expects string or nil\n");
+  return sol::make_object(lua, false);
+}
+
 // watch(ref, decls)
 // No return value
 sol::object daemon_watch(sol::this_state ts, const std::string &ref, sol::table decls_tbl) {
-  lua_State *L = ts;
-  sol::state_view lua(L);
+  sol::state_view lua(ts);
 
   std::vector<InputDecl> decls;
 
@@ -20,12 +38,14 @@ sol::object daemon_watch(sol::this_state ts, const std::string &ref, sol::table 
     if (entry.is<sol::table>()) {
       sol::table t = entry.as<sol::table>();
       InputDecl decl = parse_input(t);
+      decl.callback_events.clear();
+      decl.callback_state.clear();
       decls.push_back(decl);
     }
   }
 
   aelkey_state.watch_map[ref] = decls;
-  return sol::make_object(lua, sol::lua_nil);
+  return sol::nil;
 }
 
 // unwatch(ref)
@@ -35,14 +55,13 @@ sol::object daemon_unwatch(sol::this_state ts, const std::string &ref) {
   if (it != aelkey_state.watch_map.end()) {
     aelkey_state.watch_map.erase(it);
   }
-  return sol::make_object(ts, sol::lua_nil);
+  return sol::nil;
 }
 
 // watchlist()
 // Returns array of reference strings
 sol::object daemon_watchlist(sol::this_state ts) {
-  lua_State *L = ts;
-  sol::state_view lua(L);
+  sol::state_view lua(ts);
 
   sol::table t = lua.create_table();
 
@@ -59,6 +78,7 @@ extern "C" int luaopen_aelkey_daemon(lua_State *L) {
 
   sol::table mod = lua.create_table();
 
+  mod.set_function("set_callback", daemon_set_callback);
   mod.set_function("watch", daemon_watch);
   mod.set_function("unwatch", daemon_unwatch);
   mod.set_function("watchlist", daemon_watchlist);
