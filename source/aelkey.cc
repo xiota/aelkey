@@ -40,11 +40,7 @@ constexpr CModule c_modules[] = {
 };
 // clang-format on
 
-}  // namespace
-
-extern "C" int luaopen_aelkey(lua_State *L) {
-  sol::state_view lua(L);
-
+sol::table load_aelkey(sol::state_view lua) {
   sol::table mod = lua.create_table();
 
   // Core functions
@@ -76,8 +72,8 @@ extern "C" int luaopen_aelkey(lua_State *L) {
   // C modules
   for (auto &cm : c_modules) {
     try {
-      cm.open_func(L);
-      sol::table module = sol::stack::pop<sol::table>(L);
+      cm.open_func(lua.lua_state());
+      sol::table module = sol::stack::pop<sol::table>(lua.lua_state());
       mod[cm.name] = module;
     } catch (const sol::error &err) {
       throw sol::error(std::string("aelkey: C module '") + cm.name + "' failed: " + err.what());
@@ -88,5 +84,34 @@ extern "C" int luaopen_aelkey(lua_State *L) {
     }
   }
 
-  return sol::stack::push(L, mod);
+  return mod;
+}
+
+}  // namespace
+
+extern "C" int luaopen_aelkey(lua_State *L) {
+  sol::state_view lua(L);
+
+  try {
+    // Block root access
+    if (geteuid() == 0) {
+      const char *allow = std::getenv("AELKEY_ALLOW_ROOT");
+      if (!allow || allow[0] == '\0') {
+        throw sol::error("aelkey: do not run as root.");
+      }
+    }
+
+    // Normal module creation
+    sol::table mod = load_aelkey(lua);
+    return sol::stack::push(lua, mod);
+  } catch (const sol::error &err) {
+    // Turn any sol::error into a real Lua error with a message
+    return luaL_error(L, "%s", err.what());
+  } catch (const std::exception &e) {
+    // Catch other std exceptions too, just in case
+    return luaL_error(L, "aelkey: C++ exception: %s", e.what());
+  } catch (...) {
+    // Absolute last-resort safety net
+    return luaL_error(L, "aelkey: unknown C++ exception");
+  }
 }
