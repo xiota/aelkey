@@ -26,6 +26,7 @@ struct AelkeyState {
   std::unordered_map<std::string, std::vector<struct input_event>> frames;
 
   bool loop_should_stop = false;
+  int sigint = 0;
 
   std::vector<InputDecl> input_decls;
   std::vector<OutputDecl> output_decls;

@@ -133,8 +133,9 @@ sol::object loop_stop(sol::this_state ts) {
   return sol::make_object(lua, sol::nil);
 }
 
-void handle_signal(int /*sig*/) {
+void handle_signal(int sig) {
   aelkey_state.loop_should_stop = true;
+  aelkey_state.sigint = sig;
 }
 
 sol::object loop_start(sol::this_state ts) {
@@ -296,6 +297,15 @@ sol::object loop_start(sol::this_state ts) {
   if (aelkey_state.g_libusb) {
     libusb_exit(aelkey_state.g_libusb);
     aelkey_state.g_libusb = nullptr;
+  }
+
+  if (aelkey_state.sigint != 0) {
+    std::signal(SIGHUP, SIG_DFL);
+    std::signal(SIGINT, SIG_DFL);
+    std::signal(SIGTERM, SIG_DFL);
+
+    int sig = aelkey_state.sigint;
+    std::raise(sig);
   }
 
   return sol::make_object(lua, true);
