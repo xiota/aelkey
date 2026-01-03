@@ -25,10 +25,7 @@ struct AelkeyState {
   std::unordered_map<std::string, InputCtx> input_map;
   std::unordered_map<std::string, std::vector<struct input_event>> frames;
 
-  enum ActiveMode { NONE, LOOP, DAEMON };
-  ActiveMode active_mode = NONE;
   bool loop_should_stop = false;
-  bool daemon_should_stop = false;
 
   std::vector<InputDecl> input_decls;
   std::vector<OutputDecl> output_decls;
@@ -43,26 +40,6 @@ struct AelkeyState {
 
   DBusConnection *g_dbus_conn = nullptr;
   int g_dbus_fd = -1;
-
-  void aelkey_set_mode(ActiveMode mode) {
-    switch (mode) {
-      case LOOP:
-        active_mode = LOOP;
-        loop_should_stop = false;
-        daemon_should_stop = true;
-        break;
-      case DAEMON:
-        active_mode = DAEMON;
-        daemon_should_stop = false;
-        loop_should_stop = true;
-        break;
-      default:
-        active_mode = NONE;
-        loop_should_stop = true;
-        daemon_should_stop = true;
-        break;
-    }
-  }
 };
 
 extern AelkeyState aelkey_state;

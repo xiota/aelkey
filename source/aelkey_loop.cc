@@ -140,15 +140,6 @@ void handle_signal(int /*sig*/) {
 sol::object loop_start(sol::this_state ts) {
   sol::state_view lua(ts);
 
-  if (aelkey_state.active_mode == AelkeyState::ActiveMode::DAEMON) {
-    throw sol::error("cannot start event loop while daemon is running");
-  } else if (aelkey_state.active_mode == AelkeyState::ActiveMode::LOOP) {
-    std::fprintf(stderr, "event loop is already running\n");
-    return sol::make_object(lua, false);
-  }
-
-  aelkey_state.aelkey_set_mode(AelkeyState::ActiveMode::LOOP);
-
   // signal handlers
   std::signal(SIGHUP, handle_signal);   // terminal hangup
   std::signal(SIGINT, handle_signal);   // interactive interrupt (Ctrl+C)
@@ -306,9 +297,6 @@ sol::object loop_start(sol::this_state ts) {
     libusb_exit(aelkey_state.g_libusb);
     aelkey_state.g_libusb = nullptr;
   }
-
-  // Reset mode
-  aelkey_state.aelkey_set_mode(AelkeyState::ActiveMode::NONE);
 
   return sol::make_object(lua, true);
 }
