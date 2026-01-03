@@ -26,26 +26,37 @@ sol::object daemon_set_callback(sol::this_state ts, sol::object cb_obj) {
 }
 
 // watch(ref, decls)
-// No return value
+// Returns number of valid decls added (0 if none)
 sol::object daemon_watch(sol::this_state ts, const std::string &ref, sol::table decls_tbl) {
   sol::state_view lua(ts);
 
-  std::vector<InputDecl> decls;
+  std::vector<InputDecl> valid_decls;
 
   int len = decls_tbl.size();
   for (int i = 1; i <= len; i++) {
     sol::object entry = decls_tbl[i];
-    if (entry.is<sol::table>()) {
-      sol::table t = entry.as<sol::table>();
-      InputDecl decl = parse_input(t);
+    if (!entry.is<sol::table>()) {
+      continue;
+    }
+
+    sol::table t = entry.as<sol::table>();
+    InputDecl decl = parse_input(t);
+
+    // Only allow udev-visible types
+    if (decl.type == "evdev" || decl.type == "hidraw" || decl.type == "libusb") {
       decl.callback_events.clear();
       decl.callback_state.clear();
-      decls.push_back(decl);
+      valid_decls.push_back(decl);
     }
   }
 
-  aelkey_state.watch_map[ref] = decls;
-  return sol::nil;
+  // Store only if at least one valid decl exists
+  if (!valid_decls.empty()) {
+    aelkey_state.watch_map[ref] = valid_decls;
+  }
+
+  // Return number of valid decls added
+  return sol::make_object(lua, static_cast<int>(valid_decls.size()));
 }
 
 // unwatch(ref)
