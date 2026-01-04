@@ -72,7 +72,7 @@ shared_library(
   ],
   name_prefix: '',
   install: true,
-  install_dir: get_option('libdir') / 'lua/5.1'
+  install_dir: luajit_dep.get_variable('INSTALL_CMOD')
 )
 
 install_data(
