@@ -68,7 +68,6 @@ default_css_h = configure_file(
 # source
 src_files = files(
   'source/aelkey.cc',
-  'source/aelkey_bit.cc',
   'source/aelkey_core.cc',
   'source/aelkey_daemon.cc',
   'source/aelkey_device.cc',

@@ -1,6 +1,5 @@
 #include <sol/sol.hpp>
 
-#include "aelkey_bit.h"
 #include "aelkey_core.h"
 #include "aelkey_daemon.h"
 #include "aelkey_device.h"
@@ -31,7 +30,6 @@ constexpr ScriptModule script_modules[] = {
 };
 
 constexpr CModule c_modules[] = {
-  { "bit", luaopen_aelkey_bit },
   { "daemon", luaopen_aelkey_daemon },
   { "gatt", luaopen_aelkey_gatt },
   { "hid", luaopen_aelkey_hid },
