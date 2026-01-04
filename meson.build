@@ -3,7 +3,7 @@ project(
   license: 'GPL-3.0-or-later',
   version: files('version.txt'),
   meson_version: '>=0.61',
-  default_options: ['buildtype=release', 'prefix=/usr', 'cpp_std=c++20'],
+  default_options: ['buildtype=debugoptimized', 'prefix=/usr', 'cpp_std=c++20'],
 )
 
 # depends
@@ -15,7 +15,7 @@ libusb_dep = dependency('libusb-1.0')
 # lua and sol
 lua_version = get_option('lua_version')
 if lua_version == 'auto'
-  foreach lv : ['lua5.4', 'luajit', 'lua5.3', 'lua5.2', 'lua5.1']
+  foreach lv : ['lua5.5', 'lua5.4', 'luajit', 'lua5.3', 'lua5.2', 'lua5.1']
     lua_dep = dependency(lv, required: false)
     if lua_dep.found()
       lua_version = lv
