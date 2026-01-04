@@ -1,4 +1,11 @@
 option(
+  'lua_version',
+  type: 'string',
+  value: 'auto',
+  description: 'Lua version to use (auto, luajit, lua5.4)'
+)
+
+option(
   'sysusersdir',
   type: 'string',
   value: '',
