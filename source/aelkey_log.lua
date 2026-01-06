@@ -97,6 +97,23 @@ function M.set_level(level)
   end
 end
 
+function M.is_enabled(level)
+  local lvl = levels[level]
+  local cur = levels[current_level]
+
+  if not lvl then
+    log_write("error", "unknown log level: " .. tostring(level))
+    return
+  end
+
+  if not cur then
+    log_write("error", "invalid current log level: " .. tostring(current_level))
+    return
+  end
+
+  return lvl <= cur
+end
+
 function M.error(...) log_dispatch("error", ...) end
 function M.warn(...)  log_dispatch("warn",  ...) end
 function M.info(...)  log_dispatch("info",  ...) end
