@@ -29,6 +29,7 @@ constexpr ScriptModule script_modules[] = {
   { "edge", aelkey_edge_script },
   { "log", aelkey_log_script },
   { "sequence", aelkey_sequence_script },
+  { "ticker", aelkey_ticker_script },
 };
 
 constexpr CModule c_modules[] = {
