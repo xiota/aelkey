@@ -27,6 +27,7 @@ struct CModule {
 constexpr ScriptModule script_modules[] = {
   { "click", aelkey_click_script },
   { "edge", aelkey_edge_script },
+  { "filter", aelkey_filter_script },
   { "log", aelkey_log_script },
   { "sequence", aelkey_sequence_script },
   { "ticker", aelkey_ticker_script },
