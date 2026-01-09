@@ -32,6 +32,7 @@ constexpr ScriptModule script_modules[] = {
   { "mouse", aelkey_mouse_script },
   { "sequence", aelkey_sequence_script },
   { "ticker", aelkey_ticker_script },
+  { "touchpad", aelkey_touchpad_script },
 };
 
 constexpr CModule c_modules[] = {
