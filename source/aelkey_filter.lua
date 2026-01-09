@@ -172,6 +172,10 @@ function M.ease_smoothstep(t)
   return t * t * (3 - 2 * t)
 end
 
+function M.ease_smootherstep(t)
+  return t * t * t * (t * (6 * t - 15) + 10)
+end
+
 -- Invert a monotonic easing function via binary search
 local function invert_ease(fn, y, inv_eps)
   local lo, hi = 0, 1
