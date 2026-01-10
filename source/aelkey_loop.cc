@@ -94,10 +94,8 @@ static void dispatch_evdev(sol::this_state ts, InputCtx &ctx) {
               const char *tname = libevdev_event_type_get_name(e.type);
               const char *cname = libevdev_event_code_get_name(e.type, e.code);
 
-              evt["type_name"] = std::string(tname ? tname : "");
-              evt["code_name"] = std::string(cname ? cname : "");
-              evt["type"] = e.type;
-              evt["code"] = e.code;
+              evt["type"] = std::string(tname ? tname : "");
+              evt["code"] = std::string(cname ? cname : "");
               evt["value"] = e.value;
               evt["sec"] = static_cast<int>(e.time.tv_sec);
               evt["usec"] = static_cast<int>(e.time.tv_usec);

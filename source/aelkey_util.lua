@@ -6,8 +6,8 @@ function M.dump_events(events)
 
   for i, ev in ipairs(events) do
     out[#out+1] = string.format(
-      "[%d] device=%s type=%s(%s) code=%s(%s) value=%s",
-      i, ev.device, ev.type_name, ev.type, ev.code_name, ev.code, ev.value
+      "[%d] device=%s type=%s code=%s value=%s",
+      i, ev.device, ev.type, ev.code, ev.value
     )
   end
 

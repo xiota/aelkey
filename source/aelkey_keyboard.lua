@@ -77,13 +77,13 @@ local IDENTITY_MAP = {
 }
 
 -- Internal helpers
-local function append_event(self, type_name, code_name, value)
+local function append_event(self, type, code, value)
   local buf = self.buffer
   local n = #buf + 1
   buf[n] = buf[n] or {}
   local e = buf[n]
-  e.type = type_name
-  e.code = code_name
+  e.type = type
+  e.code = code
   e.value = value
 end
 
@@ -91,26 +91,28 @@ end
 -- Returns:
 --   mapped_codes: table of code strings, or nil to suppress
 --   is_fn_placeholder: true if this mapping should toggle Fn mode only
-local function resolve_mapping(self, code_name)
+local function resolve_mapping(self, code)
   local mapped
 
   if self.fn_down then
-    mapped = self.modifier_map[code_name]
-             or ( IDENTITY_MAP[code_name] and { code_name })
-             or self.fn_map[code_name]
+    mapped = self.modifier_map[code]
+             or ( IDENTITY_MAP[code] and { code })
+             or self.fn_map[code]
   else
-    mapped = self.modifier_map[code_name]
-             or self.normal_map[code_name]
-             or { code_name }
+    mapped = self.modifier_map[code]
+             or self.normal_map[code]
+             or code
   end
 
   -- Empty table explicitly means "suppress"
-  if type(mapped) == "table" and #mapped == 0 then
+  if mapped and type(mapped) == "table" and #mapped == 0 then
+    aelkey.log.trace("aelkey.keyboard: unmapped, %s", code)
     return nil, false
   end
 
   -- Normalize single-string mapping to table
   if type(mapped) == "string" then
+    aelkey.log.trace("aelkey.keyboard: fallback, %s", code)
     mapped = { mapped }
   end
 
@@ -132,23 +134,23 @@ local function feed_events(self, events)
   end
 
   for _, e in ipairs(events) do
-    local type_name = e.type_name or e.type
-    local code_name = e.code_name or e.code
+    local type = e.type
+    local code = e.code
     local value = e.value
 
     -- Only handle EV_KEY presses/releases (value 0/1)
-    if type_name == KEY_EVENT_TYPE and (value == 0 or value == 1) then
+    if type == KEY_EVENT_TYPE and (value == 0 or value == 1) then
       if value == 1 then
         -- Key press
-        local mapped, is_fn_placeholder = resolve_mapping(self, code_name)
+        local mapped, is_fn_placeholder = resolve_mapping(self, code)
 
         if is_fn_placeholder then
           -- Toggle Fn mode on press; remember for release
           self.fn_down = true
-          self.active_keys[code_name] = { FN_CODE } -- marker
+          self.active_keys[code] = { FN_CODE } -- marker
         elseif mapped then
           -- Remember mapping used at press time
-          self.active_keys[code_name] = mapped
+          self.active_keys[code] = mapped
 
           -- Emit press events in order
           for _, out_code in ipairs(mapped) do
@@ -161,8 +163,8 @@ local function feed_events(self, events)
 
       else
         -- Key release
-        local mapped = self.active_keys[code_name]
-        self.active_keys[code_name] = nil
+        local mapped = self.active_keys[code]
+        self.active_keys[code] = nil
 
         if mapped and mapped[1] == FN_CODE and #mapped == 1 then
           -- Fn placeholder release: turn off Fn mode
@@ -179,7 +181,7 @@ local function feed_events(self, events)
         end
       end
 
-    elseif type_name == "EV_MSC" or type_name == "EV_SYN" or value == 2 then
+    elseif type == "EV_MSC" or type == "EV_SYN" or value == 2 then
       -- Ignore misc, sync, and auto-repeat by default.
       -- If needed later, this can be made configurable.
     else
@@ -254,7 +256,7 @@ local function new(opts)
 
     -- State
     fn_down = false,        -- Fn mode flag
-    active_keys = {},       -- physical_code_name → mapped_codes table
+    active_keys = {},       -- physical_code → mapped_codes table
     buffer = {},            -- list of { type, code, value }
   }
 
