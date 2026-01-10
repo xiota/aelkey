@@ -31,7 +31,7 @@
     tp.begin_frame()
 
     tp.feed_contact{
-      id = 3,            -- optional (auto‑assigned if missing)
+      slot = 0,          -- required
       x = 12000,         -- required
       y = 8000,          -- required
       touching = true,   -- optional (inferred if missing)
@@ -39,6 +39,7 @@
       palm = false,      -- optional
       button_left = false,
       button_right = false,
+      button_middle = false,
     }
 
     tp.end_frame()
@@ -67,54 +68,31 @@ local function new_tracking_id(self)
   return id
 end
 
-local function assign_slot(self, tracking_id)
-  -- Reuse existing slot if present
-  for slot, tid in pairs(self.slots) do
-    if tid == tracking_id then
-      return slot
-    end
-  end
-
-  -- Find free slot
-  for slot = 0, self.max_slots - 1 do
-    if self.slots[slot] == nil then
-      self.slots[slot] = tracking_id
-      return slot
-    end
-  end
-
-  -- No free slot; overwrite slot 0 (fallback)
-  self.slots[0] = tracking_id
-  return 0
+local function queue_event(self, ev)
+  self.events[#self.events + 1] = ev
 end
 
 local function clear_missing_contacts(self)
   for tracking_id, c in pairs(self.contacts) do
     if not c._seen_this_frame then
-      -- Mark as ended
+      -- Mark as ended, but DO NOT delete yet
+      c._ended = true
       self.ended[#self.ended + 1] = tracking_id
-
-      -- Remove from slot map
-      for slot, tid in pairs(self.slots) do
-        if tid == tracking_id then
-          self.slots[slot] = nil
-        end
-      end
-
-      -- Remove from contacts
-      self.contacts[tracking_id] = nil
     end
   end
 end
 
 local function update_primary(self)
-  -- Primary = lowest slot with active contact
+  -- Primary = lowest slot with active contact (not ended)
   local best_slot = nil
   for slot = 0, self.max_slots - 1 do
     local tid = self.slots[slot]
-    if tid and self.contacts[tid] then
-      best_slot = slot
-      break
+    if tid then
+      local c = self.contacts[tid]
+      if c and not c._ended and c.touching then
+        best_slot = slot
+        break
+      end
     end
   end
   self.primary = best_slot
@@ -124,6 +102,7 @@ end
 local function begin_frame(self)
   self.changed = {}
   self.ended = {}
+  self.events = {}
 
   -- Mark all contacts as unseen until feed_contact() updates them
   for _, c in pairs(self.contacts) do
@@ -143,15 +122,38 @@ local function feed_contact(self, contact)
     touching = not (contact.x == 0 and contact.y == 0)
   end
 
-  -- Determine tracking ID
-  local tid = contact.id
-  if not tid then
-    -- Auto‑assign synthetic ID
-    tid = new_tracking_id(self)
+  -- Determine tracking ID based on mode and slot
+  local tid
+  local slot
+
+  if self.mode == "multitouch" then
+    -- Determine slot (default to 0)
+    slot = contact.slot or 0
+    slot = math.floor(slot)
+
+    if slot < 0 or slot >= self.max_slots then
+      return -- invalid slot
+    end
+
+    -- Reuse existing tracking ID for this slot if present
+    tid = self.slots[slot]
+    if not tid then
+      -- New contact in this slot → allocate new tracking ID
+      tid = new_tracking_id(self)
+      self.slots[slot] = tid
+    end
+  else
+    -- Basic mode: single synthetic tracking ID
+    if not self._basic_tid then
+      self._basic_tid = new_tracking_id(self)
+    end
+    tid = self._basic_tid
   end
 
   -- Create or update contact entry
   local c = self.contacts[tid]
+  local is_new = false
+
   if not c then
     c = {
       id = tid,
@@ -162,12 +164,14 @@ local function feed_contact(self, contact)
       palm = contact.palm,
       button_left = contact.button_left,
       button_right = contact.button_right,
+      button_middle = contact.button_middle,
       _seen_this_frame = true,
+      _ended = false,
     }
     self.contacts[tid] = c
     self.changed[tid] = true
+    is_new = true
   else
-    -- Update existing
     if c.x ~= contact.x or c.y ~= contact.y or c.touching ~= touching then
       self.changed[tid] = true
     end
@@ -179,217 +183,259 @@ local function feed_contact(self, contact)
     c.palm = contact.palm
     c.button_left = contact.button_left
     c.button_right = contact.button_right
+    c.button_middle = contact.button_middle
     c._seen_this_frame = true
+    c._ended = false
   end
 
-  -- Assign slot (multitouch mode only)
-  if self.mode == "multitouch" then
-    assign_slot(self, tid)
+  -- Build MT events as contacts are received (multitouch mode only)
+  if self.mode == "multitouch" and touching then
+    -- Select slot
+    queue_event(self, {
+      type = "EV_ABS",
+      code = "ABS_MT_SLOT",
+      value = slot,
+    })
+
+    -- Tracking ID: for new contact or whenever we want to (keep it simple: always)
+    queue_event(self, {
+      type = "EV_ABS",
+      code = "ABS_MT_TRACKING_ID",
+      value = tid,
+    })
+
+    -- Position
+    queue_event(self, {
+      type = "EV_ABS",
+      code = "ABS_MT_POSITION_X",
+      value = c.x,
+    })
+    queue_event(self, {
+      type = "EV_ABS",
+      code = "ABS_MT_POSITION_Y",
+      value = c.y,
+    })
+
+    -- Tool type (finger=0, palm=2)
+    if c.palm ~= nil then
+      queue_event(self, {
+        type = "EV_ABS",
+        code = "ABS_MT_TOOL_TYPE",
+        value = c.palm and 2 or 0,
+      })
+    end
   end
 end
 
 local function end_frame(self)
-  -- Remove contacts not seen this frame
+  -- Mark contacts not seen this frame as ended
   clear_missing_contacts(self)
 
-  -- Update primary finger
-  update_primary(self)
-end
-
--- Event emission
-local function emit_basic(self, dev)
-  -- Basic mode: single contact only
-  local tid = next(self.contacts)
-  if not tid then
-    -- No contacts → release BTN_TOUCH
-    aelkey.emit{ device=dev, type="EV_KEY", code="BTN_TOUCH", value=0 }
-    aelkey.emit{ device=dev, type="EV_KEY", code="BTN_TOOL_FINGER", value=0 }
-    return
-  end
-
-  local c = self.contacts[tid]
-
-  -- BTN_TOUCH
-  aelkey.emit{
-    device = dev,
-    type = "EV_KEY",
-    code = "BTN_TOUCH",
-    value = c.touching and 1 or 0,
-  }
-
-  -- BTN_TOOL_FINGER
-  aelkey.emit{
-    device = dev,
-    type = "EV_KEY",
-    code = "BTN_TOOL_FINGER",
-    value = c.touching and 1 or 0,
-  }
-
-  -- ABS_X / ABS_Y
-  aelkey.emit{
-    device = dev,
-    type = "EV_ABS",
-    code = "ABS_X",
-    value = c.x,
-  }
-  aelkey.emit{
-    device = dev,
-    type = "EV_ABS",
-    code = "ABS_Y",
-    value = c.y,
-  }
-
-  -- Clickpad buttons (if present)
-  if c.button_left ~= nil then
-    aelkey.emit{
-      device = dev,
-      type = "EV_KEY",
-      code = "BTN_LEFT",
-      value = c.button_left and 1 or 0,
-    }
-  end
-  if c.button_right ~= nil then
-    aelkey.emit{
-      device = dev,
-      type = "EV_KEY",
-      code = "BTN_RIGHT",
-      value = c.button_right and 1 or 0,
-    }
-  end
-end
-
-local function emit_multitouch(self, dev)
-  local finger_count = 0
-
-  -- Emit MT slots
-  for slot = 0, self.max_slots - 1 do
-    local tid = self.slots[slot]
-    if tid then
-      local c = self.contacts[tid]
-
-      -- Select slot
-      aelkey.emit{
-        device = dev,
-        type = "EV_ABS",
-        code = "ABS_MT_SLOT",
-        value = slot,
-      }
-
-      if c then
-        finger_count = finger_count + 1
-
-        -- Tracking ID
-        aelkey.emit{
-          device = dev,
-          type = "EV_ABS",
-          code = "ABS_MT_TRACKING_ID",
-          value = tid,
-        }
-
-        -- Position
-        aelkey.emit{
-          device = dev,
-          type = "EV_ABS",
-          code = "ABS_MT_POSITION_X",
-          value = c.x,
-        }
-        aelkey.emit{
-          device = dev,
-          type = "EV_ABS",
-          code = "ABS_MT_POSITION_Y",
-          value = c.y,
-        }
-
-        -- Tool type (finger=0, palm=2)
-        if c.palm ~= nil then
-          aelkey.emit{
-            device = dev,
+  -- For multitouch: emit -1 tracking IDs for ended contacts, as if actually emitted
+  if self.mode == "multitouch" then
+    for _, tracking_id in ipairs(self.ended) do
+      -- Find the slot(s) for this tracking ID
+      for slot, tid in pairs(self.slots) do
+        if tid == tracking_id then
+          -- Select slot
+          queue_event(self, {
             type = "EV_ABS",
-            code = "ABS_MT_TOOL_TYPE",
-            value = c.palm and 2 or 0,
-          }
+            code = "ABS_MT_SLOT",
+            value = slot,
+          })
+          -- End contact in this slot
+          queue_event(self, {
+            type = "EV_ABS",
+            code = "ABS_MT_TRACKING_ID",
+            value = -1,
+          })
         end
-      else
-        -- Contact ended → tracking ID = -1
-        aelkey.emit{
-          device = dev,
-          type = "EV_ABS",
-          code = "ABS_MT_TRACKING_ID",
-          value = -1,
-        }
       end
     end
   end
 
+  -- Update primary finger (multitouch only)
+  if self.mode == "multitouch" then
+    update_primary(self)
+  else
+    self.primary = nil
+  end
+
+  -- Compute finger count and primary contact
+  local finger_count = 0
+  local primary_contact = nil
+
+  if self.mode == "multitouch" then
+    -- Count active contacts
+    for _, c in pairs(self.contacts) do
+      if not c._ended and c.touching then
+        finger_count = finger_count + 1
+      end
+    end
+
+    -- Primary contact from primary slot
+    if self.primary ~= nil then
+      local ptid = self.slots[self.primary]
+      if ptid then
+        local pc = self.contacts[ptid]
+        if pc and not pc._ended and pc.touching then
+          primary_contact = pc
+        end
+      end
+    end
+  else
+    -- Basic mode: single synthetic contact
+    local tid = self._basic_tid
+    if tid then
+      local c = self.contacts[tid]
+      if c and not c._ended and c.touching then
+        finger_count = 1
+        primary_contact = c
+      end
+    end
+  end
+
+  self.finger_count = finger_count
+
   -- BTN_TOUCH
-  aelkey.emit{
-    device = dev,
+  queue_event(self, {
     type = "EV_KEY",
     code = "BTN_TOUCH",
     value = (finger_count > 0) and 1 or 0,
-  }
+  })
 
-  -- BTN_TOOL_* based on finger count
-  local tool_code = "BTN_TOOL_FINGER"
-  if finger_count == 2 then tool_code = "BTN_TOOL_DOUBLETAP" end
-  if finger_count == 3 then tool_code = "BTN_TOOL_TRIPLETAP" end
-  if finger_count >= 4 then tool_code = "BTN_TOOL_QUADTAP" end
+  -- BTN_TOOL_* based on finger count, with state tracking
+  local desired_down = {}
 
-  aelkey.emit{
-    device = dev,
-    type = "EV_KEY",
-    code = tool_code,
-    value = (finger_count > 0) and 1 or 0,
-  }
+  if finger_count == 1 then
+    desired_down["BTN_TOOL_FINGER"] = true
+  elseif finger_count == 2 then
+    desired_down["BTN_TOOL_DOUBLETAP"] = true
+  elseif finger_count == 3 then
+    desired_down["BTN_TOOL_TRIPLETAP"] = true
+  elseif finger_count >= 4 then
+    desired_down["BTN_TOOL_QUADTAP"] = true
+  end
 
-  -- Primary ABS_X / ABS_Y
-  if self.primary then
-    local tid = self.slots[self.primary]
-    local c = self.contacts[tid]
-    if c then
-      aelkey.emit{
-        device = dev,
-        type = "EV_ABS",
-        code = "ABS_X",
-        value = c.x,
-      }
-      aelkey.emit{
-        device = dev,
-        type = "EV_ABS",
-        code = "ABS_Y",
-        value = c.y,
-      }
+  -- Release codes that are currently down but no longer desired
+  for code, _ in pairs(self.tool_keys_down) do
+    if not desired_down[code] then
+      queue_event(self, {
+        type  = "EV_KEY",
+        code  = code,
+        value = 0,
+      })
+      self.tool_keys_down[code] = nil
     end
+  end
+
+  -- Press codes that should be down but aren’t yet
+  for code, _ in pairs(desired_down) do
+    if not self.tool_keys_down[code] then
+      queue_event(self, {
+        type  = "EV_KEY",
+        code  = code,
+        value = 1,
+      })
+      self.tool_keys_down[code] = true
+    end
+  end
+
+  -- ABS_X / ABS_Y for primary contact (if any)
+  if primary_contact then
+    queue_event(self, {
+      type = "EV_ABS",
+      code = "ABS_X",
+      value = primary_contact.x,
+    })
+    queue_event(self, {
+      type = "EV_ABS",
+      code = "ABS_Y",
+      value = primary_contact.y,
+    })
   end
 
   -- Clickpad buttons (if present)
-  for _, c in pairs(self.contacts) do
-    if c.button_left ~= nil then
-      aelkey.emit{
-        device = dev,
-        type = "EV_KEY",
-        code = "BTN_LEFT",
-        value = c.button_left and 1 or 0,
-      }
+  local button_source = primary_contact
+
+  -- fallback: first active contact
+  if not button_source then
+    for _, c in pairs(self.contacts) do
+      if not c._ended then
+        button_source = c
+        break
+      end
     end
-    if c.button_right ~= nil then
-      aelkey.emit{
-        device = dev,
+  end
+
+  if button_source then
+    if button_source.button_left ~= nil then
+      local pressed = aelkey.edge.detect("_aelkey_touchpad_BTN_LEFT", button_source.button_left)
+      if pressed ~= nil then
+        queue_event(self, {
+          type = "EV_KEY",
+          code = "BTN_LEFT",
+          value = pressed and 1 or 0,
+        })
+      end
+    end
+    if button_source.button_right ~= nil then
+      local pressed = aelkey.edge.detect("_aelkey_touchpad_BTN_RIGHT", button_source.button_right)
+      if pressed ~= nil then
+        queue_event(self, {
         type = "EV_KEY",
         code = "BTN_RIGHT",
-        value = c.button_right and 1 or 0,
-      }
+          value = pressed and 1 or 0,
+        })
+      end
     end
-    break -- only primary contact's buttons matter
+    if button_source.button_middle ~= nil then
+      local pressed = aelkey.edge.detect("_aelkey_touchpad_BTN_MIDDLE", button_source.button_middle)
+      if pressed ~= nil then
+        queue_event(self, {
+        type = "EV_KEY",
+        code = "BTN_MIDDLE",
+          value = pressed and 1 or 0,
+        })
+      end
+    end
+  end
+
+  -- Cleanup ended contacts and slots AFTER queuing -1 events
+  for tracking_id, c in pairs(self.contacts) do
+    if c._ended then
+      -- remove slot(s)
+      for slot, tid in pairs(self.slots) do
+        if tid == tracking_id then
+          self.slots[slot] = nil
+        end
+      end
+      -- remove contact
+      self.contacts[tracking_id] = nil
+    end
   end
 end
 
-local function emit_events(self, dev)
-  if self.mode == "basic" then
-    emit_basic(self, dev)
-  else
-    emit_multitouch(self, dev)
+-- Event retrieval and emission
+local function get_pending_events(self)
+  local copy = {}
+  for i, ev in ipairs(self.events) do
+    local evcopy = {}
+    for k, v in pairs(ev) do
+      evcopy[k] = v
+    end
+    copy[i] = evcopy
   end
+  return copy
+end
+
+local function emit_events(self, dev)
+  for _, ev in ipairs(self.events) do
+    ev.device = dev
+    aelkey.emit(ev)
+  end
+  -- Clear after emitting
+  self.events = {}
 end
 
 -- Constructor
@@ -406,12 +452,16 @@ local function new(opts)
     changed = {},        -- tracking_id → true
     ended = {},          -- list of tracking_ids
     next_tracking_id = 1,
+
+    tool_keys_down = {}, -- code -> true if currently pressed
+    events = {},         -- accumulated events for current frame
   }
 
   -- Bind methods
   self.begin_frame = function() return begin_frame(self) end
   self.feed_contact = function(c) return feed_contact(self, c) end
   self.end_frame = function() return end_frame(self) end
+  self.get_pending_events = function() return get_pending_events(self) end
   self.emit_events = function(dev) return emit_events(self, dev) end
 
   return self
