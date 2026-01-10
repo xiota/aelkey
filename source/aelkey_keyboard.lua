@@ -117,7 +117,7 @@ local function resolve_mapping(self, code)
   end
 
   -- Fn placeholder: first mapped code is KEY_FN and used to toggle Fn mode
-  local is_fn_placeholder = (mapped[1] == FN_CODE and #mapped == 1)
+  local is_fn_placeholder = (mapped and mapped[1] == FN_CODE and #mapped == 1)
 
   return mapped, is_fn_placeholder
 end
