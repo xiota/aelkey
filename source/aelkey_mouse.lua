@@ -170,42 +170,58 @@ function M.emit_buttons(dev_id, report)
 end
 
 function M.emit_wheels(dev_id, report)
-  local emitted = false
   if not report then return false end
+  local emitted = false
 
   -- vertical wheel
-  local v = report.wheel_vert
-  if v and v ~= 0 then
+  local v_hr = report.wheel_vert_hr
+  local v    = report.wheel_vert
+
+  if v_hr and v_hr ~= 0 then
     emitted = true
+    aelkey.emit{
+      device = dev_id,
+      type   = events.wheel_vert_hr.type,
+      code   = events.wheel_vert_hr.code,
+      value  = v_hr,
+    }
+
+  elseif v and v ~= 0 then
+    emitted = true
+    -- synthesize HR event
+    M.emit_wheels(dev_id, { wheel_vert_hr = v * 120 })
+    -- emit standard wheel
     aelkey.emit{
       device = dev_id,
       type   = events.wheel_vert.type,
       code   = events.wheel_vert.code,
       value  = v,
     }
-    aelkey.emit{
-      device = dev_id,
-      type   = events.wheel_vert_hr.type,
-      code   = events.wheel_vert_hr.code,
-      value  = v * 120,
-    }
   end
 
   -- horizontal wheel
-  local h = report.wheel_horz
-  if h and h ~= 0 then
+  local h_hr = report.wheel_horz_hr
+  local h    = report.wheel_horz
+
+  if h_hr and h_hr ~= 0 then
     emitted = true
+    aelkey.emit{
+      device = dev_id,
+      type   = events.wheel_horz_hr.type,
+      code   = events.wheel_horz_hr.code,
+      value  = h_hr,
+    }
+
+  elseif h and h ~= 0 then
+    emitted = true
+    -- synthesize HR event (corrected variable)
+    M.emit_wheels(dev_id, { wheel_horz_hr = h * 120 })
+    -- emit standard wheel
     aelkey.emit{
       device = dev_id,
       type   = events.wheel_horz.type,
       code   = events.wheel_horz.code,
       value  = h,
-    }
-    aelkey.emit{
-      device = dev_id,
-      type   = events.wheel_horz_hr.type,
-      code   = events.wheel_horz_hr.code,
-      value  = h * 120,
     }
   end
 
