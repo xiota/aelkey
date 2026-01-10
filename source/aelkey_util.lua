@@ -14,6 +14,32 @@ function M.dump_events(events)
   return table.concat(out, "\n")
 end
 
+function M.dump_hex(data)
+  local bytes = {}
+
+  if type(data) == "string" then
+    -- Convert string → byte table
+    for i = 1, #data do
+      bytes[#bytes+1] = string.byte(data, i)
+    end
+  elseif type(data) == "table" then
+    -- Assume table of numbers
+    for i = 1, #data do
+      bytes[#bytes+1] = data[i]
+    end
+  else
+    return string.format("dump_hex: unsupported format, %s", type(data))
+  end
+
+  -- Format as hex
+  local out = {}
+  for i = 1, #bytes do
+    out[#out+1] = string.format("%02X", bytes[i])
+  end
+
+  return table.concat(out, " ")
+end
+
 function M.dump_raw(ev)
   local data = ev.data
   local len = #data
