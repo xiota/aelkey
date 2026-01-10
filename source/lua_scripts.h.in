@@ -19,6 +19,10 @@ constexpr const char *aelkey_filter_script = R"LUA(
 @AELKEY_FILTER_SCRIPT@
 )LUA";
 
+constexpr const char *aelkey_keyboard_script = R"LUA(
+@AELKEY_KEYBOARD_SCRIPT@
+)LUA";
+
 constexpr const char *aelkey_log_script = R"LUA(
 @AELKEY_LOG_SCRIPT@
 )LUA";
