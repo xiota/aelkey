@@ -159,6 +159,7 @@ local function feed_events(self, events)
         else
           -- mapped == nil → suppressed key
           -- Do nothing, do not track active_keys
+          aelkey.log.trace("aelkey.keyboard: ignored key %s", out_code)
         end
 
       else
@@ -177,15 +178,16 @@ local function feed_events(self, events)
           end
         else
           -- Untracked release:
-          -- Ignored
+          aelkey.log.trace("aelkey.keyboard: ignored key %s", out_code)
         end
       end
 
     elseif type == "EV_MSC" or type == "EV_SYN" or value == 2 then
       -- Ignore misc, sync, and auto-repeat by default.
-      -- If needed later, this can be made configurable.
+      aelkey.log.spam("aelkey.keyboard: unwanted event %s, %d", type, value)
     else
       -- Unknown or unsupported event type → ignore.
+      aelkey.log.spam("aelkey.keyboard: unknown event %s, %d", type, value)
     end
   end
 end
@@ -442,6 +444,15 @@ local prev_keys = {}   -- code → true
 -- Parse 8‑byte HID keyboard report (no RID)
 -- Returns list of EV_KEY events
 function parse_report(bytes)
+  if #bytes < 8 then
+    aelkey.log.error(
+      "aelkey.keyboard.parse_report: unexpected input (%d bytes): %s",
+      #bytes,
+      aelkey.util.dump_hex(bytes)
+    )
+    return
+  end
+
   local events = {}
 
   -- Decode modifiers
