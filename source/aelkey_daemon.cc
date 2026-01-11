@@ -10,14 +10,15 @@
 // Returns true on success, false on invalid input
 sol::object daemon_set_callback(sol::this_state ts, sol::object cb_obj) {
   sol::state_view lua(ts);
+  auto &state = AelkeyState::instance();
 
   if (cb_obj.is<std::string>()) {
-    aelkey_state.callback_watchlist = cb_obj.as<std::string>();
+    state.callback_watchlist = cb_obj.as<std::string>();
     return sol::make_object(lua, true);
   }
 
   if (cb_obj.is<sol::nil_t>()) {
-    aelkey_state.callback_watchlist.clear();
+    state.callback_watchlist.clear();
     return sol::make_object(lua, true);
   }
 
@@ -52,7 +53,8 @@ sol::object daemon_watch(sol::this_state ts, const std::string &ref, sol::table 
 
   // Store only if at least one valid decl exists
   if (!valid_decls.empty()) {
-    aelkey_state.watch_map[ref] = valid_decls;
+    auto &state = AelkeyState::instance();
+    state.watch_map[ref] = valid_decls;
   }
 
   // Return number of valid decls added
@@ -62,9 +64,10 @@ sol::object daemon_watch(sol::this_state ts, const std::string &ref, sol::table 
 // unwatch(ref)
 // No return value
 sol::object daemon_unwatch(sol::this_state ts, const std::string &ref) {
-  auto it = aelkey_state.watch_map.find(ref);
-  if (it != aelkey_state.watch_map.end()) {
-    aelkey_state.watch_map.erase(it);
+  auto &state = AelkeyState::instance();
+  auto it = state.watch_map.find(ref);
+  if (it != state.watch_map.end()) {
+    state.watch_map.erase(it);
   }
   return sol::nil;
 }
@@ -73,11 +76,12 @@ sol::object daemon_unwatch(sol::this_state ts, const std::string &ref) {
 // Returns array of reference strings
 sol::object daemon_watchlist(sol::this_state ts) {
   sol::state_view lua(ts);
+  auto &state = AelkeyState::instance();
 
   sol::table t = lua.create_table();
 
   int i = 1;
-  for (const auto &entry : aelkey_state.watch_map) {
+  for (const auto &entry : state.watch_map) {
     t[i++] = entry.first;
   }
 

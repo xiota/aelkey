@@ -269,7 +269,8 @@ OutputDecl parse_output(sol::table tbl) {
 void parse_outputs_from_lua(sol::this_state ts) {
   sol::state_view lua(ts);
 
-  aelkey_state.output_decls.clear();
+  auto &state = AelkeyState::instance();
+  state.output_decls.clear();
 
   sol::object obj = lua["outputs"];
   if (!obj.valid() || !obj.is<sol::table>()) {
@@ -282,7 +283,7 @@ void parse_outputs_from_lua(sol::this_state ts) {
     if (v.is<sol::table>()) {
       OutputDecl decl = parse_output(v.as<sol::table>());
       if (!decl.id.empty()) {
-        aelkey_state.output_decls.push_back(decl);
+        state.output_decls.push_back(decl);
       }
     }
   });
@@ -291,16 +292,17 @@ void parse_outputs_from_lua(sol::this_state ts) {
 // This helper is still pure C++ and can be used from elsewhere
 // once aelkey_state.output_decls has been filled.
 void create_outputs_from_decls() {
-  for (auto &out : aelkey_state.output_decls) {
+  auto &state = AelkeyState::instance();
+  for (auto &out : state.output_decls) {
     if (out.id.empty()) {
       continue;
     }
-    if (aelkey_state.uinput_devices.count(out.id)) {
+    if (state.uinput_devices.count(out.id)) {
       continue;
     }
     libevdev_uinput *uidev = create_output_device(out);
     if (uidev) {
-      aelkey_state.uinput_devices[out.id] = uidev;
+      state.uinput_devices[out.id] = uidev;
     }
   }
 }

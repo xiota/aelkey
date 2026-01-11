@@ -14,6 +14,7 @@
 // emit{ device=?, type=?, code=?, value=? }
 sol::object core_emit(sol::this_state ts, sol::table opts) {
   sol::state_view lua(ts);
+  auto &state = AelkeyState::instance();
 
   // device (optional)
   sol::optional<std::string> dev_id_opt = opts["device"];
@@ -44,15 +45,15 @@ sol::object core_emit(sol::this_state ts, sol::table opts) {
 
   // device selection logic
   if (!dev_id) {
-    if (aelkey_state.uinput_devices.size() == 1) {
-      auto it = aelkey_state.uinput_devices.begin();
+    if (state.uinput_devices.size() == 1) {
+      auto it = state.uinput_devices.begin();
       libevdev_uinput_write_event(it->second, type, code, value);
     } else {
       throw sol::error("emit requires 'device' when multiple output devices are present");
     }
   } else {
-    auto it = aelkey_state.uinput_devices.find(dev_id);
-    if (it == aelkey_state.uinput_devices.end()) {
+    auto it = state.uinput_devices.find(dev_id);
+    if (it == state.uinput_devices.end()) {
       throw sol::error("Unknown device id: " + std::string(dev_id));
     }
     libevdev_uinput_write_event(it->second, type, code, value);
@@ -64,16 +65,17 @@ sol::object core_emit(sol::this_state ts, sol::table opts) {
 // syn_report([device])
 sol::object core_syn_report(sol::this_state ts, sol::optional<std::string> dev_id_opt) {
   sol::state_view lua(ts);
+  auto &state = AelkeyState::instance();
 
   if (dev_id_opt) {
     const std::string &dev_id = *dev_id_opt;
-    auto it = aelkey_state.uinput_devices.find(dev_id);
-    if (it == aelkey_state.uinput_devices.end()) {
+    auto it = state.uinput_devices.find(dev_id);
+    if (it == state.uinput_devices.end()) {
       throw sol::error("Unknown device id: " + dev_id);
     }
     libevdev_uinput_write_event(it->second, EV_SYN, SYN_REPORT, 0);
   } else {
-    for (auto &kv : aelkey_state.uinput_devices) {
+    for (auto &kv : state.uinput_devices) {
       libevdev_uinput_write_event(kv.second, EV_SYN, SYN_REPORT, 0);
     }
   }
@@ -85,11 +87,12 @@ sol::object core_syn_report(sol::this_state ts, sol::optional<std::string> dev_i
 // callback = string name OR function
 sol::object core_tick(sol::this_state ts, int ms, sol::object cb_obj) {
   sol::state_view lua(ts);
+  auto &state = AelkeyState::instance();
 
   // tick(0, nil) → cancel all timers
   if (cb_obj.is<sol::nil_t>()) {
     if (ms == 0) {
-      aelkey_state.scheduler->cancel_all();
+      state.scheduler->cancel_all();
     }
     // nil callback with non-zero ms → do nothing
     return sol::lua_nil;
@@ -106,7 +109,7 @@ sol::object core_tick(sol::this_state ts, int ms, sol::object cb_obj) {
   }
 
   // Cancel existing timers for this key
-  aelkey_state.scheduler->cancel_matching(key);
+  state.scheduler->cancel_matching(key);
 
   // If ms == 0, we were just canceling
   if (ms == 0) {
@@ -114,7 +117,7 @@ sol::object core_tick(sol::this_state ts, int ms, sol::object cb_obj) {
   }
 
   // Schedule new repeating timer
-  int fd = aelkey_state.scheduler->schedule(ms, key);
+  int fd = state.scheduler->schedule(ms, key);
   if (fd < 0) {
     return sol::make_object(lua, sol::lua_nil);
   }

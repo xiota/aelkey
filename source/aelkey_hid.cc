@@ -15,8 +15,9 @@ sol::object hid_get_feature_report(sol::this_state ts, const std::string &id, in
   lua_State *L = ts;
   sol::state_view lua(L);
 
-  auto it = aelkey_state.input_map.find(id);
-  if (it == aelkey_state.input_map.end() || it->second.fd < 0) {
+  auto &state = AelkeyState::instance();
+  auto it = state.input_map.find(id);
+  if (it == state.input_map.end() || it->second.fd < 0) {
     return sol::make_object(lua, std::string());
   }
 
@@ -41,8 +42,9 @@ sol::object hid_get_report_descriptor(sol::this_state ts, const std::string &id)
   lua_State *L = ts;
   sol::state_view lua(L);
 
-  auto it = aelkey_state.input_map.find(id);
-  if (it == aelkey_state.input_map.end() || it->second.fd < 0) {
+  auto &state = AelkeyState::instance();
+  auto it = state.input_map.find(id);
+  if (it == state.input_map.end() || it->second.fd < 0) {
     return sol::make_object(lua, std::string());
   }
 
@@ -71,8 +73,9 @@ sol::object hid_read_input_report(sol::this_state ts, const std::string &id) {
   lua_State *L = ts;
   sol::state_view lua(L);
 
-  auto it = aelkey_state.input_map.find(id);
-  if (it == aelkey_state.input_map.end() || it->second.fd < 0) {
+  auto &state = AelkeyState::instance();
+  auto it = state.input_map.find(id);
+  if (it == state.input_map.end() || it->second.fd < 0) {
     return sol::make_object(lua, std::string());
   }
 
@@ -96,8 +99,9 @@ hid_send_feature_report(sol::this_state ts, const std::string &id, const std::st
   lua_State *L = ts;
   sol::state_view lua(L);
 
-  auto it = aelkey_state.input_map.find(id);
-  if (it == aelkey_state.input_map.end() || it->second.fd < 0) {
+  auto &state = AelkeyState::instance();
+  auto it = state.input_map.find(id);
+  if (it == state.input_map.end() || it->second.fd < 0) {
     return sol::make_object(lua, false);
   }
 
@@ -117,8 +121,9 @@ hid_send_output_report(sol::this_state ts, const std::string &id, const std::str
   lua_State *L = ts;
   sol::state_view lua(L);
 
-  auto it = aelkey_state.input_map.find(id);
-  if (it == aelkey_state.input_map.end() || it->second.fd < 0) {
+  auto &state = AelkeyState::instance();
+  auto it = state.input_map.find(id);
+  if (it == state.input_map.end() || it->second.fd < 0) {
     return sol::make_object(lua, false);
   }
 

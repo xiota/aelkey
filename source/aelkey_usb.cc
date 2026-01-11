@@ -131,8 +131,9 @@ sol::object usb_bulk_transfer(sol::this_state ts, sol::table opts) {
   // device id
   std::string dev_id = opts.get<std::string>("device");
 
-  auto it = aelkey_state.input_map.find(dev_id);
-  if (it == aelkey_state.input_map.end() || !it->second.usb_handle) {
+  auto &state = AelkeyState::instance();
+  auto it = state.input_map.find(dev_id);
+  if (it == state.input_map.end() || !it->second.usb_handle) {
     sol::table result = lua.create_table();
     result["device"] = dev_id;
     result["data"] = "";
@@ -205,8 +206,9 @@ sol::object usb_control_transfer(sol::this_state ts, sol::table opts) {
   // device id
   std::string dev_id = opts.get<std::string>("device");
 
-  auto it = aelkey_state.input_map.find(dev_id);
-  if (it == aelkey_state.input_map.end() || !it->second.usb_handle) {
+  auto &state = AelkeyState::instance();
+  auto it = state.input_map.find(dev_id);
+  if (it == state.input_map.end() || !it->second.usb_handle) {
     sol::table result = lua.create_table();
     result["device"] = dev_id;
     result["data"] = "";
@@ -304,8 +306,9 @@ sol::object usb_interrupt_transfer(sol::this_state ts, sol::table opts) {
   // device id
   std::string dev_id = opts.get<std::string>("device");
 
-  auto it = aelkey_state.input_map.find(dev_id);
-  if (it == aelkey_state.input_map.end() || !it->second.usb_handle) {
+  auto &state = AelkeyState::instance();
+  auto it = state.input_map.find(dev_id);
+  if (it == state.input_map.end() || !it->second.usb_handle) {
     sol::table result = lua.create_table();
     result["device"] = dev_id;
     result["data"] = "";
@@ -379,8 +382,9 @@ sol::object usb_submit_transfer(sol::this_state ts, sol::table opts) {
   // device id
   std::string dev_id = opts.get<std::string>("device");
 
-  auto it = aelkey_state.input_map.find(dev_id);
-  if (it == aelkey_state.input_map.end() || !it->second.usb_handle) {
+  auto &state = AelkeyState::instance();
+  auto it = state.input_map.find(dev_id);
+  if (it == state.input_map.end() || !it->second.usb_handle) {
     sol::table result = lua.create_table();
     result["device"] = dev_id;
     result["endpoint"] = opts.get<int>("endpoint");

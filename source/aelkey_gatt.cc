@@ -10,8 +10,9 @@
 
 // Lookup InputCtx by device id
 static InputCtx *get_ctx(sol::state_view lua, const std::string &dev_id) {
-  auto it = aelkey_state.input_map.find(dev_id);
-  if (it == aelkey_state.input_map.end()) {
+  auto &state = AelkeyState::instance();
+  auto it = state.input_map.find(dev_id);
+  if (it == state.input_map.end()) {
     throw sol::error("Unknown device id '" + dev_id + "'");
   }
   return &it->second;

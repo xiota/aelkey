@@ -36,27 +36,28 @@ static void stop_notify(DBusConnection *conn, const std::string &char_path) {
 }
 
 void ensure_gatt_initialized() {
-  if (aelkey_state.g_dbus_conn) {
+  auto &state = AelkeyState::instance();
+  if (state.g_dbus_conn) {
     return;
   }
 
-  aelkey_state.g_dbus_conn = dbus_bus_get(DBUS_BUS_SYSTEM, nullptr);
-  if (!aelkey_state.g_dbus_conn) {
+  state.g_dbus_conn = dbus_bus_get(DBUS_BUS_SYSTEM, nullptr);
+  if (!state.g_dbus_conn) {
     std::fprintf(stderr, "GATT: failed to connect to system D-Bus\n");
     return;
   }
 
-  dbus_connection_set_exit_on_disconnect(aelkey_state.g_dbus_conn, false);
+  dbus_connection_set_exit_on_disconnect(state.g_dbus_conn, false);
 
-  if (!dbus_connection_get_unix_fd(aelkey_state.g_dbus_conn, &aelkey_state.g_dbus_fd)) {
+  if (!dbus_connection_get_unix_fd(state.g_dbus_conn, &state.g_dbus_fd)) {
     std::fprintf(stderr, "GATT: failed to get D-Bus fd\n");
     return;
   }
 
   struct epoll_event ev{};
   ev.events = EPOLLIN;
-  ev.data.fd = aelkey_state.g_dbus_fd;
-  if (epoll_ctl(aelkey_state.epfd, EPOLL_CTL_ADD, aelkey_state.g_dbus_fd, &ev) != 0) {
+  ev.data.fd = state.g_dbus_fd;
+  if (epoll_ctl(state.epfd, EPOLL_CTL_ADD, state.g_dbus_fd, &ev) != 0) {
     std::fprintf(stderr, "GATT: epoll_ctl failed for D-Bus fd\n");
   }
 }
@@ -86,12 +87,13 @@ static GattPathType classify_gatt_path(const std::string &path) {
 }
 
 static DBusMessage *get_managed_objects() {
+  auto &state = AelkeyState::instance();
   DBusMessage *msg = dbus_message_new_method_call(
       "org.bluez", "/", "org.freedesktop.DBus.ObjectManager", "GetManagedObjects"
   );
 
   DBusMessage *resp =
-      dbus_connection_send_with_reply_and_block(aelkey_state.g_dbus_conn, msg, -1, nullptr);
+      dbus_connection_send_with_reply_and_block(state.g_dbus_conn, msg, -1, nullptr);
 
   dbus_message_unref(msg);
   return resp;
@@ -362,7 +364,8 @@ InputCtx attach_gatt_device(const InputDecl &decl) {
   InputCtx ctx;
   ctx.decl = decl;
 
-  DBusConnection *conn = aelkey_state.g_dbus_conn;
+  auto &state = AelkeyState::instance();
+  DBusConnection *conn = state.g_dbus_conn;
   if (!conn) {
     std::fprintf(stderr, "GATT: no D-Bus connection\n");
     return ctx;
@@ -431,7 +434,8 @@ InputCtx attach_gatt_device(const InputDecl &decl) {
 }
 
 void detach_gatt_device(InputCtx &ctx) {
-  DBusConnection *conn = aelkey_state.g_dbus_conn;
+  auto &state = AelkeyState::instance();
+  DBusConnection *conn = state.g_dbus_conn;
   if (!conn) {
     return;
   }
@@ -501,7 +505,8 @@ static void process_one_gatt_message(sol::this_state ts, DBusMessage *msg) {
   }
 
   // Route to correct InputCtx
-  for (auto &kv : aelkey_state.input_map) {
+  auto &state = AelkeyState::instance();
+  for (auto &kv : state.input_map) {
     InputCtx &ctx = kv.second;
 
     if (ctx.decl.type != "gatt") {
@@ -536,7 +541,8 @@ static void process_one_gatt_message(sol::this_state ts, DBusMessage *msg) {
 }
 
 void dispatch_gatt(sol::this_state ts) {
-  DBusConnection *conn = aelkey_state.g_dbus_conn;
+  auto &state = AelkeyState::instance();
+  DBusConnection *conn = state.g_dbus_conn;
   if (!conn) {
     return;
   }
@@ -827,7 +833,8 @@ match_gatt_device(const InputDecl &decl, std::vector<std::string> *found_charact
 bool gatt_read_characteristic(const std::string &char_path, std::vector<uint8_t> &out_data) {
   out_data.clear();
 
-  DBusConnection *conn = aelkey_state.g_dbus_conn;
+  auto &state = AelkeyState::instance();
+  DBusConnection *conn = state.g_dbus_conn;
   if (!conn) {
     std::fprintf(stderr, "GATT read: no D-Bus connection\n");
     return false;
@@ -878,7 +885,8 @@ bool gatt_write_characteristic(
     size_t len,
     bool with_resp
 ) {
-  DBusConnection *conn = aelkey_state.g_dbus_conn;
+  auto &state = AelkeyState::instance();
+  DBusConnection *conn = state.g_dbus_conn;
   if (!conn) {
     std::fprintf(stderr, "GATT write: no D-Bus connection\n");
     return false;

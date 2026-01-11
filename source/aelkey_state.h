@@ -15,7 +15,18 @@
 #include "device_output.h"
 #include "tick_scheduler.h"
 
-struct AelkeyState {
+class AelkeyState {
+ public:
+  static AelkeyState &instance() {
+    static AelkeyState inst;
+    return inst;
+  }
+
+  AelkeyState(const AelkeyState &) = delete;
+  AelkeyState &operator=(const AelkeyState &) = delete;
+  AelkeyState(AelkeyState &&) = delete;
+  AelkeyState &operator=(AelkeyState &&) = delete;
+
   lua_State *lua_vm = nullptr;
   TickScheduler *scheduler = nullptr;
 
@@ -43,6 +54,7 @@ struct AelkeyState {
   int g_dbus_fd = -1;
 
   std::string callback_watchlist;
-};
 
-extern AelkeyState aelkey_state;
+ private:
+  AelkeyState() = default;
+};

@@ -11,24 +11,26 @@
 
 // Create all uinput output devices declared in aelkey_state.output_decls
 static void create_outputs_from_decls() {
-  for (auto &out : aelkey_state.output_decls) {
+  auto &state = AelkeyState::instance();
+  for (auto &out : state.output_decls) {
     if (out.id.empty()) {
       continue;
     }
-    if (aelkey_state.uinput_devices.count(out.id)) {
+    if (state.uinput_devices.count(out.id)) {
       continue;
     }
 
     libevdev_uinput *uidev = create_output_device(out);
     if (uidev) {
-      aelkey_state.uinput_devices[out.id] = uidev;
+      state.uinput_devices[out.id] = uidev;
     }
   }
 }
 
 // Attach all input devices declared in aelkey_state.input_decls
 static void attach_inputs_from_decls(sol::this_state ts) {
-  for (auto &decl : aelkey_state.input_decls) {
+  auto &state = AelkeyState::instance();
+  for (auto &decl : state.input_decls) {
     std::string devnode = match_device(decl);
     if (devnode.empty()) {
       continue;
@@ -45,17 +47,17 @@ static void attach_inputs_from_decls(sol::this_state ts) {
 // Ret: boolean
 sol::object device_open(sol::this_state ts, sol::optional<std::string> dev_id_opt) {
   sol::state_view lua(ts);
+  auto &state = AelkeyState::instance();
 
   // GLOBAL MODE: no argument → open all devices
   if (!dev_id_opt.has_value()) {
     // If devices already attached, skip
-    if (!aelkey_state.input_map.empty() || !aelkey_state.uinput_devices.empty()) {
+    if (!state.input_map.empty() || !state.uinput_devices.empty()) {
       return sol::make_object(lua, true);
     }
 
     // Ensure udev + epoll initialized
-    if (aelkey_state.epfd < 0 || aelkey_state.udev_fd < 0 || !aelkey_state.g_udev ||
-        !aelkey_state.g_mon) {
+    if (state.epfd < 0 || state.udev_fd < 0 || !state.g_udev || !state.g_mon) {
       ensure_udev_initialized(ts);
     }
 
@@ -74,13 +76,12 @@ sol::object device_open(sol::this_state ts, sol::optional<std::string> dev_id_op
   std::string dev_id = dev_id_opt.value();
 
   // Ensure init
-  if (aelkey_state.epfd < 0 || aelkey_state.udev_fd < 0 || !aelkey_state.g_udev ||
-      !aelkey_state.g_mon) {
+  if (state.epfd < 0 || state.udev_fd < 0 || !state.g_udev || !state.g_mon) {
     ensure_udev_initialized(ts);
   }
 
   // Parse declarations if not already parsed
-  if (aelkey_state.input_decls.empty() && aelkey_state.output_decls.empty()) {
+  if (state.input_decls.empty() && state.output_decls.empty()) {
     parse_outputs_from_lua(ts);
     parse_inputs_from_lua(ts);
     create_outputs_from_decls();
@@ -88,7 +89,7 @@ sol::object device_open(sol::this_state ts, sol::optional<std::string> dev_id_op
 
   // Attach only the requested device
   bool ok = false;
-  for (auto &decl : aelkey_state.input_decls) {
+  for (auto &decl : state.input_decls) {
     if (decl.id != dev_id) {
       continue;
     }
@@ -122,8 +123,9 @@ sol::object device_close(sol::this_state ts, const std::string &dev_id) {
 sol::object device_get_info(sol::this_state ts, const std::string &dev_id) {
   sol::state_view lua(ts);
 
-  auto it = aelkey_state.input_map.find(dev_id);
-  if (it == aelkey_state.input_map.end()) {
+  auto &state = AelkeyState::instance();
+  auto it = state.input_map.find(dev_id);
+  if (it == state.input_map.end()) {
     return sol::make_object(lua, sol::nil);
   }
 

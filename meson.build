@@ -90,7 +90,6 @@ src_files = files(
   'source/aelkey_gatt.cc',
   'source/aelkey_hid.cc',
   'source/aelkey_loop.cc',
-  'source/aelkey_state.cc',
   'source/aelkey_usb.cc',
   'source/aelkey_util.cc',
   'source/device_gatt.cc',

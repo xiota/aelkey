@@ -192,7 +192,8 @@ static std::string enumerate_and_match(
     const char *subsystem,
     std::function<std::string(struct udev_device *)> matcher
 ) {
-  struct udev_enumerate *enumerate = udev_enumerate_new(aelkey_state.g_udev);
+  auto &state = AelkeyState::instance();
+  struct udev_enumerate *enumerate = udev_enumerate_new(state.g_udev);
   udev_enumerate_add_match_subsystem(enumerate, subsystem);
   udev_enumerate_scan_devices(enumerate);
 
@@ -202,7 +203,7 @@ static std::string enumerate_and_match(
   std::string result;
   udev_list_entry_foreach(entry, devices) {
     const char *path = udev_list_entry_get_name(entry);
-    struct udev_device *dev = udev_device_new_from_syspath(aelkey_state.g_udev, path);
+    struct udev_device *dev = udev_device_new_from_syspath(state.g_udev, path);
     if (!dev) {
       continue;
     }
@@ -404,10 +405,10 @@ static InputCtx attach_device_helper(
       ctx.active = false;
     }
   } else if (in.type == "libusb") {
+    auto &state = AelkeyState::instance();
     ensure_libusb_initialized();
 
-    ctx.usb_handle =
-        libusb_open_device_with_vid_pid(aelkey_state.g_libusb, in.vendor, in.product);
+    ctx.usb_handle = libusb_open_device_with_vid_pid(state.g_libusb, in.vendor, in.product);
     if (!ctx.usb_handle) {
       std::fprintf(stderr, "Failed to open libusb device %04x:%04x\n", in.vendor, in.product);
       return ctx;
@@ -480,7 +481,8 @@ static InputCtx attach_device_helper(
 void parse_inputs_from_lua(sol::this_state ts) {
   sol::state_view lua(ts);
 
-  aelkey_state.input_decls.clear();
+  auto &state = AelkeyState::instance();
+  state.input_decls.clear();
 
   sol::object obj = lua["inputs"];
   if (!obj.valid() || !obj.is<sol::table>()) {
@@ -493,22 +495,22 @@ void parse_inputs_from_lua(sol::this_state ts) {
     if (v.is<sol::table>()) {
       InputDecl decl = parse_input(v.as<sol::table>());
       if (!decl.id.empty()) {
-        aelkey_state.input_decls.push_back(decl);
+        state.input_decls.push_back(decl);
       }
     }
   });
 }
 
 bool attach_input_device(const std::string &devnode, const InputDecl &decl) {
+  auto &state = AelkeyState::instance();
+
   // already attached?
-  if (aelkey_state.input_map.find(decl.id) != aelkey_state.input_map.end()) {
+  if (state.input_map.find(decl.id) != state.input_map.end()) {
     std::cout << "Device already attached: " << decl.id << std::endl;
     return false;
   }
 
-  InputCtx ctx = attach_device_helper(
-      devnode, decl, aelkey_state.input_map, aelkey_state.frames, aelkey_state.epfd
-  );
+  InputCtx ctx = attach_device_helper(devnode, decl, state.input_map, state.frames, state.epfd);
 
   // failure check
   if (!ctx.active) {
@@ -522,15 +524,16 @@ bool attach_input_device(const std::string &devnode, const InputDecl &decl) {
   }
 
   // store context keyed by string id
-  aelkey_state.input_map[decl.id] = std::move(ctx);
+  state.input_map[decl.id] = std::move(ctx);
   return true;
 }
 
 InputDecl detach_input_device(const std::string &dev_id) {
   InputDecl decl{};
 
-  auto im = aelkey_state.input_map.find(dev_id);
-  if (im == aelkey_state.input_map.end()) {
+  auto &state = AelkeyState::instance();
+  auto im = state.input_map.find(dev_id);
+  if (im == state.input_map.end()) {
     return decl;  // nothing to detach
   }
 
@@ -543,8 +546,8 @@ InputDecl detach_input_device(const std::string &dev_id) {
   }
 
   // Remove from epoll if fd is valid
-  if (aelkey_state.epfd >= 0 && ctx.fd >= 0) {
-    epoll_ctl(aelkey_state.epfd, EPOLL_CTL_DEL, ctx.fd, nullptr);
+  if (state.epfd >= 0 && ctx.fd >= 0) {
+    epoll_ctl(state.epfd, EPOLL_CTL_DEL, ctx.fd, nullptr);
   }
 
   // Free libevdev resources if present
@@ -576,8 +579,8 @@ InputDecl detach_input_device(const std::string &dev_id) {
   }
 
   // Erase from maps keyed by string id
-  aelkey_state.input_map.erase(im);
-  aelkey_state.frames.erase(dev_id);
+  state.input_map.erase(im);
+  state.frames.erase(dev_id);
 
   return decl;
 }

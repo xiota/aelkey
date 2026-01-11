@@ -64,8 +64,9 @@ static void dispatch_evdev(sol::this_state ts, InputCtx &ctx) {
     return;
   }
 
-  auto fit = aelkey_state.frames.find(ctx.decl.id);
-  if (fit == aelkey_state.frames.end()) {
+  auto &state = AelkeyState::instance();
+  auto fit = state.frames.find(ctx.decl.id);
+  if (fit == state.frames.end()) {
     return;
   }
   auto &frame = fit->second;
@@ -127,13 +128,15 @@ static void dispatch_evdev(sol::this_state ts, InputCtx &ctx) {
 
 sol::object loop_stop(sol::this_state ts) {
   sol::state_view lua(ts);
-  aelkey_state.loop_should_stop = true;
+  auto &state = AelkeyState::instance();
+  state.loop_should_stop = true;
   return sol::make_object(lua, sol::nil);
 }
 
 void handle_signal(int sig) {
-  aelkey_state.loop_should_stop = true;
-  aelkey_state.sigint = sig;
+  auto &state = AelkeyState::instance();
+  state.loop_should_stop = true;
+  state.sigint = sig;
 }
 
 sol::object loop_start(sol::this_state ts) {
@@ -151,8 +154,9 @@ sol::object loop_start(sol::this_state ts) {
   constexpr int MAX_EVENTS = 64;
   struct epoll_event events[MAX_EVENTS];
 
-  while (!aelkey_state.loop_should_stop) {
-    int n = epoll_wait(aelkey_state.epfd, events, MAX_EVENTS, -1);  // block until event
+  auto &state = AelkeyState::instance();
+  while (!state.loop_should_stop) {
+    int n = epoll_wait(state.epfd, events, MAX_EVENTS, -1);  // block until event
     if (n < 0) {
       if (errno == EINTR) {
         continue;
@@ -166,9 +170,9 @@ sol::object loop_start(sol::this_state ts) {
       uint32_t evmask = events[i].events;
 
       // libusb poll fds
-      if (aelkey_state.libusb_fd_set.count(fd_ready)) {
+      if (state.libusb_fd_set.count(fd_ready)) {
         timeval tv{ 0, 0 };
-        int rc = libusb_handle_events_timeout_completed(aelkey_state.g_libusb, &tv, nullptr);
+        int rc = libusb_handle_events_timeout_completed(state.g_libusb, &tv, nullptr);
         if (rc != 0) {
           std::fprintf(stderr, "libusb_handle_events error: %s\n", libusb_error_name(rc));
         }
@@ -176,14 +180,14 @@ sol::object loop_start(sol::this_state ts) {
       }
 
       // D-Bus GATT notifications
-      if (fd_ready == aelkey_state.g_dbus_fd) {
+      if (fd_ready == state.g_dbus_fd) {
         dispatch_gatt(ts);
         continue;
       }
 
       // udev hotplug
-      if (fd_ready == aelkey_state.udev_fd) {
-        struct udev_device *dev = udev_monitor_receive_device(aelkey_state.g_mon);
+      if (fd_ready == state.udev_fd) {
+        struct udev_device *dev = udev_monitor_receive_device(state.g_mon);
         if (!dev) {
           continue;
         }
@@ -202,14 +206,14 @@ sol::object loop_start(sol::this_state ts) {
       }
 
       // timerfd ticks
-      if (aelkey_state.scheduler && aelkey_state.scheduler->owns_fd(fd_ready)) {
-        aelkey_state.scheduler->handle_event(fd_ready);
+      if (state.scheduler && state.scheduler->owns_fd(fd_ready)) {
+        state.scheduler->handle_event(fd_ready);
         continue;
       }
 
       // look up InputCtx
       InputCtx *ctx_ptr = nullptr;
-      for (auto &kv : aelkey_state.input_map) {
+      for (auto &kv : state.input_map) {
         if (kv.second.fd == fd_ready) {
           ctx_ptr = &kv.second;
           break;
@@ -241,7 +245,7 @@ sol::object loop_start(sol::this_state ts) {
 
   // Cleanup all resources
   // Detach all devices
-  for (auto &kv : aelkey_state.input_map) {
+  for (auto &kv : state.input_map) {
     InputCtx &ctx = kv.second;
 
     // Evdev/hidraw cleanup
@@ -262,47 +266,47 @@ sol::object loop_start(sol::this_state ts) {
       ctx.active = false;
     }
   }
-  aelkey_state.input_map.clear();
-  aelkey_state.frames.clear();
+  state.input_map.clear();
+  state.frames.clear();
 
   // Destroy uinput devices
-  for (auto &kv : aelkey_state.uinput_devices) {
+  for (auto &kv : state.uinput_devices) {
     libevdev_uinput_destroy(kv.second);
   }
-  aelkey_state.uinput_devices.clear();
+  state.uinput_devices.clear();
 
   // Tear down global monitoring state
-  if (aelkey_state.udev_fd >= 0) {
-    epoll_ctl(aelkey_state.epfd, EPOLL_CTL_DEL, aelkey_state.udev_fd, nullptr);
-    aelkey_state.udev_fd = -1;
+  if (state.udev_fd >= 0) {
+    epoll_ctl(state.epfd, EPOLL_CTL_DEL, state.udev_fd, nullptr);
+    state.udev_fd = -1;
   }
-  if (aelkey_state.g_mon) {
-    udev_monitor_unref(aelkey_state.g_mon);
-    aelkey_state.g_mon = nullptr;
+  if (state.g_mon) {
+    udev_monitor_unref(state.g_mon);
+    state.g_mon = nullptr;
   }
-  if (aelkey_state.g_udev) {
-    udev_unref(aelkey_state.g_udev);
-    aelkey_state.g_udev = nullptr;
+  if (state.g_udev) {
+    udev_unref(state.g_udev);
+    state.g_udev = nullptr;
   }
-  if (aelkey_state.scheduler) {
-    delete aelkey_state.scheduler;
-    aelkey_state.scheduler = nullptr;
+  if (state.scheduler) {
+    delete state.scheduler;
+    state.scheduler = nullptr;
   }
-  if (aelkey_state.epfd >= 0) {
-    close(aelkey_state.epfd);
-    aelkey_state.epfd = -1;
+  if (state.epfd >= 0) {
+    close(state.epfd);
+    state.epfd = -1;
   }
-  if (aelkey_state.g_libusb) {
-    libusb_exit(aelkey_state.g_libusb);
-    aelkey_state.g_libusb = nullptr;
+  if (state.g_libusb) {
+    libusb_exit(state.g_libusb);
+    state.g_libusb = nullptr;
   }
 
-  if (aelkey_state.sigint != 0) {
+  if (state.sigint != 0) {
     std::signal(SIGHUP, SIG_DFL);
     std::signal(SIGINT, SIG_DFL);
     std::signal(SIGTERM, SIG_DFL);
 
-    int sig = aelkey_state.sigint;
+    int sig = state.sigint;
     std::raise(sig);
   }
 
