@@ -2,6 +2,7 @@
 
 #include <cstdio>
 
+#include <sol/sol.hpp>
 #include <sys/ioctl.h>
 #include <unistd.h>
 
@@ -93,5 +94,103 @@ void haptics_debug_dump(const HapticsSourceCtx &hctx) {
   for (auto &kv : hctx.effects) {
     const ff_effect &eff = kv.second;
     std::printf("  virt_id=%d type=%d length=%d\n", kv.first, eff.type, eff.replay.length);
+  }
+}
+
+sol::table haptics_effect_to_lua(sol::state_view lua, const ff_effect &eff) {
+  sol::table t = lua.create_table();
+
+  t["id"] = eff.id;
+  t["type"] = eff.type;
+  t["length"] = eff.replay.length;
+  t["delay"] = eff.replay.delay;
+
+  switch (eff.type) {
+    case FF_RUMBLE:
+      t["strong"] = eff.u.rumble.strong_magnitude;
+      t["weak"] = eff.u.rumble.weak_magnitude;
+      break;
+
+    case FF_PERIODIC:
+      t["waveform"] = eff.u.periodic.waveform;
+      t["magnitude"] = eff.u.periodic.magnitude;
+      t["offset"] = eff.u.periodic.offset;
+      t["phase"] = eff.u.periodic.phase;
+      t["period"] = eff.u.periodic.period;
+      break;
+
+    case FF_CONSTANT:
+      t["level"] = eff.u.constant.level;
+      break;
+
+    default:
+      break;
+  }
+
+  return t;
+}
+
+void haptics_handle_play(
+    sol::this_state ts,
+    HapticsSourceCtx &src,
+    int virt_id,
+    int magnitude
+) {
+  sol::state_view lua(ts);
+
+  if (src.callback.empty()) {
+    return;
+  }
+
+  sol::object cb = lua[src.callback];
+  if (!cb.is<sol::function>()) {
+    return;
+  }
+
+  sol::function f = cb.as<sol::function>();
+
+  sol::table ev = lua.create_table();
+  ev["source"] = src.id;
+  ev["event"] = "play";
+  ev["id"] = virt_id;
+  ev["value"] = magnitude;
+
+  auto it = src.effects.find(virt_id);
+  if (it != src.effects.end()) {
+    ev["effect"] = haptics_effect_to_lua(lua, it->second);
+  }
+
+  sol::protected_function pf = f;
+  sol::protected_function_result res = pf(ev);
+  if (!res.valid()) {
+    sol::error err = res;
+    std::fprintf(stderr, "Lua haptics callback error: %s\n", err.what());
+  }
+}
+
+void haptics_handle_stop(sol::this_state ts, HapticsSourceCtx &src, int virt_id) {
+  sol::state_view lua(ts);
+
+  if (src.callback.empty()) {
+    return;
+  }
+
+  sol::object cb = lua[src.callback];
+  if (!cb.is<sol::function>()) {
+    return;
+  }
+
+  sol::function f = cb.as<sol::function>();
+
+  sol::table ev = lua.create_table();
+  ev["source"] = src.id;
+  ev["event"] = "stop";
+  ev["id"] = virt_id;
+
+  sol::protected_function pf = f;
+  sol::protected_function_result res = pf(ev);
+  if (!res.valid()) {
+    sol::error err = res;
+    std::fprintf(stderr, "Lua haptics callback error: %s\n", err.what());
   }
 }

@@ -206,6 +206,10 @@ libevdev_uinput *create_output_device(const OutputDecl &out) {
   int ufd = libevdev_uinput_get_fd(uidev);
   haptics_register_source(out.id, ufd);
 
+  // store callback name
+  auto &state = AelkeyState::instance();
+  state.haptics_sources[out.id].callback = out.callback_haptics;
+
   std::cout << "Created uinput device: " << out.name << " at "
             << libevdev_uinput_get_devnode(uidev) << std::endl;
 
@@ -256,6 +260,11 @@ OutputDecl parse_output(sol::table tbl) {
   // name
   if (sol::object v = tbl["name"]; v.valid() && v.is<std::string>()) {
     decl.name = v.as<std::string>();
+  }
+
+  // haptics callback
+  if (sol::object v = tbl["callback_haptics"]; v.valid() && v.is<std::string>()) {
+    decl.callback_haptics = v.as<std::string>();
   }
 
   // capabilities

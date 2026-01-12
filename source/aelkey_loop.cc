@@ -127,33 +127,37 @@ static void dispatch_evdev(sol::this_state ts, InputCtx &ctx) {
   }
 }
 
-void dispatch_haptics(HapticsSourceCtx &src) {
+void dispatch_haptics(sol::this_state ts, HapticsSourceCtx &src) {
   struct input_event ev;
 
-  while (true) {
-    ssize_t n = ::read(src.fd, &ev, sizeof(ev));
-    if (n < 0) {
-      if (errno == EAGAIN || errno == EWOULDBLOCK) {
-        break;
-      }
-      perror("read haptics");
-      break;
+  ssize_t n = ::read(src.fd, &ev, sizeof(ev));
+  if (n < 0) {
+    if (errno == EAGAIN || errno == EWOULDBLOCK) {
+      return;
     }
-    if (n == 0) {
-      break;
-    }
-    if (n != sizeof(ev)) {
-      continue;
-    }
+    perror("read haptics");
+    return;
+  } else if (n == 0) {
+    return;
+  } else if (n != sizeof(ev)) {
+    return;
+  }
 
-    if (ev.type == EV_UINPUT) {
-      if (ev.code == UI_FF_UPLOAD) {
-        haptics_handle_upload(src, ev.value);
-      } else if (ev.code == UI_FF_ERASE) {
-        haptics_handle_erase(src, ev.value);
-      }
+  if (ev.type == EV_UINPUT) {
+    if (ev.code == UI_FF_UPLOAD) {
+      haptics_handle_upload(src, ev.value);
+    } else if (ev.code == UI_FF_ERASE) {
+      haptics_handle_erase(src, ev.value);
     }
-    // PLAY/STOP ignored for now
+  } else if (ev.type == EV_FF) {
+    int virt_id = ev.code;
+    int magnitude = ev.value;
+
+    if (magnitude > 0) {
+      haptics_handle_play(ts, src, virt_id, magnitude);
+    } else {
+      haptics_handle_stop(ts, src, virt_id);
+    }
   }
 }
 
@@ -257,7 +261,7 @@ sol::object loop_start(sol::this_state ts) {
         }
 
         if (evmask & EPOLLIN) {
-          dispatch_haptics(*src);
+          dispatch_haptics(ts, *src);
         }
 
         continue;

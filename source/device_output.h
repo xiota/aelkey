@@ -14,6 +14,7 @@ struct OutputDecl {
   int bus = 3;
   int version = 1;
   std::string name;
+  std::string callback_haptics;
   std::vector<std::string> capabilities;
 };
 
