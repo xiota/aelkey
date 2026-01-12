@@ -89,6 +89,11 @@ constexpr int gamepad_abs[] = {
   ABS_HAT0X, ABS_HAT0Y  // D-pad
 };
 
+constexpr int gamepad_ff[] = {
+  FF_RUMBLE, FF_GAIN,
+  FF_PERIODIC, FF_SQUARE, FF_TRIANGLE, FF_SINE,
+};
+
 constexpr int mouse_buttons[] = {
   BTN_LEFT,  BTN_RIGHT,   BTN_MIDDLE, BTN_SIDE, BTN_EXTRA, BTN_FORWARD, BTN_BACK,   BTN_TASK,
 };

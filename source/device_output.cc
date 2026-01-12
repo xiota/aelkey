@@ -128,6 +128,8 @@ void enable_capability(libevdev *dev, const std::string &cap) {
     evtype = EV_MSC;
   } else if (cap.rfind("SW_", 0) == 0) {
     evtype = EV_SW;
+  } else if (cap.rfind("FF_", 0) == 0) {
+    evtype = EV_FF;
   }
 
   int code = libevdev_event_code_from_name(evtype, cap.c_str());
@@ -162,6 +164,7 @@ libevdev_uinput *create_output_device(const OutputDecl &out) {
   } else if (out.type == "gamepad") {
     enable_codes(dev, EV_KEY, aelkey::capabilities::gamepad_buttons);
     enable_codes(dev, EV_ABS, aelkey::capabilities::gamepad_abs);
+    enable_codes(dev, EV_FF, aelkey::capabilities::gamepad_ff);
 
     // Override ABS_X/ABS_Y to stick range
     libevdev_enable_event_code(dev, EV_ABS, ABS_X, &stick_default);
