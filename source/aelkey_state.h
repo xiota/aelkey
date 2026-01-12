@@ -11,6 +11,7 @@
 #include <libusb-1.0/libusb.h>
 
 #include "aelkey_core.h"
+#include "aelkey_haptics.h"
 #include "device_input.h"
 #include "device_output.h"
 #include "tick_scheduler.h"
@@ -35,6 +36,8 @@ class AelkeyState {
   std::unordered_map<std::string, libevdev_uinput *> uinput_devices;
   std::unordered_map<std::string, InputCtx> input_map;
   std::unordered_map<std::string, std::vector<struct input_event>> frames;
+
+  std::unordered_map<std::string, HapticsSourceCtx> haptics_sources;
 
   bool loop_should_stop = false;
   int sigint = 0;

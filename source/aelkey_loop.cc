@@ -14,6 +14,7 @@
 #include <sol/sol.hpp>
 
 #include "aelkey_device.h"
+#include "aelkey_haptics.h"
 #include "aelkey_state.h"
 #include "device_gatt.h"
 #include "device_input.h"
@@ -126,6 +127,36 @@ static void dispatch_evdev(sol::this_state ts, InputCtx &ctx) {
   }
 }
 
+void dispatch_haptics(HapticsSourceCtx &src) {
+  struct input_event ev;
+
+  while (true) {
+    ssize_t n = ::read(src.fd, &ev, sizeof(ev));
+    if (n < 0) {
+      if (errno == EAGAIN || errno == EWOULDBLOCK) {
+        break;
+      }
+      perror("read haptics");
+      break;
+    }
+    if (n == 0) {
+      break;
+    }
+    if (n != sizeof(ev)) {
+      continue;
+    }
+
+    if (ev.type == EV_UINPUT) {
+      if (ev.code == UI_FF_UPLOAD) {
+        haptics_handle_upload(src, ev.value);
+      } else if (ev.code == UI_FF_ERASE) {
+        haptics_handle_erase(src, ev.value);
+      }
+    }
+    // PLAY/STOP ignored for now
+  }
+}
+
 sol::object loop_stop(sol::this_state ts) {
   sol::state_view lua(ts);
   auto &state = AelkeyState::instance();
@@ -208,6 +239,27 @@ sol::object loop_start(sol::this_state ts) {
       // timerfd ticks
       if (state.scheduler && state.scheduler->owns_fd(fd_ready)) {
         state.scheduler->handle_event(fd_ready);
+        continue;
+      }
+
+      // Haptics
+      HapticsSourceCtx *src = nullptr;
+      for (auto &kv : state.haptics_sources) {
+        if (kv.second.fd == fd_ready) {
+          src = &kv.second;
+          break;
+        }
+      }
+
+      if (src) {
+        if (evmask & (EPOLLHUP | EPOLLERR)) {
+          continue;
+        }
+
+        if (evmask & EPOLLIN) {
+          dispatch_haptics(*src);
+        }
+
         continue;
       }
 

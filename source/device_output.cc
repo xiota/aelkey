@@ -203,6 +203,9 @@ libevdev_uinput *create_output_device(const OutputDecl &out) {
     return nullptr;
   }
 
+  int ufd = libevdev_uinput_get_fd(uidev);
+  haptics_register_source(out.id, ufd);
+
   std::cout << "Created uinput device: " << out.name << " at "
             << libevdev_uinput_get_devnode(uidev) << std::endl;
 
