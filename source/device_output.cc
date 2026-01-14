@@ -11,6 +11,7 @@
 #include "device_capabilities.h"
 
 // Provide sensible max ranges for ABS axes
+// value, min, max, fuzz, flat, resolution
 static input_absinfo pos_default = { 0, 0, 65535, 0, 0, 0 };
 static input_absinfo stick_default = { 0, -32767, 32767, 0, 0, 0 };
 static input_absinfo trigger_default = { 0, 0, 255, 0, 0, 0 };
@@ -20,6 +21,10 @@ static input_absinfo distance_default = { 0, 0, 255, 0, 0, 0 };
 static input_absinfo orient_default = { 0, 0, 3, 0, 0, 0 };
 static input_absinfo wheel_default = { 0, -32768, 32767, 0, 0, 0 };
 static input_absinfo hat_default = { 0, -1, 1, 0, 0, 0 };
+
+// imu defaults
+static input_absinfo accel_default = { 0, -32767, 32767, 0, 0, 4096 };
+static input_absinfo gyro_default = { 0, -32767000, 32767000, 0, 0, 14247 };
 
 // multitouch defaults
 static input_absinfo mt_pos_default = { 0, 0, 65535, 0, 0, 0 };       // positions
@@ -169,6 +174,17 @@ libevdev_uinput *create_output_device(const OutputDecl &out) {
     // Override ABS_X/ABS_Y to stick range
     libevdev_enable_event_code(dev, EV_ABS, ABS_X, &stick_default);
     libevdev_enable_event_code(dev, EV_ABS, ABS_Y, &stick_default);
+  } else if (out.type == "imu") {
+    libevdev_enable_event_type(dev, EV_ABS);
+    libevdev_enable_event_code(dev, EV_ABS, ABS_X, &accel_default);
+    libevdev_enable_event_code(dev, EV_ABS, ABS_Y, &accel_default);
+    libevdev_enable_event_code(dev, EV_ABS, ABS_Z, &accel_default);
+    libevdev_enable_event_code(dev, EV_ABS, ABS_RX, &gyro_default);
+    libevdev_enable_event_code(dev, EV_ABS, ABS_RY, &gyro_default);
+    libevdev_enable_event_code(dev, EV_ABS, ABS_RZ, &gyro_default);
+
+    libevdev_enable_event_type(dev, EV_MSC);
+    libevdev_enable_event_code(dev, EV_MSC, MSC_TIMESTAMP, nullptr);
   } else if (out.type == "mouse") {
     enable_codes(dev, EV_KEY, aelkey::capabilities::mouse_buttons);
     enable_codes(dev, EV_REL, aelkey::capabilities::mouse_rel);
