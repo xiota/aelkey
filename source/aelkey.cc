@@ -109,6 +109,7 @@ extern "C" int luaopen_aelkey(lua_State *L) {
 
     // Normal module creation
     sol::table mod = load_aelkey(lua);
+    lua["aelkey"] = mod;  // register global
     return sol::stack::push(lua, mod);
   } catch (const sol::error &err) {
     // Turn any sol::error into a real Lua error with a message
