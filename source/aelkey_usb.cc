@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cstring>
+#include <string_view>
 #include <vector>
 
 #include <libusb-1.0/libusb.h>
@@ -98,9 +99,8 @@ static void LIBUSB_CALL dispatch_libusb(libusb_transfer *transfer) {
       sol::table ev = lua.create_table();
 
       ev["device"] = ctx->decl.id;
-      ev["data"] = std::string(
-          reinterpret_cast<const char *>(transfer->buffer),
-          static_cast<std::size_t>(transfer->actual_length)
+      ev["data"] = std::string_view(
+          reinterpret_cast<const char *>(transfer->buffer), transfer->actual_length
       );
       ev["size"] = static_cast<int>(transfer->actual_length);
       ev["endpoint"] = static_cast<int>(transfer->endpoint);
@@ -193,9 +193,7 @@ sol::object usb_bulk_transfer(sol::this_state ts, sol::table opts) {
     std::vector<unsigned char> buf(size);
     status = libusb_bulk_transfer(handle, endpoint, buf.data(), size, &transferred, timeout);
 
-    result["data"] = std::string(
-        reinterpret_cast<const char *>(buf.data()), static_cast<std::size_t>(transferred)
-    );
+    result["data"] = std::string_view(reinterpret_cast<const char *>(buf.data()), transferred);
   } else {
     // OUT transfer: send data from Lua
     sol::optional<std::string> data_opt = opts.get<sol::optional<std::string>>("data");
@@ -288,9 +286,7 @@ sol::object usb_control_transfer(sol::this_state ts, sol::table opts) {
 
     transferred = (status >= 0) ? status : 0;
 
-    result["data"] = std::string(
-        reinterpret_cast<const char *>(buf.data()), static_cast<std::size_t>(transferred)
-    );
+    result["data"] = std::string_view(reinterpret_cast<const char *>(buf.data()), transferred);
   } else {
     // OUT transfer: send data from Lua
     sol::optional<std::string> data_opt = opts.get<sol::optional<std::string>>("data");
@@ -369,9 +365,7 @@ sol::object usb_interrupt_transfer(sol::this_state ts, sol::table opts) {
     status =
         libusb_interrupt_transfer(handle, endpoint, buf.data(), size, &transferred, timeout);
 
-    result["data"] = std::string(
-        reinterpret_cast<const char *>(buf.data()), static_cast<std::size_t>(transferred)
-    );
+    result["data"] = std::string_view(reinterpret_cast<const char *>(buf.data()), transferred);
   } else {
     // OUT transfer: send data from Lua
     sol::optional<std::string> data_opt = opts.get<sol::optional<std::string>>("data");

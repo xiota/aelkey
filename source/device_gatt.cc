@@ -3,6 +3,7 @@
 #include <cstring>
 #include <iostream>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include <dbus/dbus.h>
@@ -524,7 +525,8 @@ static void process_one_gatt_message(sol::this_state ts, DBusMessage *msg) {
       sol::table tbl = lua.create_table();
       tbl["device"] = ctx.decl.id;
       tbl["path"] = path;
-      tbl["data"] = std::string(reinterpret_cast<const char *>(bytes.data()), bytes.size());
+      tbl["data"] =
+          std::string_view(reinterpret_cast<const char *>(bytes.data()), bytes.size());
       tbl["size"] = static_cast<int>(bytes.size());
       tbl["status"] = "ok";
 

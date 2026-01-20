@@ -3,6 +3,7 @@
 #include <csignal>
 #include <cstring>
 #include <string>
+#include <string_view>
 
 #include <libevdev/libevdev-uinput.h>
 #include <libudev.h>
@@ -41,7 +42,7 @@ static void dispatch_hidraw(sol::this_state ts, int fd_ready, InputCtx &ctx) {
   tbl["device"] = ctx.decl.id;
 
   if (r > 0) {
-    tbl["data"] = std::string(reinterpret_cast<const char *>(buf), static_cast<std::size_t>(r));
+    tbl["data"] = std::string_view(reinterpret_cast<const char *>(buf), r);
     tbl["size"] = static_cast<int>(r);
     tbl["status"] = "ok";
   } else if (r == 0) {
