@@ -56,7 +56,7 @@ class AelkeyState {
   DBusConnection *g_dbus_conn = nullptr;
   int g_dbus_fd = -1;
 
-  std::string callback_watchlist;
+  std::string on_watchlist;
 
  private:
   AelkeyState() = default;

@@ -90,8 +90,8 @@ static void LIBUSB_CALL dispatch_libusb(libusb_transfer *transfer) {
 
   sol::state_view lua(L);
 
-  if (!ctx->decl.callback_events.empty()) {
-    sol::object cb_obj = lua[ctx->decl.callback_events];
+  if (!ctx->decl.on_event.empty()) {
+    sol::object cb_obj = lua[ctx->decl.on_event];
     if (cb_obj.is<sol::function>()) {
       sol::function cb = cb_obj.as<sol::function>();
 

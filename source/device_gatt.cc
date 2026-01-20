@@ -513,8 +513,8 @@ static void process_one_gatt_message(sol::this_state ts, DBusMessage *msg) {
       continue;
     }
 
-    if (!ctx.decl.callback_events.empty()) {
-      sol::object obj = lua[ctx.decl.callback_events];
+    if (!ctx.decl.on_event.empty()) {
+      sol::object obj = lua[ctx.decl.on_event];
       if (!obj.is<sol::function>()) {
         continue;
       }

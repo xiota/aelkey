@@ -128,14 +128,14 @@ InputDecl parse_input(sol::table tbl) {
     decl.characteristic = v.as<int>();
   }
 
-  // callback_events
-  if (sol::object v = tbl["callback_events"]; v.valid() && v.is<std::string>()) {
-    decl.callback_events = v.as<std::string>();
+  // on_event callback
+  if (sol::object v = tbl["on_event"]; v.valid() && v.is<std::string>()) {
+    decl.on_event = v.as<std::string>();
   }
 
-  // callback_state
-  if (sol::object v = tbl["callback_state"]; v.valid() && v.is<std::string>()) {
-    decl.callback_state = v.as<std::string>();
+  // on_state callback
+  if (sol::object v = tbl["on_state"]; v.valid() && v.is<std::string>()) {
+    decl.on_state = v.as<std::string>();
   }
 
   return decl;

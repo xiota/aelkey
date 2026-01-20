@@ -13,12 +13,12 @@ sol::object daemon_set_callback(sol::this_state ts, sol::object cb_obj) {
   auto &state = AelkeyState::instance();
 
   if (cb_obj.is<std::string>()) {
-    state.callback_watchlist = cb_obj.as<std::string>();
+    state.on_watchlist = cb_obj.as<std::string>();
     return sol::make_object(lua, true);
   }
 
   if (cb_obj.is<sol::nil_t>()) {
-    state.callback_watchlist.clear();
+    state.on_watchlist.clear();
     return sol::make_object(lua, true);
   }
 
@@ -45,8 +45,8 @@ sol::object daemon_watch(sol::this_state ts, const std::string &ref, sol::table 
 
     // Only allow udev-visible types
     if (decl.type == "evdev" || decl.type == "hidraw" || decl.type == "libusb") {
-      decl.callback_events.clear();
-      decl.callback_state.clear();
+      decl.on_event.clear();
+      decl.on_state.clear();
       valid_decls.push_back(decl);
     }
   }

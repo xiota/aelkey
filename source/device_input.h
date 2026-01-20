@@ -29,8 +29,8 @@ struct InputDecl {
 
   std::string devnode;
 
-  std::string callback_events;  // HID input events
-  std::string callback_state;   // lifecycle events
+  std::string on_event;  // HID input events
+  std::string on_state;  // lifecycle events
 };
 
 struct InputCtx {

@@ -54,13 +54,13 @@ void ensure_udev_initialized(sol::this_state ts) {
 }
 
 void notify_state_change(sol::this_state ts, const InputDecl &decl, const char *state) {
-  if (decl.callback_state.empty()) {
+  if (decl.on_state.empty()) {
     return;
   }
 
   sol::state_view lua(ts);
 
-  sol::object obj = lua[decl.callback_state];
+  sol::object obj = lua[decl.on_state];
   if (!obj.is<sol::function>()) {
     return;
   }
@@ -99,7 +99,7 @@ void handle_udev_add(sol::this_state ts, struct udev_device *dev) {
           (decl.type == "hidraw" && std::string(subsystem) == "hidraw")) {
         if (matched == devnode) {
           decl.devnode = devnode;
-          decl.callback_state = state.callback_watchlist;
+          decl.on_state = state.on_watchlist;
           notify_state_change(ts, decl, "add");
         }
       } else if (decl.type == "libusb" && std::string(subsystem) == "usb") {
@@ -110,7 +110,7 @@ void handle_udev_add(sol::this_state ts, struct udev_device *dev) {
 
         if (matched == std::string(syspath)) {
           decl.devnode = syspath;
-          decl.callback_state = state.callback_watchlist;
+          decl.on_state = state.on_watchlist;
           notify_state_change(ts, decl, "add");
         }
       }
@@ -179,14 +179,14 @@ void handle_udev_remove(sol::this_state ts, struct udev_device *dev) {
         }
 
         if (decl.devnode == std::string(syspath)) {
-          decl.callback_state = state.callback_watchlist;
+          decl.on_state = state.on_watchlist;
           notify_state_change(ts, decl, "remove");
           decl.devnode.clear();
         }
       } else if ((decl.type == "evdev" && std::string(subsystem) == "input") ||
                  (decl.type == "hidraw" && std::string(subsystem) == "hidraw")) {
         if (decl.devnode == devnode) {
-          decl.callback_state = state.callback_watchlist;
+          decl.on_state = state.on_watchlist;
           notify_state_change(ts, decl, "remove");
           decl.devnode.clear();
         }

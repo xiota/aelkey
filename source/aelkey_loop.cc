@@ -26,11 +26,11 @@ static void dispatch_hidraw(sol::this_state ts, int fd_ready, InputCtx &ctx) {
   uint8_t buf[4096];
   ssize_t r = read(fd_ready, buf, sizeof(buf));
 
-  if (ctx.decl.callback_events.empty()) {
+  if (ctx.decl.on_event.empty()) {
     return;
   }
 
-  sol::object obj = lua[ctx.decl.callback_events];
+  sol::object obj = lua[ctx.decl.on_event];
   if (!obj.is<sol::function>()) {
     return;
   }
@@ -79,10 +79,10 @@ static void dispatch_evdev(sol::this_state ts, InputCtx &ctx) {
       // Accumulate into the frame
       frame.push_back(ev);
 
-      // On SYN_REPORT, flush frame to callback_events
+      // On SYN_REPORT, flush frame to on_event
       if (ev.type == EV_SYN && ev.code == SYN_REPORT) {
-        if (!ctx.decl.callback_events.empty()) {
-          sol::object obj = lua[ctx.decl.callback_events];
+        if (!ctx.decl.on_event.empty()) {
+          sol::object obj = lua[ctx.decl.on_event];
           if (obj.is<sol::function>()) {
             sol::function cb = obj.as<sol::function>();
 
