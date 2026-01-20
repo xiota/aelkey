@@ -20,7 +20,7 @@ struct InputDecl {
   std::string name;
   std::string phys;
   std::string uniq;
-  bool writable = false;
+
   bool grab = false;
   std::vector<std::pair<int, int>> capabilities;
 

@@ -36,11 +36,6 @@ InputDecl parse_input(sol::table tbl) {
     decl.type = v.as<std::string>();
   }
 
-  // writable
-  if (sol::object v = tbl["writable"]; v.valid() && v.is<bool>()) {
-    decl.writable = v.as<bool>();
-  }
-
   // grab
   if (sol::object v = tbl["grab"]; v.valid() && v.is<bool>()) {
     decl.grab = v.as<bool>();

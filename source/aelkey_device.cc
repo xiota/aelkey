@@ -140,7 +140,6 @@ sol::object device_get_info(sol::this_state ts, const std::string &dev_id) {
   tbl["name"] = decl.name;
   tbl["phys"] = decl.phys;
   tbl["uniq"] = decl.uniq;
-  tbl["writable"] = decl.writable;
   tbl["grab"] = decl.grab;
 
   return tbl;
