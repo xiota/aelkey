@@ -59,6 +59,40 @@ bool haptics_handle_upload(HapticsSourceCtx &hctx, int request_id) {
   return true;
 }
 
+static void haptics_propagate_erase_to_sinks(const std::string &source_id, int virt_id) {
+  auto &state = AelkeyState::instance();
+  auto key = std::make_pair(source_id, virt_id);
+
+  for (auto &[id, ictx] : state.input_map) {
+    if (!ictx.haptics.supported) {
+      continue;
+    }
+
+    auto &sink = ictx.haptics;
+
+    auto it = sink.slots.find(key);
+    if (it == sink.slots.end()) {
+      continue;
+    }
+
+    int real_id = it->second;
+
+    if (ioctl(ictx.fd, EVIOCRMFF, real_id) < 0) {
+      perror("EVIOCRMFF");
+    }
+
+    sink.slots.erase(it);
+
+    std::printf(
+        "Haptics: erased real_id=%d on sink '%s' for %s:%d\n",
+        real_id,
+        id.c_str(),
+        source_id.c_str(),
+        virt_id
+    );
+  }
+}
+
 // Handle UI_FF_ERASE
 bool haptics_handle_erase(HapticsSourceCtx &hctx, int request_id) {
   int fd = hctx.fd;
@@ -73,8 +107,11 @@ bool haptics_handle_erase(HapticsSourceCtx &hctx, int request_id) {
 
   int virt_id = er.effect_id;
 
-  // Remove effect
+  // Remove effect from source
   hctx.effects.erase(virt_id);
+
+  // Propagate erase to all sinks
+  haptics_propagate_erase_to_sinks(hctx.id, virt_id);
 
   er.retval = 0;
 

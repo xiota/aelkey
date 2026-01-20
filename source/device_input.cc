@@ -445,6 +445,11 @@ static InputCtx attach_device_helper(
     ctx.idev = idev;
     frames[in.id] = {};  // keyed by string id now
 
+    if (libevdev_has_event_type(idev, EV_FF)) {
+      ctx.haptics.supported = true;
+      std::printf("Haptics: sink '%s' supports FF\n", in.id.c_str());
+    }
+
     std::cout << "Attached evdev: " << libevdev_get_name(idev) << std::endl;
     ctx.active = true;
 

@@ -8,6 +8,8 @@
 #include <libusb-1.0/libusb.h>
 #include <sol/sol.hpp>
 
+#include "aelkey_haptics.h"
+
 struct InputDecl {
   std::string id;
   std::string type;
@@ -43,6 +45,8 @@ struct InputCtx {
   // The BlueZ device path, e.g. "/org/bluez/hci0/dev_XX_XX_XX_XX_XX_XX"
   // This is the root under which all GATT services/characteristics live.
   std::string gatt_path;
+
+  HapticsSinkCtx haptics;
 };
 
 // Parse a single input declaration from a Lua table.

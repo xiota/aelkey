@@ -3,7 +3,7 @@ project(
   license: 'GPL-3.0-or-later',
   version: files('version.txt'),
   meson_version: '>=0.61',
-  default_options: ['buildtype=debugoptimized', 'prefix=/usr', 'cpp_std=c++20'],
+  default_options: ['buildtype=debugoptimized', 'prefix=/usr', 'cpp_std=gnu++20'],
 )
 
 # depends
