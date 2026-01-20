@@ -195,7 +195,7 @@ void haptics_handle_play(
 
   sol::table ev = lua.create_table();
   ev["source"] = src.id;
-  ev["event"] = "play";
+  ev["type"] = "play";
   ev["id"] = virt_id;
   ev["value"] = magnitude;
 
@@ -228,7 +228,7 @@ void haptics_handle_stop(sol::this_state ts, HapticsSourceCtx &src, int virt_id)
 
   sol::table ev = lua.create_table();
   ev["source"] = src.id;
-  ev["event"] = "stop";
+  ev["type"] = "stop";
   ev["id"] = virt_id;
 
   sol::protected_function pf = f;
