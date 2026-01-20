@@ -30,35 +30,6 @@ void haptics_register_source(const std::string &id, int uinput_fd) {
   std::printf("Haptics: registered source '%s' (fd=%d)\n", id.c_str(), uinput_fd);
 }
 
-// Handle UI_FF_UPLOAD
-bool haptics_handle_upload(HapticsSourceCtx &hctx, int request_id) {
-  int fd = hctx.fd;
-
-  struct uinput_ff_upload up{};
-  up.request_id = request_id;
-
-  if (ioctl(fd, UI_BEGIN_FF_UPLOAD, &up) < 0) {
-    perror("UI_BEGIN_FF_UPLOAD");
-    return false;
-  }
-
-  int virt_id = up.effect.id;
-
-  // Store the effect
-  hctx.effects[virt_id] = up.effect;
-
-  up.retval = 0;
-
-  if (ioctl(fd, UI_END_FF_UPLOAD, &up) < 0) {
-    perror("UI_END_FF_UPLOAD");
-    return false;
-  }
-
-  std::printf("Haptics: stored effect virt_id=%d on source '%s'\n", virt_id, hctx.id.c_str());
-
-  return true;
-}
-
 static void haptics_propagate_erase_to_sinks(const std::string &source_id, int virt_id) {
   auto &state = AelkeyState::instance();
   auto key = std::make_pair(source_id, virt_id);
@@ -91,6 +62,42 @@ static void haptics_propagate_erase_to_sinks(const std::string &source_id, int v
         virt_id
     );
   }
+}
+
+// Handle UI_FF_UPLOAD
+bool haptics_handle_upload(HapticsSourceCtx &hctx, int request_id) {
+  int fd = hctx.fd;
+
+  struct uinput_ff_upload up{};
+  up.request_id = request_id;
+
+  if (ioctl(fd, UI_BEGIN_FF_UPLOAD, &up) < 0) {
+    perror("UI_BEGIN_FF_UPLOAD");
+    return false;
+  }
+
+  int virt_id = up.effect.id;
+
+  // Store the new effect data from the game
+  hctx.effects[virt_id] = up.effect;
+
+  // Erase old real_ids on all sinks
+  haptics_propagate_erase_to_sinks(hctx.id, virt_id);
+
+  up.retval = 0;
+
+  if (ioctl(fd, UI_END_FF_UPLOAD, &up) < 0) {
+    perror("UI_END_FF_UPLOAD");
+    return false;
+  }
+
+  std::printf(
+      "Haptics: stored effect virt_id=%d on source '%s' (erase-only)\n",
+      virt_id,
+      hctx.id.c_str()
+  );
+
+  return true;
 }
 
 // Handle UI_FF_ERASE
