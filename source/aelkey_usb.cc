@@ -315,7 +315,7 @@ sol::object usb_control_transfer(sol::this_state ts, sol::table opts) {
     transferred = (status >= 0) ? status : 0;
 
     // original code returned an empty string for OUT
-    result["data"] = std::string();
+    result["data"] = "";
   }
 
   // common fields

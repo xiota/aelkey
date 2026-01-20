@@ -69,7 +69,7 @@ void notify_state_change(sol::this_state ts, const InputDecl &decl, const char *
 
   sol::table tbl = lua.create_table();
   tbl["device"] = decl.id;
-  tbl["state"] = std::string(state ? state : "");
+  tbl["state"] = state ? state : "";
 
   sol::protected_function pf = cb;
   sol::protected_function_result result = pf(tbl);

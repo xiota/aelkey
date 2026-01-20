@@ -43,11 +43,11 @@ static void dispatch_hidraw(sol::this_state ts, int fd_ready, InputCtx &ctx) {
   if (r > 0) {
     tbl["data"] = std::string(reinterpret_cast<const char *>(buf), static_cast<std::size_t>(r));
     tbl["size"] = static_cast<int>(r);
-    tbl["status"] = std::string("ok");
+    tbl["status"] = "ok";
   } else if (r == 0) {
-    tbl["status"] = std::string("disconnect");
+    tbl["status"] = "disconnect";
   } else {
-    tbl["status"] = std::string(strerror(errno));
+    tbl["status"] = strerror(errno);
   }
 
   sol::protected_function pf = cb;
@@ -96,8 +96,8 @@ static void dispatch_evdev(sol::this_state ts, InputCtx &ctx) {
               const char *tname = libevdev_event_type_get_name(e.type);
               const char *cname = libevdev_event_code_get_name(e.type, e.code);
 
-              evt["type"] = std::string(tname ? tname : "");
-              evt["code"] = std::string(cname ? cname : "");
+              evt["type"] = tname ? tname : "";
+              evt["code"] = cname ? cname : "";
               evt["value"] = e.value;
               evt["sec"] = static_cast<int>(e.time.tv_sec);
               evt["usec"] = static_cast<int>(e.time.tv_usec);

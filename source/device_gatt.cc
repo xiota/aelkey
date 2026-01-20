@@ -523,10 +523,10 @@ static void process_one_gatt_message(sol::this_state ts, DBusMessage *msg) {
 
       sol::table tbl = lua.create_table();
       tbl["device"] = ctx.decl.id;
-      tbl["path"] = std::string(path);
+      tbl["path"] = path;
       tbl["data"] = std::string(reinterpret_cast<const char *>(bytes.data()), bytes.size());
       tbl["size"] = static_cast<int>(bytes.size());
-      tbl["status"] = std::string("ok");
+      tbl["status"] = "ok";
 
       sol::protected_function pf = cb;
       sol::protected_function_result res = pf(tbl);
