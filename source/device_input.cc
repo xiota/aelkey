@@ -574,7 +574,6 @@ InputDecl detach_input_device(const std::string &dev_id) {
     // Cancel and free any active libusb transfers
     for (auto *t : ctx.transfers) {
       libusb_cancel_transfer(t);
-      libusb_free_transfer(t);
     }
     ctx.transfers.clear();
 

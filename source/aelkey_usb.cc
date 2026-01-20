@@ -49,9 +49,42 @@ static const char *transfer_status_to_string(libusb_transfer_status status) {
   }
 }
 
+static void destroy_transfer(libusb_transfer *t) {
+  if (!t) {
+    return;
+  }
+
+  if (t->buffer) {
+    std::free(t->buffer);
+    t->buffer = nullptr;
+  }
+
+  if (t->user_data) {
+    delete static_cast<std::pair<InputCtx *, lua_State *> *>(t->user_data);
+    t->user_data = nullptr;
+  }
+
+  libusb_free_transfer(t);
+}
+
+static void cleanup_transfer(InputCtx *ctx, libusb_transfer *transfer) {
+  auto &vec = ctx->transfers;
+  vec.erase(std::remove(vec.begin(), vec.end(), transfer), vec.end());
+  destroy_transfer(transfer);
+}
+
 // libusb async callback → Lua
 static void LIBUSB_CALL dispatch_libusb(libusb_transfer *transfer) {
+  if (!transfer || !transfer->user_data) {
+    return;
+  }
+
   auto *ud = static_cast<std::pair<InputCtx *, lua_State *> *>(transfer->user_data);
+  if (!ud) {
+    destroy_transfer(transfer);
+    return;
+  }
+
   InputCtx *ctx = ud->first;
   lua_State *L = ud->second;
 
@@ -90,9 +123,7 @@ static void LIBUSB_CALL dispatch_libusb(libusb_transfer *transfer) {
     case LIBUSB_TRANSFER_TIMED_OUT: {
       // transient / normal: try resubmit
       if (libusb_submit_transfer(transfer) != 0) {
-        auto &vec = ctx->transfers;
-        vec.erase(std::remove(vec.begin(), vec.end(), transfer), vec.end());
-        libusb_free_transfer(transfer);
+        cleanup_transfer(ctx, transfer);
       }
       break;
     }
@@ -113,9 +144,7 @@ static void LIBUSB_CALL dispatch_libusb(libusb_transfer *transfer) {
         notify_state_change(L, ctx->decl, "remove");
       } else {
         // fatal or cancelled, just clean up this transfer
-        auto &vec = ctx->transfers;
-        vec.erase(std::remove(vec.begin(), vec.end(), transfer), vec.end());
-        libusb_free_transfer(transfer);
+        cleanup_transfer(ctx, transfer);
       }
       break;
     }
@@ -430,7 +459,7 @@ sol::object usb_submit_transfer(sol::this_state ts, sol::table opts) {
   unsigned char *buf =
       static_cast<unsigned char *>(std::malloc(static_cast<std::size_t>(size)));
   if (!buf) {
-    libusb_free_transfer(xfer);
+    destroy_transfer(xfer);
     sol::table result = lua.create_table();
     result["device"] = dev_id;
     result["endpoint"] = endpoint;
@@ -452,9 +481,7 @@ sol::object usb_submit_transfer(sol::this_state ts, sol::table opts) {
   int rc = libusb_submit_transfer(xfer);
   if (rc != 0) {
     std::fprintf(stderr, "libusb_submit_transfer error: %s\n", libusb_error_name(rc));
-    std::free(buf);
-    delete static_cast<std::pair<InputCtx *, lua_State *> *>(xfer->user_data);
-    libusb_free_transfer(xfer);
+    destroy_transfer(xfer);
 
     sol::table result = lua.create_table();
     result["device"] = dev_id;
