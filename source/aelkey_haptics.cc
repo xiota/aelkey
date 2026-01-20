@@ -66,6 +66,13 @@ bool haptics_handle_upload(HapticsSourceCtx &hctx, int request_id) {
     return false;
   }
 
+  up.retval = 0;
+
+  if (ioctl(fd, UI_END_FF_UPLOAD, &up) < 0) {
+    perror("UI_END_FF_UPLOAD");
+    return false;
+  }
+
   int virt_id = up.effect.id;
 
   // Store the new effect data from the game
@@ -74,12 +81,6 @@ bool haptics_handle_upload(HapticsSourceCtx &hctx, int request_id) {
   // Erase old real_ids on all sinks
   haptics_propagate_erase_to_sinks(hctx.id, virt_id);
 
-  up.retval = 0;
-
-  if (ioctl(fd, UI_END_FF_UPLOAD, &up) < 0) {
-    perror("UI_END_FF_UPLOAD");
-    return false;
-  }
   return true;
 }
 
