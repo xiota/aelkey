@@ -113,21 +113,52 @@ bool haptics_handle_erase(HapticsSourceCtx &hctx, int request_id) {
   return true;
 }
 
+ff_effect lua_to_ff_effect(sol::table t) {
+  ff_effect eff{};
+  eff.id = t.get_or("id", -1);
+  eff.replay.length = t.get_or("length", 250);
+  eff.replay.delay = t.get_or("delay", 0);
+
+  std::string type = t.get_or("type", std::string("rumble"));
+  if (type == "rumble") {
+    eff.type = FF_RUMBLE;
+    eff.u.rumble.strong_magnitude = t.get_or("strong", 0x4000);
+    eff.u.rumble.weak_magnitude = t.get_or("weak", 0x4000);
+  } else if (type == "periodic") {
+    eff.type = FF_PERIODIC;
+    eff.u.periodic.waveform = t.get_or("waveform", 0);
+    eff.u.periodic.magnitude = t.get_or("magnitude", 0);
+    eff.u.periodic.offset = t.get_or("offset", 0);
+    eff.u.periodic.phase = t.get_or("phase", 0);
+    eff.u.periodic.period = t.get_or("period", 0);
+  } else if (type == "constant") {
+    eff.type = FF_CONSTANT;
+    eff.u.constant.level = t.get_or("level", 0);
+  } else {
+    eff.type = FF_RUMBLE;
+    eff.u.rumble.strong_magnitude = 0x4000;
+    eff.u.rumble.weak_magnitude = 0x4000;
+  }
+
+  return eff;
+}
+
 sol::table haptics_effect_to_lua(sol::state_view lua, const ff_effect &eff) {
   sol::table t = lua.create_table();
 
   t["id"] = eff.id;
-  t["type"] = eff.type;
   t["length"] = eff.replay.length;
   t["delay"] = eff.replay.delay;
 
   switch (eff.type) {
     case FF_RUMBLE:
+      t["type"] = "rumble";
       t["strong"] = eff.u.rumble.strong_magnitude;
       t["weak"] = eff.u.rumble.weak_magnitude;
       break;
 
     case FF_PERIODIC:
+      t["type"] = "periodic";
       t["waveform"] = eff.u.periodic.waveform;
       t["magnitude"] = eff.u.periodic.magnitude;
       t["offset"] = eff.u.periodic.offset;
@@ -136,6 +167,7 @@ sol::table haptics_effect_to_lua(sol::state_view lua, const ff_effect &eff) {
       break;
 
     case FF_CONSTANT:
+      t["type"] = "constant";
       t["level"] = eff.u.constant.level;
       break;
 
@@ -374,12 +406,43 @@ void haptics_stop(std::string sink_id, sol::table ev) {
   }
 }
 
+sol::table haptics_create(sol::table tbl) {
+  auto &state = AelkeyState::instance();
+  std::string source_id = "_aelkey_haptics_";  // internal bucket
+
+  // Get/Create the internal source context
+  HapticsSourceCtx &hctx = state.haptics_sources[source_id];
+  hctx.id = source_id;  // Ensure ID is set
+
+  // Convert the table to our C struct
+  ff_effect eff = lua_to_ff_effect(tbl);
+
+  // Assign an internal ID (just increment a counter)
+  static int internal_id_counter = 0;
+  if (eff.id == -1) {
+    eff.id = internal_id_counter++;
+  }
+
+  // If the user updates an existing effect, clear it from physical controllers
+  haptics_propagate_erase_to_sinks(source_id, eff.id);
+
+  // Store it
+  hctx.effects[eff.id] = eff;
+
+  // Inject back into Lua table for the user
+  tbl["source"] = source_id;
+  tbl["id"] = eff.id;
+
+  // Return the table
+  return tbl;
+}
+
 extern "C" int luaopen_aelkey_haptics(lua_State *L) {
   sol::state_view lua(L);
 
   sol::table mod = lua.create_table();
 
-  // sink-side functions
+  mod.set_function("create", &haptics_create);
   mod.set_function("play", &haptics_play);
   mod.set_function("stop", &haptics_stop);
 
