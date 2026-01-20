@@ -378,7 +378,7 @@ static InputCtx attach_device_helper(
 
   if (in.type == "hidraw") {
     // hidraw: open fd, no libevdev init
-    ctx.fd = ::open(devnode.c_str(), O_RDONLY | O_NONBLOCK);
+    ctx.fd = ::open(devnode.c_str(), O_RDWR | O_NONBLOCK);
     if (ctx.fd < 0) {
       perror("open");
       return ctx;  // ctx.fd == -1 signals failure
@@ -428,7 +428,7 @@ static InputCtx attach_device_helper(
 
     ctx = attach_gatt_device(decl_copy);
   } else if (in.type == "evdev") {
-    ctx.fd = ::open(devnode.c_str(), O_RDONLY | O_NONBLOCK);
+    ctx.fd = ::open(devnode.c_str(), O_RDWR | O_NONBLOCK);
     if (ctx.fd < 0) {
       perror("open");
       return ctx;

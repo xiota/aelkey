@@ -231,3 +231,147 @@ void haptics_handle_stop(sol::this_state ts, HapticsSourceCtx &src, int virt_id)
     std::fprintf(stderr, "Lua haptics callback error: %s\n", err.what());
   }
 }
+
+void haptics_play(std::string sink_id, sol::table ev) {
+  auto &state = AelkeyState::instance();
+
+  // 1. Find the sink device
+  auto it = state.input_map.find(sink_id);
+  if (it == state.input_map.end()) {
+    std::fprintf(stderr, "Haptics: invalid sink_id '%s'\n", sink_id.c_str());
+    return;
+  }
+
+  InputCtx &sink = it->second;
+  HapticsSinkCtx &hctx = sink.haptics;
+
+  if (!hctx.supported) {
+    std::fprintf(stderr, "Haptics: sink '%s' does not support FF\n", sink_id.c_str());
+    return;
+  }
+
+  // 2. Extract source + virt_id from event
+  std::string source_id = ev["source"];
+  int virt_id = ev["id"];
+  int magnitude = ev.get_or("value", 0);
+
+  auto key = std::make_pair(source_id, virt_id);
+
+  // 3. Check if sink already has this effect
+  int real_id = -1;
+  auto it_slot = hctx.slots.find(key);
+
+  if (it_slot != hctx.slots.end()) {
+    real_id = it_slot->second;
+  } else {
+    // 4. Upload effect to sink
+    auto src_it = state.haptics_sources.find(source_id);
+    if (src_it == state.haptics_sources.end()) {
+      std::fprintf(stderr, "Haptics: unknown source '%s'\n", source_id.c_str());
+      return;
+    }
+
+    HapticsSourceCtx &src = src_it->second;
+
+    auto eff_it = src.effects.find(virt_id);
+    if (eff_it == src.effects.end()) {
+      std::fprintf(
+          stderr, "Haptics: source '%s' missing effect %d\n", source_id.c_str(), virt_id
+      );
+      return;
+    }
+
+    const ff_effect &src_eff = eff_it->second;
+
+    // Rebuild a clean effect for the sink
+    ff_effect eff{};
+    eff.type = src_eff.type;
+    eff.id = -1;  // let the sink assign its own ID
+
+    // Basic common fields
+    eff.replay = src_eff.replay;
+    eff.direction = src_eff.direction;
+    eff.trigger.button = 0;
+    eff.trigger.interval = 0;
+
+    switch (src_eff.type) {
+      case FF_RUMBLE:
+        eff.u.rumble = src_eff.u.rumble;
+        break;
+
+      case FF_PERIODIC:
+        eff.u.periodic = src_eff.u.periodic;
+        break;
+
+      case FF_CONSTANT:
+        eff.u.constant = src_eff.u.constant;
+        break;
+
+      default:
+        // Fallback: simple rumble if type unsupported
+        eff.type = FF_RUMBLE;
+        eff.u.rumble.strong_magnitude = 0x4000;
+        eff.u.rumble.weak_magnitude = 0x4000;
+        eff.replay.length = src_eff.replay.length ? src_eff.replay.length : 250;
+        break;
+    }
+
+    // Upload to sink
+    int new_id = ioctl(sink.fd, EVIOCSFF, &eff);
+    if (new_id < 0) {
+      perror("EVIOCSFF");
+      return;
+    }
+
+    real_id = new_id;
+    hctx.slots[key] = real_id;
+  }
+
+  // 5. Play the effect
+  struct input_event play_ev{};
+  play_ev.type = EV_FF;
+  play_ev.code = real_id;
+  play_ev.value = magnitude;
+
+  if (write(sink.fd, &play_ev, sizeof(play_ev)) < 0) {
+    perror("write(EV_FF)");
+  }
+}
+
+void haptics_stop(std::string sink_id, sol::table ev) {
+  auto &state = AelkeyState::instance();
+
+  auto it = state.input_map.find(sink_id);
+  if (it == state.input_map.end()) {
+    std::fprintf(stderr, "Haptics: invalid sink_id '%s'\n", sink_id.c_str());
+    return;
+  }
+
+  InputCtx &sink = it->second;
+  HapticsSinkCtx &hctx = sink.haptics;
+
+  if (!hctx.supported) {
+    return;
+  }
+
+  std::string source_id = ev["source"];
+  int virt_id = ev["id"];
+
+  auto key = std::make_pair(source_id, virt_id);
+  auto it_slot = hctx.slots.find(key);
+
+  if (it_slot == hctx.slots.end()) {
+    return;  // nothing to stop
+  }
+
+  int real_id = it_slot->second;
+
+  struct input_event stop_ev{};
+  stop_ev.type = EV_FF;
+  stop_ev.code = real_id;
+  stop_ev.value = 0;
+
+  if (write(sink.fd, &stop_ev, sizeof(stop_ev)) < 0) {
+    perror("write(EV_FF)");
+  }
+}
