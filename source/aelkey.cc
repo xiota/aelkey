@@ -4,6 +4,7 @@
 #include "aelkey_daemon.h"
 #include "aelkey_device.h"
 #include "aelkey_gatt.h"
+#include "aelkey_haptics.h"
 #include "aelkey_hid.h"
 #include "aelkey_loop.h"
 #include "aelkey_usb.h"
@@ -40,6 +41,7 @@ constexpr ScriptModule script_modules[] = {
 constexpr CModule c_modules[] = {
   { "daemon", luaopen_aelkey_daemon },
   { "gatt", luaopen_aelkey_gatt },
+  { "haptics", luaopen_aelkey_haptics },
   { "hid", luaopen_aelkey_hid },
   { "usb", luaopen_aelkey_usb },
   { "util", luaopen_aelkey_util },

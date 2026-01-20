@@ -50,3 +50,5 @@ void haptics_debug_dump(const HapticsSourceCtx &hctx);
 sol::table haptics_effect_to_lua(sol::state_view lua, const ff_effect &eff);
 void haptics_handle_play(sol::this_state ts, HapticsSourceCtx &src, int virt_id, int magnitude);
 void haptics_handle_stop(sol::this_state ts, HapticsSourceCtx &src, int virt_id);
+
+extern "C" int luaopen_aelkey_haptics(lua_State *L);

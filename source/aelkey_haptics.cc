@@ -375,3 +375,15 @@ void haptics_stop(std::string sink_id, sol::table ev) {
     perror("write(EV_FF)");
   }
 }
+
+extern "C" int luaopen_aelkey_haptics(lua_State *L) {
+  sol::state_view lua(L);
+
+  sol::table mod = lua.create_table();
+
+  // sink-side functions
+  mod.set_function("play", &haptics_play);
+  mod.set_function("stop", &haptics_stop);
+
+  return sol::stack::push(L, mod);
+}
