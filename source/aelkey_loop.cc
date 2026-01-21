@@ -295,6 +295,7 @@ sol::object loop_start(sol::this_state ts) {
       if (ctx_ptr->decl.type == "hidraw") {
         dispatch_hidraw(ts, fd_ready, *ctx_ptr);
       } else if (ctx_ptr->decl.type == "evdev") {
+        try_evdev_grab(*ctx_ptr);
         dispatch_evdev(ts, *ctx_ptr);
       }
     }

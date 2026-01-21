@@ -42,6 +42,9 @@ struct InputCtx {
 
   bool active = false;
 
+  bool grab_pending = false;
+  bool grabbed = false;
+
   // The BlueZ device path, e.g. "/org/bluez/hci0/dev_XX_XX_XX_XX_XX_XX"
   // This is the root under which all GATT services/characteristics live.
   std::string gatt_path;
@@ -61,3 +64,5 @@ void parse_inputs_from_lua(sol::this_state ts);
 // Attach/detach input devices.
 bool attach_input_device(const std::string &devnode, const InputDecl &decl);
 InputDecl detach_input_device(const std::string &dev_id);
+
+bool try_evdev_grab(InputCtx &ctx);

@@ -361,6 +361,45 @@ std::string match_device(const InputDecl &decl) {
   return {};
 }
 
+bool try_evdev_grab(InputCtx &ctx) {
+  if (!ctx.grab_pending || !ctx.idev) {
+    return false;
+  }
+
+  // First: check kernel key bitmap via EVIOCGKEY
+  unsigned long key_bits[(KEY_MAX + 1) / (sizeof(unsigned long) * 8)] = { 0 };
+  if (ioctl(ctx.fd, EVIOCGKEY(sizeof(key_bits)), key_bits) >= 0) {
+    for (int code = 0; code <= KEY_MAX; ++code) {
+      if (key_bits[code / (sizeof(unsigned long) * 8)] &
+          (1UL << (code % (sizeof(unsigned long) * 8)))) {
+        return false;  // kernel thinks key is down
+      }
+    }
+  }
+
+  // Second: check libevdev's internal state
+  for (int code = 0; code <= KEY_MAX; ++code) {
+    int value = 0;
+    if (libevdev_fetch_event_value(ctx.idev, EV_KEY, code, &value) == 0 && value == 1) {
+      return false;  // libevdev thinks key is down
+    }
+  }
+
+  // Attempt grab
+  int rc = libevdev_grab(ctx.idev, LIBEVDEV_GRAB);
+  if (rc < 0) {
+    std::fprintf(
+        stderr, "Deferred grab failed for %s: %s\n", ctx.decl.id.c_str(), strerror(-rc)
+    );
+    return false;
+  }
+
+  std::cout << "Grabbed device exclusively: " << ctx.decl.id << std::endl;
+  ctx.grab_pending = false;
+  ctx.grabbed = true;
+  return true;
+}
+
 static InputCtx attach_device_helper(
     const std::string &devnode,
     const InputDecl &in,
@@ -449,12 +488,8 @@ static InputCtx attach_device_helper(
     ctx.active = true;
 
     if (in.grab) {
-      int rc = libevdev_grab(idev, LIBEVDEV_GRAB);
-      if (rc < 0) {
-        std::fprintf(stderr, "Failed to grab device %s: %s\n", devnode.c_str(), strerror(-rc));
-      } else {
-        std::cout << "Grabbed device exclusively: " << devnode << std::endl;
-      }
+      ctx.grab_pending = true;
+      try_evdev_grab(ctx);
     }
 
     // register with epoll
