@@ -11,6 +11,7 @@
 #include <sys/epoll.h>
 
 #include "aelkey_state.h"
+#include "device_helpers.h"
 
 static void start_notify(DBusConnection *conn, const std::string &char_path) {
   DBusMessage *msg = dbus_message_new_method_call(
@@ -633,11 +634,14 @@ get_matching_devices(const InputDecl &decl, DBusMessageIter &array) {
     if (is_device) {
       bool match = false;
 
-      if (!decl.uniq.empty() && address == decl.uniq) {
+      // Match uniq (Bluetooth MAC address)
+      if (!decl.uniq.empty() && match_string(decl.uniq, address)) {
         match = true;
       }
 
-      if (!match && !decl.name.empty() && (name == decl.name || alias == decl.name)) {
+      // Match name or alias
+      if (!match && !decl.name.empty() &&
+          (match_string(decl.name, name) || match_string(decl.name, alias))) {
         match = true;
       }
 

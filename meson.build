@@ -94,6 +94,7 @@ src_files = files(
   'source/aelkey_usb.cc',
   'source/aelkey_util.cc',
   'source/device_gatt.cc',
+  'source/device_helpers.cc',
   'source/device_input.cc',
   'source/device_libusb.cc',
   'source/device_output.cc',

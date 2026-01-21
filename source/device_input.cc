@@ -20,6 +20,7 @@
 
 #include "aelkey_state.h"
 #include "device_gatt.h"
+#include "device_helpers.h"
 #include "device_libusb.h"
 
 // Parse a single InputDecl from a Lua table.
@@ -247,7 +248,7 @@ std::string match_device(const InputDecl &decl) {
           char name[256] = { 0 };
           if (ioctl(fd, HIDIOCGRAWNAME(sizeof(name) - 1), name) >= 0) {
             std::string devname(name);
-            if (decl.name != devname) {
+            if (!match_string(decl.name, devname)) {
               match = false;
             }
           } else {
@@ -258,7 +259,7 @@ std::string match_device(const InputDecl &decl) {
         if (!decl.phys.empty()) {
           char phys[64] = { 0 };
           if (ioctl(fd, HIDIOCGRAWPHYS(sizeof(phys) - 1), phys) >= 0) {
-            if (decl.phys != std::string(phys)) {
+            if (!match_string(decl.phys, phys)) {
               std::cout << std::string(phys) << std::endl;
               match = false;
             }
@@ -268,7 +269,7 @@ std::string match_device(const InputDecl &decl) {
         if (!decl.uniq.empty()) {
           char uniq[64] = { 0 };
           if (ioctl(fd, HIDIOCGRAWUNIQ(sizeof(uniq) - 1), uniq) >= 0) {
-            if (decl.uniq != std::string(uniq)) {
+            if (!match_string(decl.uniq, uniq)) {
               std::cout << std::string(uniq) << std::endl;
               match = false;
             }
@@ -315,13 +316,13 @@ std::string match_device(const InputDecl &decl) {
         if (decl.product && libevdev_get_id_product(evdev) != decl.product) {
           match = false;
         }
-        if (!decl.name.empty() && decl.name != (libevdev_get_name(evdev) ?: "")) {
+        if (!decl.name.empty() && !match_string(decl.name, (libevdev_get_name(evdev) ?: ""))) {
           match = false;
         }
-        if (!decl.phys.empty() && decl.phys != (libevdev_get_phys(evdev) ?: "")) {
+        if (!decl.phys.empty() && !match_string(decl.phys, (libevdev_get_phys(evdev) ?: ""))) {
           match = false;
         }
-        if (!decl.uniq.empty() && decl.uniq != (libevdev_get_uniq(evdev) ?: "")) {
+        if (!decl.uniq.empty() && !match_string(decl.uniq, (libevdev_get_uniq(evdev) ?: ""))) {
           match = false;
         }
 
