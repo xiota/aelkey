@@ -434,12 +434,38 @@ sol::table haptics_create(sol::table tbl) {
   return tbl;
 }
 
+void haptics_erase(sol::table tbl) {
+  auto &state = AelkeyState::instance();
+
+  // Extract the routing info injected by 'create'
+  std::string source_id = tbl.get_or("source", std::string(""));
+  int virt_id = tbl.get_or("id", -1);
+
+  if (source_id.empty() || virt_id == -1) {
+    return;  // Not a managed effect table
+  }
+
+  // Clean up the physical hardware (Sinks)
+  haptics_propagate_erase_to_sinks(source_id, virt_id);
+
+  // Remove the definition from the Source
+  auto it = state.haptics_sources.find(source_id);
+  if (it != state.haptics_sources.end()) {
+    it->second.effects.erase(virt_id);
+  }
+
+  // Clean up the Lua table so it can't be accidentally played again
+  tbl["source"] = sol::nil;
+  tbl["id"] = -1;
+}
+
 extern "C" int luaopen_aelkey_haptics(lua_State *L) {
   sol::state_view lua(L);
 
   sol::table mod = lua.create_table();
 
   mod.set_function("create", &haptics_create);
+  mod.set_function("erase", &haptics_erase);
   mod.set_function("play", &haptics_play);
   mod.set_function("stop", &haptics_stop);
 
