@@ -328,32 +328,29 @@ void haptics_play(std::string sink_id, sol::table ev) {
     }
 
     // Upload to sink
-    int new_id = ioctl(sink.fd, EVIOCSFF, &eff);
+    int rc = ioctl(sink.fd, EVIOCSFF, &eff);
 
     // Flush and reupload when effects slots full
-    if (new_id < 0 && errno == ENOSPC) {
+    if (rc < 0 && errno == ENOSPC) {
       std::fprintf(stderr, "Haptics: sink '%s' full, flushing slots...\n", sink_id.c_str());
 
-      // Remove known effects from the hardware
       for (const auto &[key_pair, r_id] : hctx.slots) {
         if (ioctl(sink.fd, EVIOCRMFF, r_id) < 0) {
           // ignore errors (if the effect was already gone)
         }
       }
-
-      // Clear internal tracking for this sink
       hctx.slots.clear();
 
       // Retry upload
-      new_id = ioctl(sink.fd, EVIOCSFF, &eff);
+      rc = ioctl(sink.fd, EVIOCSFF, &eff);
     }
 
-    if (new_id < 0) {
+    if (rc < 0) {
       perror("EVIOCSFF");
       return;
     }
 
-    real_id = new_id;
+    real_id = eff.id;
     hctx.slots[key] = real_id;
   }
 
