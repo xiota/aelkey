@@ -7,6 +7,9 @@
 #include <linux/uinput.h>
 #include <sol/sol.hpp>
 
+static constexpr const char *HAPTICS_SOURCE_CUSTOM = "_aelkey_haptics_custom_";
+static constexpr const char *HAPTICS_SOURCE_ONESHOT = "_aelkey_haptics_oneshot_";
+
 struct PairHash {
   std::size_t operator()(const std::pair<std::string, int> &p) const noexcept {
     std::size_t h1 = std::hash<std::string>{}(p.first);
