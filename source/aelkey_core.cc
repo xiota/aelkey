@@ -87,12 +87,12 @@ sol::object core_syn_report(sol::this_state ts, sol::optional<std::string> dev_i
 // callback = string name OR function
 sol::object core_tick(sol::this_state ts, int ms, sol::object cb_obj) {
   sol::state_view lua(ts);
-  auto &state = AelkeyState::instance();
+  auto &scheduler = TickScheduler::instance();
 
   // tick(0, nil) → cancel all timers
   if (cb_obj.is<sol::nil_t>()) {
     if (ms == 0) {
-      state.scheduler->cancel_all();
+      scheduler.cancel_all();
     }
     // nil callback with non-zero ms → do nothing
     return sol::lua_nil;
@@ -109,7 +109,7 @@ sol::object core_tick(sol::this_state ts, int ms, sol::object cb_obj) {
   }
 
   // Cancel existing timers for this key
-  state.scheduler->cancel_matching(key);
+  scheduler.cancel_matching(key);
 
   // If ms == 0, we were just canceling
   if (ms == 0) {
@@ -117,7 +117,7 @@ sol::object core_tick(sol::this_state ts, int ms, sol::object cb_obj) {
   }
 
   // Schedule new repeating timer
-  int fd = state.scheduler->schedule(ms, key);
+  int fd = scheduler.schedule(ms, key);
   if (fd < 0) {
     return sol::make_object(lua, sol::lua_nil);
   }

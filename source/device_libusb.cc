@@ -2,6 +2,7 @@
 
 #include <libusb-1.0/libusb.h>
 #include <poll.h>
+#include <sys/epoll.h>
 
 #include "aelkey_state.h"
 

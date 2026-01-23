@@ -14,7 +14,6 @@
 #include "aelkey_haptics.h"
 #include "device_input.h"
 #include "device_output.h"
-#include "tick_scheduler.h"
 
 class AelkeyState {
  public:
@@ -29,7 +28,6 @@ class AelkeyState {
   AelkeyState &operator=(AelkeyState &&) = delete;
 
   lua_State *lua_vm = nullptr;
-  TickScheduler *scheduler = nullptr;
 
   int epfd = -1;
   int udev_fd = -1;

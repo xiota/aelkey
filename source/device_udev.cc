@@ -10,7 +10,6 @@
 #include "aelkey_state.h"
 #include "device_input.h"
 #include "dispatcher_registry.h"
-#include "tick_scheduler.h"
 
 void ensure_udev_initialized(sol::this_state ts) {
   auto &state = AelkeyState::instance();
@@ -26,9 +25,12 @@ void ensure_udev_initialized(sol::this_state ts) {
   }
   state.epfd = epfd;
 
-  register_all_dispatchers();
+  init_all_dispatchers();
 
-  state.scheduler = new TickScheduler(epfd, lua);
+  fprintf(stderr, "dispatchers in registry: %zu\n", dispatcher_registry().size());
+  for (auto *d : dispatcher_registry()) {
+    fprintf(stderr, "  dispatcher ptr: %p\n", d);
+  }
 
   state.g_udev = udev_new();
   if (!state.g_udev) {

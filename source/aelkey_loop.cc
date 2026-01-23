@@ -251,12 +251,6 @@ sol::object loop_start(sol::this_state ts) {
         continue;
       }
 
-      // timerfd ticks
-      if (state.scheduler && state.scheduler->owns_fd(fd_ready)) {
-        state.scheduler->handle_event(fd_ready);
-        continue;
-      }
-
       // Haptics
       HapticsSourceCtx *src = nullptr;
       for (auto &kv : state.haptics_sources) {
@@ -355,10 +349,6 @@ sol::object loop_start(sol::this_state ts) {
   if (state.g_udev) {
     udev_unref(state.g_udev);
     state.g_udev = nullptr;
-  }
-  if (state.scheduler) {
-    delete state.scheduler;
-    state.scheduler = nullptr;
   }
   if (state.epfd >= 0) {
     close(state.epfd);

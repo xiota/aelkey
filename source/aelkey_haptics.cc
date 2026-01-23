@@ -3,6 +3,7 @@
 #include <cstdio>
 
 #include <sol/sol.hpp>
+#include <sys/epoll.h>
 #include <sys/ioctl.h>
 #include <unistd.h>
 
