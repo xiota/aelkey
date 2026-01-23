@@ -9,6 +9,7 @@
 
 #include "aelkey_state.h"
 #include "device_input.h"
+#include "dispatcher_registry.h"
 #include "tick_scheduler.h"
 
 void ensure_udev_initialized(sol::this_state ts) {
@@ -24,6 +25,8 @@ void ensure_udev_initialized(sol::this_state ts) {
     throw sol::error("epoll_create1 failed");
   }
   state.epfd = epfd;
+
+  register_all_dispatchers();
 
   state.scheduler = new TickScheduler(epfd, lua);
 

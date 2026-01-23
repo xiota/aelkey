@@ -20,6 +20,7 @@
 #include "device_gatt.h"
 #include "device_input.h"
 #include "device_udev.h"
+#include "dispatcher.h"
 
 static void dispatch_hidraw(sol::this_state ts, int fd_ready, InputCtx &ctx) {
   sol::state_view lua(ts);
@@ -204,6 +205,15 @@ sol::object loop_start(sol::this_state ts) {
     for (int i = 0; i < n; ++i) {
       int fd_ready = events[i].data.fd;
       uint32_t evmask = events[i].events;
+
+      // If epoll stored a pointer, treat it as a Dispatcher.
+      void *ptr = events[i].data.ptr;
+      void *fd_cast = reinterpret_cast<void *>(static_cast<uintptr_t>(fd_ready));
+      if (ptr != nullptr && ptr != fd_cast) {
+        auto *payload = static_cast<EpollPayload *>(ptr);
+        payload->dispatcher->handle_event(payload, events[i].events);
+        continue;
+      }
 
       // libusb poll fds
       if (state.libusb_fd_set.count(fd_ready)) {
