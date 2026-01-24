@@ -7,7 +7,6 @@
 
 #include <dbus/dbus.h>
 #include <libevdev/libevdev-uinput.h>
-#include <libudev.h>
 #include <libusb-1.0/libusb.h>
 
 #include "aelkey_core.h"
@@ -30,7 +29,6 @@ class AelkeyState {
   lua_State *lua_vm = nullptr;
 
   int epfd = -1;
-  int udev_fd = -1;
   std::unordered_map<std::string, libevdev_uinput *> uinput_devices;
   std::unordered_map<std::string, InputCtx> input_map;
   std::unordered_map<std::string, std::vector<struct input_event>> frames;
@@ -42,9 +40,6 @@ class AelkeyState {
 
   std::vector<InputDecl> input_decls;
   std::vector<OutputDecl> output_decls;
-
-  struct udev *g_udev = nullptr;
-  struct udev_monitor *g_mon = nullptr;
 
   std::unordered_map<std::string, std::vector<InputDecl>> watch_map;
 

@@ -19,8 +19,8 @@
 #include "aelkey_state.h"
 #include "device_gatt.h"
 #include "device_input.h"
-#include "device_udev.h"
 #include "dispatcher.h"
+#include "dispatcher_udev.h"
 
 static void dispatch_evdev(sol::this_state ts, InputCtx &ctx) {
   sol::state_view lua(ts);
@@ -183,26 +183,6 @@ sol::object loop_start(sol::this_state ts) {
         continue;
       }
 
-      // udev hotplug
-      if (fd_ready == state.udev_fd) {
-        struct udev_device *dev = udev_monitor_receive_device(state.g_mon);
-        if (!dev) {
-          continue;
-        }
-
-        const char *action = udev_device_get_action(dev);
-        if (action) {
-          if (strcmp(action, "add") == 0) {
-            handle_udev_add(ts, dev);
-          } else if (strcmp(action, "remove") == 0) {
-            handle_udev_remove(ts, dev);
-          }
-        }
-
-        udev_device_unref(dev);
-        continue;
-      }
-
       // Haptics
       HapticsSourceCtx *src = nullptr;
       for (auto &kv : state.haptics_sources) {
@@ -240,7 +220,7 @@ sol::object loop_start(sol::this_state ts) {
       if ((evmask & (EPOLLHUP | EPOLLERR)) != 0) {
         InputDecl decl = detach_input_device(ctx_ptr->decl.id);
         if (!decl.id.empty()) {
-          notify_state_change(ts, decl, "remove");
+          DispatcherUdev::instance().notify_state_change(ctx_ptr->decl, "remove");
         }
         continue;
       }
@@ -288,18 +268,6 @@ sol::object loop_start(sol::this_state ts) {
   state.uinput_devices.clear();
 
   // Tear down global monitoring state
-  if (state.udev_fd >= 0) {
-    epoll_ctl(state.epfd, EPOLL_CTL_DEL, state.udev_fd, nullptr);
-    state.udev_fd = -1;
-  }
-  if (state.g_mon) {
-    udev_monitor_unref(state.g_mon);
-    state.g_mon = nullptr;
-  }
-  if (state.g_udev) {
-    udev_unref(state.g_udev);
-    state.g_udev = nullptr;
-  }
   if (state.epfd >= 0) {
     close(state.epfd);
     state.epfd = -1;

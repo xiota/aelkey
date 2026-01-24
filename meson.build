@@ -97,7 +97,6 @@ src_files = files(
   'source/device_helpers.cc',
   'source/device_input.cc',
   'source/device_output.cc',
-  'source/device_udev.cc',
 )
 
 shared_library(

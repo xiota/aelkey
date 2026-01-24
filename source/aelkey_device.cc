@@ -7,7 +7,7 @@
 #include "aelkey_state.h"
 #include "device_input.h"
 #include "device_output.h"
-#include "device_udev.h"
+#include "dispatcher_udev.h"
 
 // Create all uinput output devices declared in aelkey_state.output_decls
 static void create_outputs_from_decls() {
@@ -38,7 +38,7 @@ static void attach_inputs_from_decls(sol::this_state ts) {
 
     if (attach_input_device(devnode, decl)) {
       decl.devnode = devnode;
-      notify_state_change(ts, decl, "add");
+      DispatcherUdev::instance().notify_state_change(decl, "add");
     }
   }
 }
@@ -56,10 +56,7 @@ sol::object device_open(sol::this_state ts, sol::optional<std::string> dev_id_op
       return sol::make_object(lua, true);
     }
 
-    // Ensure udev + epoll initialized
-    if (state.epfd < 0 || state.udev_fd < 0 || !state.g_udev || !state.g_mon) {
-      ensure_udev_initialized(ts);
-    }
+    DispatcherUdev::instance().ensure_initialized();
 
     // Parse declarations from Lua
     parse_outputs_from_lua(ts);
@@ -75,10 +72,7 @@ sol::object device_open(sol::this_state ts, sol::optional<std::string> dev_id_op
   // SINGLE DEVICE MODE
   std::string dev_id = dev_id_opt.value();
 
-  // Ensure init
-  if (state.epfd < 0 || state.udev_fd < 0 || !state.g_udev || !state.g_mon) {
-    ensure_udev_initialized(ts);
-  }
+  DispatcherUdev::instance().ensure_initialized();
 
   // Parse declarations if not already parsed
   if (state.input_decls.empty() && state.output_decls.empty()) {
@@ -98,7 +92,7 @@ sol::object device_open(sol::this_state ts, sol::optional<std::string> dev_id_op
     decl.devnode = devnode;
 
     if (!devnode.empty() && attach_input_device(devnode, decl)) {
-      notify_state_change(ts, decl, "add");
+      DispatcherUdev::instance().notify_state_change(decl, "add");
       ok = true;
     }
     break;
