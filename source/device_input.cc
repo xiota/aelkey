@@ -20,6 +20,7 @@
 
 #include "aelkey_state.h"
 #include "device_helpers.h"
+#include "dispatcher_evdev.h"
 #include "dispatcher_gatt.h"
 #include "dispatcher_hidraw.h"
 #include "dispatcher_libusb.h"
@@ -403,49 +404,12 @@ static InputCtx attach_device_helper(
 
     ctx = gatt.attach_device(decl_copy);
   } else if (in.type == "evdev") {
-    ctx.fd = ::open(devnode.c_str(), O_RDWR | O_NONBLOCK);
-    if (ctx.fd < 0) {
-      perror("open");
+    if (!DispatcherEvdev::instance().open_device(ctx, devnode)) {
+      // open_device failed → ctx.active stays false
       return ctx;
     }
 
-    struct libevdev *idev = nullptr;
-    if (libevdev_new_from_fd(ctx.fd, &idev) < 0) {
-      std::fprintf(stderr, "Failed to init libevdev for %s\n", devnode.c_str());
-      close(ctx.fd);
-      ctx.fd = -1;
-      ctx.active = false;
-      return ctx;
-    }
-    ctx.idev = idev;
-    frames[in.id] = {};  // keyed by string id now
-
-    if (libevdev_has_event_type(idev, EV_FF)) {
-      ctx.haptics.supported = true;
-      std::printf("Haptics: sink '%s' supports FF\n", in.id.c_str());
-    }
-
-    std::cout << "Attached evdev: " << libevdev_get_name(idev) << std::endl;
     ctx.active = true;
-
-    if (in.grab) {
-      ctx.grab_pending = true;
-      try_evdev_grab(ctx);
-    }
-
-    // register with epoll
-    struct epoll_event evreg{};
-    evreg.events = EPOLLIN;
-    evreg.data.fd = ctx.fd;
-    if (epoll_ctl(epfd, EPOLL_CTL_ADD, ctx.fd, &evreg) < 0) {
-      perror("epoll_ctl EPOLL_CTL_ADD evdev");
-      libevdev_grab(ctx.idev, LIBEVDEV_UNGRAB);
-      libevdev_free(ctx.idev);
-      ctx.idev = nullptr;
-      close(ctx.fd);
-      ctx.fd = -1;
-      ctx.active = false;
-    }
   } else {
     std::fprintf(stderr, "Unknown input type: %s\n", in.type.c_str());
     return ctx;
@@ -516,33 +480,11 @@ InputDecl detach_input_device(const std::string &dev_id) {
   InputCtx &ctx = im->second;
   decl = ctx.decl;
 
-  // Detach from gatt
-  if (ctx.decl.type == "gatt") {
+  if (ctx.decl.type == "evdev") {
+    DispatcherEvdev::instance().close_device(ctx);
+  } else if (ctx.decl.type == "gatt") {
     DispatcherGATT::instance().detach_device(ctx);
-  }
-
-  // Remove from epoll if fd is valid
-  if (state.epfd >= 0 && ctx.fd >= 0) {
-    epoll_ctl(state.epfd, EPOLL_CTL_DEL, ctx.fd, nullptr);
-  }
-
-  // Free libevdev resources if present
-  if (ctx.idev) {
-    libevdev_grab(ctx.idev, LIBEVDEV_UNGRAB);
-    libevdev_free(ctx.idev);
-    ctx.idev = nullptr;
-  }
-
-  // Close fd if valid
-  if (ctx.fd >= 0) {
-    close(ctx.fd);
-    ctx.fd = -1;
-    ctx.active = false;
-  }
-
-  // Close libusb handle if present
-  if (ctx.usb_handle) {
-    // Cancel and free any active libusb transfers
+  } else if (ctx.usb_handle) {  // libusb
     for (auto *t : ctx.transfers) {
       libusb_cancel_transfer(t);
     }
@@ -553,7 +495,7 @@ InputDecl detach_input_device(const std::string &dev_id) {
     ctx.active = false;
   }
 
-  // Erase from maps keyed by string id
+  // Remove from maps
   state.input_map.erase(im);
   state.frames.erase(dev_id);
 
