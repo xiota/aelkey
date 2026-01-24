@@ -97,6 +97,7 @@ src_files = files(
   'source/device_input.cc',
   'source/device_output.cc',
   'source/dispatcher_gatt.cc',
+  'source/dispatcher_haptics.cc',
 )
 
 shared_library(

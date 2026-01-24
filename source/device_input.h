@@ -8,7 +8,7 @@
 #include <libusb-1.0/libusb.h>
 #include <sol/sol.hpp>
 
-#include "aelkey_haptics.h"
+#include "haptics_context.h"
 
 struct InputDecl {
   std::string id;

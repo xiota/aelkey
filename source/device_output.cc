@@ -9,6 +9,7 @@
 
 #include "aelkey_state.h"
 #include "device_capabilities.h"
+#include "dispatcher_haptics.h"
 
 // Provide sensible max ranges for ABS axes
 // value, min, max, fuzz, flat, resolution
@@ -220,11 +221,8 @@ libevdev_uinput *create_output_device(const OutputDecl &out) {
   }
 
   int ufd = libevdev_uinput_get_fd(uidev);
-  haptics_register_source(out.id, ufd);
 
-  // store callback name
-  auto &state = AelkeyState::instance();
-  state.haptics_sources[out.id].callback = out.on_haptics;
+  DispatcherHaptics::instance().register_source(out.id, ufd, out.on_haptics);
 
   std::cout << "Created uinput device: " << out.name << " at "
             << libevdev_uinput_get_devnode(uidev) << std::endl;
