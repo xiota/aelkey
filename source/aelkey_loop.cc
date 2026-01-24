@@ -22,44 +22,6 @@
 #include "device_udev.h"
 #include "dispatcher.h"
 
-static void dispatch_hidraw(sol::this_state ts, int fd_ready, InputCtx &ctx) {
-  sol::state_view lua(ts);
-
-  uint8_t buf[4096];
-  ssize_t r = read(fd_ready, buf, sizeof(buf));
-
-  if (ctx.decl.on_event.empty()) {
-    return;
-  }
-
-  sol::object obj = lua[ctx.decl.on_event];
-  if (!obj.is<sol::function>()) {
-    return;
-  }
-
-  sol::function cb = obj.as<sol::function>();
-
-  sol::table tbl = lua.create_table();
-  tbl["device"] = ctx.decl.id;
-
-  if (r > 0) {
-    tbl["data"] = std::string_view(reinterpret_cast<const char *>(buf), r);
-    tbl["size"] = static_cast<int>(r);
-    tbl["status"] = "ok";
-  } else if (r == 0) {
-    tbl["status"] = "disconnect";
-  } else {
-    tbl["status"] = strerror(errno);
-  }
-
-  sol::protected_function pf = cb;
-  sol::protected_function_result res = pf(tbl);
-  if (!res.valid()) {
-    sol::error err = res;
-    std::fprintf(stderr, "Lua hidraw callback error: %s\n", err.what());
-  }
-}
-
 static void dispatch_evdev(sol::this_state ts, InputCtx &ctx) {
   sol::state_view lua(ts);
 
@@ -286,9 +248,7 @@ sol::object loop_start(sol::this_state ts) {
         continue;
       }
 
-      if (ctx_ptr->decl.type == "hidraw") {
-        dispatch_hidraw(ts, fd_ready, *ctx_ptr);
-      } else if (ctx_ptr->decl.type == "evdev") {
+      if (ctx_ptr->decl.type == "evdev") {
         try_evdev_grab(*ctx_ptr);
         dispatch_evdev(ts, *ctx_ptr);
       }

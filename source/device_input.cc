@@ -21,6 +21,7 @@
 #include "aelkey_state.h"
 #include "device_gatt.h"
 #include "device_helpers.h"
+#include "dispatcher_hidraw.h"
 #include "dispatcher_libusb.h"
 
 // Parse a single InputDecl from a Lua table.
@@ -392,33 +393,13 @@ static InputCtx attach_device_helper(
   ctx.decl = in;
 
   if (in.type == "hidraw") {
-    // hidraw: open fd, no libevdev init
-    ctx.fd = ::open(devnode.c_str(), O_RDWR | O_NONBLOCK);
+    ctx.fd = DispatcherHidraw::instance().open_device(devnode, in);
     if (ctx.fd < 0) {
-      perror("open");
       return ctx;  // ctx.fd == -1 signals failure
     }
 
     std::cout << "Attached hidraw: " << devnode << std::endl;
     ctx.active = true;
-
-    if (in.grab) {
-      int flags = fcntl(ctx.fd, F_GETFL, 0);
-      if (flags != -1) {
-        fcntl(ctx.fd, F_SETFL, flags & ~O_NONBLOCK);
-      }
-    }
-
-    // register with epoll
-    struct epoll_event evreg{};
-    evreg.events = EPOLLIN;
-    evreg.data.fd = ctx.fd;
-    if (epoll_ctl(epfd, EPOLL_CTL_ADD, ctx.fd, &evreg) < 0) {
-      perror("epoll_ctl EPOLL_CTL_ADD hidraw");
-      close(ctx.fd);
-      ctx.fd = -1;
-      ctx.active = false;
-    }
   } else if (in.type == "libusb") {
     auto &usb = DispatcherLibUSB::instance();
     ctx.usb_handle = usb.open_device(in.vendor, in.product);
