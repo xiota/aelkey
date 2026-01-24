@@ -7,6 +7,7 @@
 #include "aelkey_haptics.h"
 #include "aelkey_hid.h"
 #include "aelkey_loop.h"
+#include "aelkey_state.h"
 #include "aelkey_usb.h"
 #include "aelkey_util.h"
 #include "lua_scripts.h"
@@ -98,6 +99,9 @@ sol::table load_aelkey(sol::state_view lua) {
 }  // namespace
 
 extern "C" int luaopen_aelkey(lua_State *L) {
+  auto &state = AelkeyState::instance();
+  state.lua_vm = L;
+
   sol::state_view lua(L);
 
   try {
