@@ -43,9 +43,6 @@ class AelkeyState {
 
   std::unordered_map<std::string, std::vector<InputDecl>> watch_map;
 
-  DBusConnection *g_dbus_conn = nullptr;
-  int g_dbus_fd = -1;
-
   std::string on_watchlist;
 
  private:

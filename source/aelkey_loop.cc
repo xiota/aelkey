@@ -17,7 +17,6 @@
 #include "aelkey_device.h"
 #include "aelkey_haptics.h"
 #include "aelkey_state.h"
-#include "device_gatt.h"
 #include "device_input.h"
 #include "dispatcher.h"
 #include "dispatcher_udev.h"
@@ -174,12 +173,6 @@ sol::object loop_start(sol::this_state ts) {
       if (ptr != nullptr && ptr != fd_cast) {
         auto *payload = static_cast<EpollPayload *>(ptr);
         payload->dispatcher->handle_event(payload, events[i].events);
-        continue;
-      }
-
-      // D-Bus GATT notifications
-      if (fd_ready == state.g_dbus_fd) {
-        dispatch_gatt(ts);
         continue;
       }
 

@@ -1,84 +1,176 @@
-#include "device_gatt.h"
+#include "dispatcher_gatt.h"
 
 #include <cstring>
 #include <iostream>
 #include <string>
 #include <string_view>
-#include <vector>
 
 #include <dbus/dbus.h>
-#include <sol/sol.hpp>
 #include <sys/epoll.h>
 
 #include "aelkey_state.h"
 #include "device_helpers.h"
 
-static void start_notify(DBusConnection *conn, const std::string &char_path) {
-  DBusMessage *msg = dbus_message_new_method_call(
-      "org.bluez", char_path.c_str(), "org.bluez.GattCharacteristic1", "StartNotify"
-  );
-
-  DBusMessage *reply = dbus_connection_send_with_reply_and_block(conn, msg, -1, nullptr);
-  dbus_message_unref(msg);
-  if (reply) {
-    dbus_message_unref(reply);
-  }
-}
-
-static void stop_notify(DBusConnection *conn, const std::string &char_path) {
-  DBusMessage *msg = dbus_message_new_method_call(
-      "org.bluez", char_path.c_str(), "org.bluez.GattCharacteristic1", "StopNotify"
-  );
-
-  DBusMessage *reply = dbus_connection_send_with_reply_and_block(conn, msg, -1, nullptr);
-  dbus_message_unref(msg);
-  if (reply) {
-    dbus_message_unref(reply);
-  }
-}
-
-void ensure_gatt_initialized() {
-  auto &state = AelkeyState::instance();
-  if (state.g_dbus_conn) {
+void DispatcherGATT::ensure_initialized() {
+  if (conn_) {
     return;
   }
 
-  state.g_dbus_conn = dbus_bus_get(DBUS_BUS_SYSTEM, nullptr);
-  if (!state.g_dbus_conn) {
+  conn_ = dbus_bus_get(DBUS_BUS_SYSTEM, nullptr);
+  if (!conn_) {
     std::fprintf(stderr, "GATT: failed to connect to system D-Bus\n");
     return;
   }
 
-  dbus_connection_set_exit_on_disconnect(state.g_dbus_conn, false);
+  dbus_connection_set_exit_on_disconnect(conn_, false);
 
-  if (!dbus_connection_get_unix_fd(state.g_dbus_conn, &state.g_dbus_fd)) {
+  if (!dbus_connection_get_unix_fd(conn_, &fd_)) {
     std::fprintf(stderr, "GATT: failed to get D-Bus fd\n");
     return;
   }
 
-  struct epoll_event ev{};
-  ev.events = EPOLLIN;
-  ev.data.fd = state.g_dbus_fd;
-  if (epoll_ctl(state.epfd, EPOLL_CTL_ADD, state.g_dbus_fd, &ev) != 0) {
-    std::fprintf(stderr, "GATT: epoll_ctl failed for D-Bus fd\n");
+  // Register with dispatcher/epoll
+  register_fd(fd_, EPOLLIN);
+}
+
+void DispatcherGATT::pump_messages(sol::this_state ts) {
+  if (!conn_) {
+    return;
+  }
+
+  // Non-blocking read
+  dbus_connection_read_write(conn_, 0);
+
+  // Process ALL pending messages
+  while (true) {
+    DBusMessage *msg = dbus_connection_pop_message(conn_);
+    if (!msg) {
+      break;
+    }
+
+    process_one_message(ts, msg);
+    dbus_message_unref(msg);
   }
 }
 
-// Helper: derive BlueZ device path from characteristic path.
-// Example: /org/bluez/hci0/dev_XX/service0010/char002A
-//   → /org/bluez/hci0/dev_XX
-static std::string derive_device_path_from_char_path(const std::string &char_path) {
-  std::string prefix = "/service";
-  size_t pos = char_path.find(prefix);
-  if (pos == std::string::npos) {
-    return {};
+void DispatcherGATT::process_one_message(sol::this_state ts, DBusMessage *msg) {
+  sol::state_view lua(ts);
+
+  const char *path = dbus_message_get_path(msg);
+  if (!path) {
+    return;
   }
-  return char_path.substr(0, pos);
+
+  std::vector<uint8_t> bytes;
+
+  DBusMessageIter args;
+  dbus_message_iter_init(msg, &args);
+
+  const char *iface = nullptr;
+  dbus_message_iter_get_basic(&args, &iface);
+
+  if (!iface || strcmp(iface, "org.bluez.GattCharacteristic1") != 0) {
+    return;
+  }
+
+  dbus_message_iter_next(&args);
+  DBusMessageIter dict;
+  dbus_message_iter_recurse(&args, &dict);
+
+  while (dbus_message_iter_get_arg_type(&dict) == DBUS_TYPE_DICT_ENTRY) {
+    DBusMessageIter entry;
+    dbus_message_iter_recurse(&dict, &entry);
+
+    const char *key = nullptr;
+    if (dbus_message_iter_get_arg_type(&entry) == DBUS_TYPE_STRING) {
+      dbus_message_iter_get_basic(&entry, &key);
+    }
+
+    dbus_message_iter_next(&entry);
+    if (dbus_message_iter_get_arg_type(&entry) == DBUS_TYPE_VARIANT) {
+      DBusMessageIter variant;
+      dbus_message_iter_recurse(&entry, &variant);
+
+      if (key && strcmp(key, "Value") == 0) {
+        if (dbus_message_iter_get_arg_type(&variant) == DBUS_TYPE_ARRAY) {
+          DBusMessageIter array;
+          dbus_message_iter_recurse(&variant, &array);
+
+          while (dbus_message_iter_get_arg_type(&array) == DBUS_TYPE_BYTE) {
+            uint8_t b;
+            dbus_message_iter_get_basic(&array, &b);
+            bytes.push_back(b);
+            dbus_message_iter_next(&array);
+          }
+        }
+      }
+    }
+
+    dbus_message_iter_next(&dict);
+  }
+
+  // Route to correct InputCtx (same logic as before)
+  auto &state = AelkeyState::instance();
+  for (auto &kv : state.input_map) {
+    InputCtx &ctx = kv.second;
+
+    if (ctx.decl.type != "gatt") {
+      continue;
+    }
+
+    if (!ctx.decl.on_event.empty()) {
+      sol::object obj = lua[ctx.decl.on_event];
+      if (!obj.is<sol::function>()) {
+        continue;
+      }
+
+      sol::function cb = obj.as<sol::function>();
+
+      sol::table tbl = lua.create_table();
+      tbl["device"] = ctx.decl.id;
+      tbl["path"] = path;
+      tbl["data"] =
+          std::string_view(reinterpret_cast<const char *>(bytes.data()), bytes.size());
+      tbl["size"] = static_cast<int>(bytes.size());
+      tbl["status"] = "ok";
+
+      sol::protected_function pf = cb;
+      sol::protected_function_result res = pf(tbl);
+      if (!res.valid()) {
+        sol::error err = res;
+        std::fprintf(stderr, "Lua gatt_callback error: %s\n", err.what());
+      }
+    }
+
+    break;
+  }
 }
 
-enum class GattPathType { Device, Service, Characteristic };
+void DispatcherGATT::start_notify(const std::string &char_path) {
+  DBusMessage *msg = dbus_message_new_method_call(
+      "org.bluez", char_path.c_str(), "org.bluez.GattCharacteristic1", "StartNotify"
+  );
 
-static GattPathType classify_gatt_path(const std::string &path) {
+  DBusMessage *reply = dbus_connection_send_with_reply_and_block(conn_, msg, -1, nullptr);
+  dbus_message_unref(msg);
+  if (reply) {
+    dbus_message_unref(reply);
+  }
+}
+
+void DispatcherGATT::stop_notify(const std::string &char_path) {
+  DBusMessage *msg = dbus_message_new_method_call(
+      "org.bluez", char_path.c_str(), "org.bluez.GattCharacteristic1", "StopNotify"
+  );
+
+  DBusMessage *reply = dbus_connection_send_with_reply_and_block(conn_, msg, -1, nullptr);
+  dbus_message_unref(msg);
+  if (reply) {
+    dbus_message_unref(reply);
+  }
+}
+
+GattPathType DispatcherGATT::classify_gatt_path(const std::string &path) {
   if (path.find("/char") != std::string::npos) {
     return GattPathType::Characteristic;
   }
@@ -88,20 +180,26 @@ static GattPathType classify_gatt_path(const std::string &path) {
   return GattPathType::Device;
 }
 
-static DBusMessage *get_managed_objects() {
-  auto &state = AelkeyState::instance();
+std::string DispatcherGATT::derive_device_path_from_char_path(const std::string &char_path) {
+  std::string prefix = "/service";
+  size_t pos = char_path.find(prefix);
+  if (pos == std::string::npos) {
+    return {};
+  }
+  return char_path.substr(0, pos);
+}
+
+DBusMessage *DispatcherGATT::get_managed_objects() {
   DBusMessage *msg = dbus_message_new_method_call(
       "org.bluez", "/", "org.freedesktop.DBus.ObjectManager", "GetManagedObjects"
   );
 
-  DBusMessage *resp =
-      dbus_connection_send_with_reply_and_block(state.g_dbus_conn, msg, -1, nullptr);
-
+  DBusMessage *resp = dbus_connection_send_with_reply_and_block(conn_, msg, -1, nullptr);
   dbus_message_unref(msg);
   return resp;
 }
 
-static std::string get_characteristic_uuid(const std::string &path) {
+std::string DispatcherGATT::get_characteristic_uuid(const std::string &path) {
   DBusMessage *msg = get_managed_objects();
   if (!msg) {
     return "";
@@ -199,7 +297,7 @@ static std::string get_characteristic_uuid(const std::string &path) {
   return "";
 }
 
-static std::vector<std::string> get_characteristic_flags(const std::string &path) {
+std::vector<std::string> DispatcherGATT::get_characteristic_flags(const std::string &path) {
   std::vector<std::string> out;
 
   DBusMessage *msg = get_managed_objects();
@@ -274,7 +372,7 @@ static std::vector<std::string> get_characteristic_flags(const std::string &path
   return out;
 }
 
-static void print_characteristic_inspect_line(const std::string &ch) {
+void DispatcherGATT::print_characteristic_inspect_line(const std::string &ch) {
   // Extract service and characteristic handles from DBus path
   std::string service_hex = "0000";
   std::string char_hex = "0000";
@@ -314,7 +412,7 @@ static void print_characteristic_inspect_line(const std::string &ch) {
             << ", flags=" << fl.str() << std::endl;
 }
 
-bool characteristic_supports_notify(DBusConnection *conn, const std::string &char_path) {
+bool DispatcherGATT::characteristic_supports_notify(const std::string &char_path) {
   DBusMessage *msg;
   DBusMessage *reply;
   DBusMessageIter args;
@@ -330,7 +428,7 @@ bool characteristic_supports_notify(DBusConnection *conn, const std::string &cha
       msg, DBUS_TYPE_STRING, &iface, DBUS_TYPE_STRING, &prop, DBUS_TYPE_INVALID
   );
 
-  reply = dbus_connection_send_with_reply_and_block(conn, msg, -1, nullptr);
+  reply = dbus_connection_send_with_reply_and_block(conn_, msg, -1, nullptr);
   dbus_message_unref(msg);
 
   if (!reply) {
@@ -362,215 +460,8 @@ bool characteristic_supports_notify(DBusConnection *conn, const std::string &cha
   return supports;
 }
 
-InputCtx attach_gatt_device(const InputDecl &decl) {
-  InputCtx ctx;
-  ctx.decl = decl;
-
-  auto &state = AelkeyState::instance();
-  DBusConnection *conn = state.g_dbus_conn;
-  if (!conn) {
-    std::fprintf(stderr, "GATT: no D-Bus connection\n");
-    return ctx;
-  }
-
-  if (decl.devnode.empty()) {
-    std::fprintf(stderr, "GATT: no GATT path in devnode for %s\n", decl.id.c_str());
-    return ctx;
-  }
-
-  // Determine what kind of GATT path this is
-  GattPathType type = classify_gatt_path(decl.devnode);
-
-  // Determine the device root path
-  if (type == GattPathType::Characteristic) {
-    ctx.gatt_path = derive_device_path_from_char_path(decl.devnode);
-    if (ctx.gatt_path.empty()) {
-      std::fprintf(
-          stderr, "GATT: failed to derive device path from %s\n", decl.devnode.c_str()
-      );
-    }
-  } else {
-    // For device-level or service-level matches, the path itself is the root
-    ctx.gatt_path = decl.devnode;
-  }
-
-  if (type != GattPathType::Characteristic) {
-    std::vector<std::string> found_characteristics;
-    match_gatt_device(decl, &found_characteristics);
-
-    for (const auto &ch : found_characteristics) {
-      // Always print inspect info
-      print_characteristic_inspect_line(ch);
-
-      // Only subscribe if characteristic supports notify
-      if (characteristic_supports_notify(conn, ch)) {
-        std::string rule =
-            "type='signal',interface='org.freedesktop.DBus.Properties',"
-            "member='PropertiesChanged',path='" +
-            ch + "'";
-
-        dbus_bus_add_match(conn, rule.c_str(), nullptr);
-
-        start_notify(conn, ch);
-      }
-    }
-
-    dbus_connection_flush(conn);
-  } else {
-    print_characteristic_inspect_line(decl.devnode);
-
-    // Notify
-    std::string rule =
-        "type='signal',interface='org.freedesktop.DBus.Properties',"
-        "member='PropertiesChanged',path='" +
-        decl.devnode + "'";
-
-    dbus_bus_add_match(conn, rule.c_str(), nullptr);
-    dbus_connection_flush(conn);
-
-    start_notify(conn, decl.devnode);
-  }
-
-  ctx.active = true;
-  return ctx;
-}
-
-void detach_gatt_device(InputCtx &ctx) {
-  auto &state = AelkeyState::instance();
-  DBusConnection *conn = state.g_dbus_conn;
-  if (!conn) {
-    return;
-  }
-
-  if (!ctx.decl.devnode.empty()) {
-    stop_notify(conn, ctx.decl.devnode);
-  }
-
-  ctx.active = false;
-  std::fprintf(stderr, "Detached GATT characteristic: %s\n", ctx.decl.devnode.c_str());
-}
-
-static void process_one_gatt_message(sol::this_state ts, DBusMessage *msg) {
-  sol::state_view lua(ts);
-
-  const char *path = dbus_message_get_path(msg);
-  if (!path) {
-    return;
-  }
-
-  std::vector<uint8_t> bytes;
-
-  DBusMessageIter args;
-  dbus_message_iter_init(msg, &args);
-
-  const char *iface = nullptr;
-  dbus_message_iter_get_basic(&args, &iface);
-
-  if (!iface || strcmp(iface, "org.bluez.GattCharacteristic1") != 0) {
-    return;
-  }
-
-  dbus_message_iter_next(&args);
-  DBusMessageIter dict;
-  dbus_message_iter_recurse(&args, &dict);
-
-  while (dbus_message_iter_get_arg_type(&dict) == DBUS_TYPE_DICT_ENTRY) {
-    DBusMessageIter entry;
-    dbus_message_iter_recurse(&dict, &entry);
-
-    const char *key = nullptr;
-    if (dbus_message_iter_get_arg_type(&entry) == DBUS_TYPE_STRING) {
-      dbus_message_iter_get_basic(&entry, &key);
-    }
-
-    dbus_message_iter_next(&entry);
-    if (dbus_message_iter_get_arg_type(&entry) == DBUS_TYPE_VARIANT) {
-      DBusMessageIter variant;
-      dbus_message_iter_recurse(&entry, &variant);
-
-      if (key && strcmp(key, "Value") == 0) {
-        if (dbus_message_iter_get_arg_type(&variant) == DBUS_TYPE_ARRAY) {
-          DBusMessageIter array;
-          dbus_message_iter_recurse(&variant, &array);
-
-          while (dbus_message_iter_get_arg_type(&array) == DBUS_TYPE_BYTE) {
-            uint8_t b;
-            dbus_message_iter_get_basic(&array, &b);
-            bytes.push_back(b);
-            dbus_message_iter_next(&array);
-          }
-        }
-      }
-    }
-
-    dbus_message_iter_next(&dict);
-  }
-
-  // Route to correct InputCtx
-  auto &state = AelkeyState::instance();
-  for (auto &kv : state.input_map) {
-    InputCtx &ctx = kv.second;
-
-    if (ctx.decl.type != "gatt") {
-      continue;
-    }
-
-    if (!ctx.decl.on_event.empty()) {
-      sol::object obj = lua[ctx.decl.on_event];
-      if (!obj.is<sol::function>()) {
-        continue;
-      }
-
-      sol::function cb = obj.as<sol::function>();
-
-      sol::table tbl = lua.create_table();
-      tbl["device"] = ctx.decl.id;
-      tbl["path"] = path;
-      tbl["data"] =
-          std::string_view(reinterpret_cast<const char *>(bytes.data()), bytes.size());
-      tbl["size"] = static_cast<int>(bytes.size());
-      tbl["status"] = "ok";
-
-      sol::protected_function pf = cb;
-      sol::protected_function_result res = pf(tbl);
-      if (!res.valid()) {
-        sol::error err = res;
-        std::fprintf(stderr, "Lua gatt_callback error: %s\n", err.what());
-      }
-    }
-
-    break;
-  }
-}
-
-void dispatch_gatt(sol::this_state ts) {
-  auto &state = AelkeyState::instance();
-  DBusConnection *conn = state.g_dbus_conn;
-  if (!conn) {
-    return;
-  }
-
-  // Non-blocking read
-  dbus_connection_read_write(conn, 0);
-
-  // Process ALL pending messages
-  while (true) {
-    DBusMessage *msg = dbus_connection_pop_message(conn);
-    if (!msg) {
-      break;
-    }
-
-    process_one_gatt_message(ts, msg);
-    dbus_message_unref(msg);
-  }
-}
-
-// ---------------------------------------------------------------------
-// Device matching
-// ---------------------------------------------------------------------
-
-static std::vector<std::string>
-get_matching_devices(const InputDecl &decl, DBusMessageIter &array) {
+std::vector<std::string>
+DispatcherGATT::get_matching_devices(const InputDecl &decl, DBusMessageIter &array) {
   std::vector<std::string> result;
 
   DBusMessageIter it = array;
@@ -656,7 +547,7 @@ get_matching_devices(const InputDecl &decl, DBusMessageIter &array) {
   return result;
 }
 
-static std::vector<std::string> get_matching_services(
+std::vector<std::string> DispatcherGATT::get_matching_services(
     const InputDecl &decl,
     const std::vector<std::string> &candidate_devices,
     DBusMessageIter &array
@@ -710,7 +601,7 @@ static std::vector<std::string> get_matching_services(
   return result;
 }
 
-static std::vector<std::string> get_matching_characteristic(
+std::vector<std::string> DispatcherGATT::get_matching_characteristics(
     const InputDecl &decl,
     const std::vector<std::string> &candidate_services,
     DBusMessageIter &array
@@ -763,9 +654,89 @@ static std::vector<std::string> get_matching_characteristic(
   return result;
 }
 
-std::string
-match_gatt_device(const InputDecl &decl, std::vector<std::string> *found_characteristics) {
-  ensure_gatt_initialized();
+InputCtx DispatcherGATT::attach_device(const InputDecl &decl) {
+  InputCtx ctx;
+  ctx.decl = decl;
+
+  ensure_initialized();
+  if (!conn_) {
+    std::fprintf(stderr, "GATT: no D-Bus connection\n");
+    return ctx;
+  }
+
+  if (decl.devnode.empty()) {
+    std::fprintf(stderr, "GATT: no GATT path in devnode for %s\n", decl.id.c_str());
+    return ctx;
+  }
+
+  GattPathType type = classify_gatt_path(decl.devnode);
+
+  if (type == GattPathType::Characteristic) {
+    ctx.gatt_path = derive_device_path_from_char_path(decl.devnode);
+    if (ctx.gatt_path.empty()) {
+      std::fprintf(
+          stderr, "GATT: failed to derive device path from %s\n", decl.devnode.c_str()
+      );
+    }
+  } else {
+    ctx.gatt_path = decl.devnode;
+  }
+
+  if (type != GattPathType::Characteristic) {
+    std::vector<std::string> found_characteristics;
+    match_device(decl, &found_characteristics);
+
+    for (const auto &ch : found_characteristics) {
+      print_characteristic_inspect_line(ch);
+
+      if (characteristic_supports_notify(ch)) {
+        std::string rule =
+            "type='signal',interface='org.freedesktop.DBus.Properties',"
+            "member='PropertiesChanged',path='" +
+            ch + "'";
+
+        dbus_bus_add_match(conn_, rule.c_str(), nullptr);
+        start_notify(ch);
+      }
+    }
+
+    dbus_connection_flush(conn_);
+  } else {
+    print_characteristic_inspect_line(decl.devnode);
+
+    std::string rule =
+        "type='signal',interface='org.freedesktop.DBus.Properties',"
+        "member='PropertiesChanged',path='" +
+        decl.devnode + "'";
+
+    dbus_bus_add_match(conn_, rule.c_str(), nullptr);
+    dbus_connection_flush(conn_);
+
+    start_notify(decl.devnode);
+  }
+
+  ctx.active = true;
+  return ctx;
+}
+
+void DispatcherGATT::detach_device(InputCtx &ctx) {
+  if (!conn_) {
+    return;
+  }
+
+  if (!ctx.decl.devnode.empty()) {
+    stop_notify(ctx.decl.devnode);
+  }
+
+  ctx.active = false;
+  std::fprintf(stderr, "Detached GATT characteristic: %s\n", ctx.decl.devnode.c_str());
+}
+
+std::string DispatcherGATT::match_device(
+    const InputDecl &decl,
+    std::vector<std::string> *found_characteristics
+) {
+  ensure_initialized();
 
   DBusMessage *resp = get_managed_objects();
   if (!resp) {
@@ -774,7 +745,6 @@ match_gatt_device(const InputDecl &decl, std::vector<std::string> *found_charact
 
   DBusMessageIter iter, dict;
 
-  // 1. devices
   dbus_message_iter_init(resp, &iter);
   dbus_message_iter_recurse(&iter, &dict);
 
@@ -789,7 +759,6 @@ match_gatt_device(const InputDecl &decl, std::vector<std::string> *found_charact
     return devices[0];
   }
 
-  // 2. services
   dbus_message_iter_init(resp, &iter);
   dbus_message_iter_recurse(&iter, &dict);
 
@@ -804,11 +773,10 @@ match_gatt_device(const InputDecl &decl, std::vector<std::string> *found_charact
     return services[0];
   }
 
-  // 3. characteristics
   dbus_message_iter_init(resp, &iter);
   dbus_message_iter_recurse(&iter, &dict);
 
-  auto characteristics = get_matching_characteristic(decl, services, dict);
+  auto characteristics = get_matching_characteristics(decl, services, dict);
 
   if (found_characteristics) {
     *found_characteristics = characteristics;
@@ -832,16 +800,14 @@ match_gatt_device(const InputDecl &decl, std::vector<std::string> *found_charact
   return characteristics[0];
 }
 
-// ---------------------------------------------------------------------
-// Low-level GATT read/write helpers
-// ---------------------------------------------------------------------
-
-bool gatt_read_characteristic(const std::string &char_path, std::vector<uint8_t> &out_data) {
+bool DispatcherGATT::read_characteristic(
+    const std::string &char_path,
+    std::vector<uint8_t> &out_data
+) {
   out_data.clear();
 
-  auto &state = AelkeyState::instance();
-  DBusConnection *conn = state.g_dbus_conn;
-  if (!conn) {
+  ensure_initialized();
+  if (!conn_) {
     std::fprintf(stderr, "GATT read: no D-Bus connection\n");
     return false;
   }
@@ -857,7 +823,7 @@ bool gatt_read_characteristic(const std::string &char_path, std::vector<uint8_t>
   dbus_message_iter_open_container(&args, DBUS_TYPE_ARRAY, "{sv}", &dict);
   dbus_message_iter_close_container(&args, &dict);
 
-  DBusMessage *reply = dbus_connection_send_with_reply_and_block(conn, msg, -1, nullptr);
+  DBusMessage *reply = dbus_connection_send_with_reply_and_block(conn_, msg, -1, nullptr);
   dbus_message_unref(msg);
 
   if (!reply) {
@@ -885,15 +851,14 @@ bool gatt_read_characteristic(const std::string &char_path, std::vector<uint8_t>
   return true;
 }
 
-bool gatt_write_characteristic(
+bool DispatcherGATT::write_characteristic(
     const std::string &char_path,
     const uint8_t *data,
     size_t len,
     bool with_resp
 ) {
-  auto &state = AelkeyState::instance();
-  DBusConnection *conn = state.g_dbus_conn;
-  if (!conn) {
+  ensure_initialized();
+  if (!conn_) {
     std::fprintf(stderr, "GATT write: no D-Bus connection\n");
     return false;
   }
@@ -938,7 +903,7 @@ bool gatt_write_characteristic(
 
   dbus_message_iter_close_container(&args, &opts);
 
-  DBusMessage *reply = dbus_connection_send_with_reply_and_block(conn, msg, -1, nullptr);
+  DBusMessage *reply = dbus_connection_send_with_reply_and_block(conn_, msg, -1, nullptr);
   dbus_message_unref(msg);
 
   if (!reply) {

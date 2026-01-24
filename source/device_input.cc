@@ -19,8 +19,8 @@
 #include <unistd.h>
 
 #include "aelkey_state.h"
-#include "device_gatt.h"
 #include "device_helpers.h"
+#include "dispatcher_gatt.h"
 #include "dispatcher_hidraw.h"
 #include "dispatcher_libusb.h"
 #include "dispatcher_udev.h"
@@ -313,7 +313,7 @@ std::string match_device(const InputDecl &decl) {
       return std::string{};
     });
   } else if (decl.type == "gatt") {
-    return match_gatt_device(decl);
+    return DispatcherGATT::instance().match_device(decl, nullptr);
   }
 
   return {};
@@ -394,13 +394,14 @@ static InputCtx attach_device_helper(
 
     // no ctx.fd, epoll integration handled by pollfd notifiers
   } else if (in.type == "gatt") {
-    ensure_gatt_initialized();
+    auto &gatt = DispatcherGATT::instance();
+    gatt.init();
 
     // devnode is the characteristic path discovered in match_device()
     InputDecl decl_copy = in;
     decl_copy.devnode = devnode;  // <- important
 
-    ctx = attach_gatt_device(decl_copy);
+    ctx = gatt.attach_device(decl_copy);
   } else if (in.type == "evdev") {
     ctx.fd = ::open(devnode.c_str(), O_RDWR | O_NONBLOCK);
     if (ctx.fd < 0) {
@@ -517,7 +518,7 @@ InputDecl detach_input_device(const std::string &dev_id) {
 
   // Detach from gatt
   if (ctx.decl.type == "gatt") {
-    detach_gatt_device(ctx);
+    DispatcherGATT::instance().detach_device(ctx);
   }
 
   // Remove from epoll if fd is valid
