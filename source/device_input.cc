@@ -21,7 +21,7 @@
 #include "aelkey_state.h"
 #include "device_gatt.h"
 #include "device_helpers.h"
-#include "device_libusb.h"
+#include "dispatcher_libusb.h"
 
 // Parse a single InputDecl from a Lua table.
 InputDecl parse_input(sol::table tbl) {
@@ -162,26 +162,6 @@ static int get_interface_num(const std::string &devnode) {
   udev_device_unref(dev);
   udev_unref(udev);
   return iface;
-}
-
-static int ensure_claimed(libusb_device_handle *devh, const InputDecl &in) {
-  int iface = (in.interface == -1) ? 0 : in.interface;
-
-  if (libusb_kernel_driver_active(devh, iface) == 1) {
-    int d = libusb_detach_kernel_driver(devh, iface);
-    if (d != 0) {
-      std::fprintf(stderr, "Failed to detach kernel driver: %s\n", libusb_error_name(d));
-      return d;
-    }
-  }
-
-  int r = libusb_claim_interface(devh, iface);
-  if (r != 0) {
-    std::fprintf(stderr, "Failed to claim interface %d: %s\n", iface, libusb_error_name(r));
-    return r;
-  }
-
-  return 0;
 }
 
 static std::string enumerate_and_match(
@@ -440,18 +420,20 @@ static InputCtx attach_device_helper(
       ctx.active = false;
     }
   } else if (in.type == "libusb") {
-    auto &state = AelkeyState::instance();
-    ensure_libusb_initialized();
-
-    ctx.usb_handle = libusb_open_device_with_vid_pid(state.g_libusb, in.vendor, in.product);
+    auto &usb = DispatcherLibUSB::instance();
+    ctx.usb_handle = usb.open_device(in.vendor, in.product);
     if (!ctx.usb_handle) {
-      std::fprintf(stderr, "Failed to open libusb device %04x:%04x\n", in.vendor, in.product);
       return ctx;
     }
+
+    if (usb.claim_interface(ctx.usb_handle, in.interface) != 0) {
+      libusb_close(ctx.usb_handle);
+      ctx.usb_handle = nullptr;
+      return ctx;
+    }
+
     std::cout << "Attached libusb device: " << in.id << std::endl;
     ctx.active = true;
-
-    ensure_claimed(ctx.usb_handle, in);
 
     // no ctx.fd, epoll integration handled by pollfd notifiers
   } else if (in.type == "gatt") {

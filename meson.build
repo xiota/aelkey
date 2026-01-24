@@ -96,7 +96,6 @@ src_files = files(
   'source/device_gatt.cc',
   'source/device_helpers.cc',
   'source/device_input.cc',
-  'source/device_libusb.cc',
   'source/device_output.cc',
   'source/device_udev.cc',
 )

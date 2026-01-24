@@ -215,16 +215,6 @@ sol::object loop_start(sol::this_state ts) {
         continue;
       }
 
-      // libusb poll fds
-      if (state.libusb_fd_set.count(fd_ready)) {
-        timeval tv{ 0, 0 };
-        int rc = libusb_handle_events_timeout_completed(state.g_libusb, &tv, nullptr);
-        if (rc != 0) {
-          std::fprintf(stderr, "libusb_handle_events error: %s\n", libusb_error_name(rc));
-        }
-        continue;  // handled; go to next epoll event
-      }
-
       // D-Bus GATT notifications
       if (fd_ready == state.g_dbus_fd) {
         dispatch_gatt(ts);
@@ -353,10 +343,6 @@ sol::object loop_start(sol::this_state ts) {
   if (state.epfd >= 0) {
     close(state.epfd);
     state.epfd = -1;
-  }
-  if (state.g_libusb) {
-    libusb_exit(state.g_libusb);
-    state.g_libusb = nullptr;
   }
 
   if (state.sigint != 0) {

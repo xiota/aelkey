@@ -48,9 +48,6 @@ class AelkeyState {
 
   std::unordered_map<std::string, std::vector<InputDecl>> watch_map;
 
-  libusb_context *g_libusb = nullptr;
-  std::unordered_set<int> libusb_fd_set;
-
   DBusConnection *g_dbus_conn = nullptr;
   int g_dbus_fd = -1;
 
