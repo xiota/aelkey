@@ -5,7 +5,6 @@
 #include <string>
 #include <unordered_map>
 
-#include <errno.h>
 #include <sol/sol.hpp>
 #include <sys/epoll.h>
 #include <sys/timerfd.h>
@@ -28,6 +27,11 @@ class TickScheduler : public Dispatcher<TickScheduler> {
   TickScheduler() = default;
   ~TickScheduler() {
     cancel_all();
+  }
+
+  void unregister_fd(int fd) {
+    DispatcherBase::unregister_fd(fd);
+    close(fd);
   }
 
   void handle_event(EpollPayload *payload, uint32_t /*events*/) override {
@@ -72,12 +76,7 @@ class TickScheduler : public Dispatcher<TickScheduler> {
     }
 
     if (cb.oneshot) {
-      int epfd = AelkeyState::instance().epfd;
-      epoll_ctl(epfd, EPOLL_CTL_DEL, fd, nullptr);
-      close(fd);
-      delete payloads_[fd];
-      payloads_.erase(fd);
-      callbacks_.erase(it);
+      unregister_fd(fd);
     }
   }
 
@@ -109,27 +108,12 @@ class TickScheduler : public Dispatcher<TickScheduler> {
       return -1;
     }
 
-    int epfd = AelkeyState::instance().epfd;
-
-    struct epoll_event ev{};
-    ev.events = EPOLLIN;
-
-    payloads_[fd] = new EpollPayload{ this, fd };
-    ev.data.ptr = payloads_[fd];
-
-    if (epoll_ctl(epfd, EPOLL_CTL_ADD, fd, &ev) < 0) {
-      perror("epoll_ctl EPOLL_CTL_ADD (tick)");
-      close(fd);
-      return -1;
-    }
-
+    register_fd(fd, EPOLLIN);
     callbacks_[fd] = std::move(cb);
     return fd;
   }
 
   void cancel_matching(const TickCb &key) {
-    int epfd = AelkeyState::instance().epfd;
-
     for (auto it = callbacks_.begin(); it != callbacks_.end();) {
       auto &existing = it->second;
       bool match = false;
@@ -142,10 +126,7 @@ class TickScheduler : public Dispatcher<TickScheduler> {
 
       if (match) {
         int fd = it->first;
-        epoll_ctl(epfd, EPOLL_CTL_DEL, fd, nullptr);
-        close(fd);
-        delete payloads_[fd];
-        payloads_.erase(fd);
+        unregister_fd(fd);
         it = callbacks_.erase(it);
       } else {
         ++it;
@@ -158,20 +139,14 @@ class TickScheduler : public Dispatcher<TickScheduler> {
   // - if key.is_function && existing.is_function: compare sol::function identity
   // - if both are name-based: compare name strings
   void cancel_all() {
-    int epfd = AelkeyState::instance().epfd;
-
     for (auto &[fd, cb] : callbacks_) {
-      epoll_ctl(epfd, EPOLL_CTL_DEL, fd, nullptr);
-      close(fd);
-      delete payloads_[fd];
-      payloads_.erase(fd);
+      unregister_fd(fd);
     }
     callbacks_.clear();
   }
 
  private:
   std::unordered_map<int, TickCb> callbacks_;
-  std::unordered_map<int, EpollPayload *> payloads_;
 };
 
 template class Dispatcher<TickScheduler>;
