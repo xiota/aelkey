@@ -12,10 +12,11 @@
 #include "dispatcher_registry.h"
 
 class DispatcherUdev : public Dispatcher<DispatcherUdev> {
- public:
-  DispatcherUdev() = default;
+  friend class Singleton<DispatcherUdev>;
 
-  inline ~DispatcherUdev() {
+ protected:
+  DispatcherUdev() = default;
+  ~DispatcherUdev() {
     if (mon_) {
       udev_monitor_unref(mon_);
       mon_ = nullptr;
@@ -27,8 +28,9 @@ class DispatcherUdev : public Dispatcher<DispatcherUdev> {
     mon_fd_ = -1;
   }
 
+ public:
   // Initialization
-  inline void ensure_initialized() {
+  void ensure_initialized() {
     if (udev_ctx_) {
       return;
     }
@@ -61,7 +63,7 @@ class DispatcherUdev : public Dispatcher<DispatcherUdev> {
   }
 
   // EPOLL callback
-  inline void handle_event(EpollPayload *, uint32_t events) override {
+  void handle_event(EpollPayload *, uint32_t events) override {
     if (!(events & EPOLLIN) || !mon_) {
       return;
     }

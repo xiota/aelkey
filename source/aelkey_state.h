@@ -12,19 +12,12 @@
 #include "aelkey_core.h"
 #include "device_input.h"
 #include "device_output.h"
+#include "singleton.h"
 
-class AelkeyState {
+class AelkeyState : public Singleton<AelkeyState> {
+  friend class Singleton<AelkeyState>;
+
  public:
-  static AelkeyState &instance() {
-    static AelkeyState inst;
-    return inst;
-  }
-
-  AelkeyState(const AelkeyState &) = delete;
-  AelkeyState &operator=(const AelkeyState &) = delete;
-  AelkeyState(AelkeyState &&) = delete;
-  AelkeyState &operator=(AelkeyState &&) = delete;
-
   lua_State *lua_vm = nullptr;
 
   int epfd = -1;
@@ -42,6 +35,6 @@ class AelkeyState {
 
   std::string on_watchlist;
 
- private:
+ protected:
   AelkeyState() = default;
 };

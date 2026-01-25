@@ -14,10 +14,15 @@
 #include "haptics_context.h"
 
 class DispatcherHaptics : public Dispatcher<DispatcherHaptics> {
- public:
-  DispatcherHaptics() = default;
-  ~DispatcherHaptics();
+  friend class Singleton<DispatcherHaptics>;
 
+ protected:
+  DispatcherHaptics() = default;
+  ~DispatcherHaptics() {
+    cleanup_sources();
+  }
+
+ public:
   // Register a virtual FF source (uinput device)
   void register_source(const std::string &id, int uinput_fd, const std::string &callback);
 

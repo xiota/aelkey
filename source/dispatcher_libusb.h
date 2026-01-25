@@ -9,7 +9,9 @@
 #include "dispatcher.h"
 
 class DispatcherLibUSB : public Dispatcher<DispatcherLibUSB> {
- public:
+  friend class Singleton<DispatcherLibUSB>;
+
+ protected:
   DispatcherLibUSB() = default;
   ~DispatcherLibUSB() {
     if (libusb_) {
@@ -18,6 +20,7 @@ class DispatcherLibUSB : public Dispatcher<DispatcherLibUSB> {
     }
   }
 
+ public:
   void ensure_initialized() {
     if (!libusb_) {
       if (libusb_init(&libusb_) != 0) {

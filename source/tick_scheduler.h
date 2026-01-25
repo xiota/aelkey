@@ -23,12 +23,15 @@ struct TickCb {
 };
 
 class TickScheduler : public Dispatcher<TickScheduler> {
- public:
+  friend class Singleton<TickScheduler>;
+
+ protected:
   TickScheduler() = default;
   ~TickScheduler() {
     cancel_all();
   }
 
+ public:
   void unregister_fd(int fd) {
     DispatcherBase::unregister_fd(fd);
     close(fd);

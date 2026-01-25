@@ -12,6 +12,12 @@
 #include "dispatcher_udev.h"
 
 class DispatcherEvdev : public Dispatcher<DispatcherEvdev> {
+  friend class Singleton<DispatcherEvdev>;
+
+ protected:
+  DispatcherEvdev() = default;
+  ~DispatcherEvdev() = default;
+
  public:
   // Called by attach_input_device() after creating InputCtx
   bool open_device(InputCtx &ctx, const std::string &devnode) {

@@ -15,6 +15,12 @@
 #include "dispatcher_registry.h"
 
 class DispatcherHidraw : public Dispatcher<DispatcherHidraw> {
+  friend class Singleton<DispatcherHidraw>;
+
+ protected:
+  DispatcherHidraw() = default;
+  ~DispatcherHidraw() = default;
+
  public:
   void unregister_fd(int fd) {
     DispatcherBase::unregister_fd(fd);

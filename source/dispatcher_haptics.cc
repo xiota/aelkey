@@ -9,10 +9,6 @@
 #include "aelkey_state.h"
 #include "haptics_context.h"
 
-DispatcherHaptics::~DispatcherHaptics() {
-  cleanup_sources();
-}
-
 void DispatcherHaptics::cleanup_sources() {
   for (auto &[id, src] : sources_) {
     if (src.fd >= 0) {

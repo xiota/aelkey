@@ -7,6 +7,7 @@
 #include <sys/epoll.h>
 
 #include "aelkey_state.h"
+#include "singleton.h"
 
 template <typename T>
 struct DispatcherRegistry;
@@ -82,17 +83,8 @@ class DispatcherBase {
 
 // CRTP dispatcher class
 template <typename Derived>
-class Dispatcher : public DispatcherBase {
- public:
-  static Derived &instance() {
-    static Derived inst;
-    return inst;
-  }
-
-  Dispatcher(const Dispatcher &) = delete;
-  Dispatcher &operator=(const Dispatcher &) = delete;
-  Dispatcher(Dispatcher &&) = delete;
-  Dispatcher &operator=(Dispatcher &&) = delete;
+class Dispatcher : public DispatcherBase, public Singleton<Derived> {
+  friend class Singleton<Derived>;
 
  protected:
   Dispatcher() = default;

@@ -15,7 +15,9 @@
 enum class GattPathType { Device, Service, Characteristic };
 
 class DispatcherGATT : public Dispatcher<DispatcherGATT> {
- public:
+  friend class Singleton<DispatcherGATT>;
+
+ protected:
   DispatcherGATT() = default;
   ~DispatcherGATT() {
     // We do NOT own fd_ (D-Bus owns it), so just unregister if needed
@@ -29,6 +31,7 @@ class DispatcherGATT : public Dispatcher<DispatcherGATT> {
     }
   }
 
+ public:
   void init() override {
     ensure_initialized();
   }
