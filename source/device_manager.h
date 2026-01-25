@@ -1,0 +1,83 @@
+#pragma once
+
+#include <optional>
+#include <string>
+#include <unordered_map>
+
+#include "device_backend.h"
+#include "device_input.h"
+#include "singleton.h"
+
+class DeviceManager : public Singleton<DeviceManager> {
+  friend class Singleton<DeviceManager>;
+
+ public:
+  bool match(const InputDecl &decl, std::string &devnode_out) {
+    DeviceBackend *backend = backend_for_type(decl.type);
+    if (!backend) {
+      return false;
+    }
+    return backend->match(decl, devnode_out);
+  }
+
+  std::optional<InputCtx> attach(const InputDecl &decl, const std::string &devnode) {
+    auto &state = AelkeyState::instance();
+    if (state.input_map.contains(decl.id)) {
+      return std::nullopt;
+    }
+
+    DeviceBackend *backend = backend_for_type(decl.type);
+    if (!backend) {
+      return std::nullopt;
+    }
+
+    auto maybe_ctx = backend->attach(decl, devnode);
+    if (!maybe_ctx) {
+      return std::nullopt;
+    }
+
+    state.input_map[decl.id] = *maybe_ctx;
+    return state.input_map[decl.id];
+  }
+
+  std::optional<InputDecl> detach(const std::string &dev_id) {
+    auto &state = AelkeyState::instance();
+    auto it = state.input_map.find(dev_id);
+    if (it == state.input_map.end()) {
+      return std::nullopt;
+    }
+
+    InputCtx &ctx = it->second;
+    InputDecl decl = ctx.decl;
+
+    DeviceBackend *backend = backend_for_type(decl.type);
+    if (!backend) {
+      return std::nullopt;
+    }
+
+    if (!backend->detach(dev_id)) {
+      return std::nullopt;
+    }
+
+    state.input_map.erase(it);
+    state.frames.erase(dev_id);
+
+    return decl;
+  }
+
+  DeviceBackend *backend_for_type(const std::string &type) {
+    auto it = backends_.find(type);
+    return (it != backends_.end()) ? it->second : nullptr;
+  }
+
+ protected:
+  DeviceManager() {
+    // backends_["evdev"]  = &DeviceBackendEvdev::instance();
+    // backends_["hidraw"] = &DeviceBackendHidraw::instance();
+    // backends_["libusb"] = &DeviceBackendLibUSB::instance();
+    // backends_["gatt"]   = &DeviceBackendGATT::instance();
+  }
+
+ private:
+  std::unordered_map<std::string, DeviceBackend *> backends_;
+};

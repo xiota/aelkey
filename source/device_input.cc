@@ -20,6 +20,7 @@
 
 #include "aelkey_state.h"
 #include "device_helpers.h"
+#include "device_manager.h"
 #include "dispatcher_evdev.h"
 #include "dispatcher_gatt.h"
 #include "dispatcher_hidraw.h"
@@ -167,6 +168,14 @@ static int get_interface_num(const std::string &devnode) {
 }
 
 std::string match_device(const InputDecl &decl) {
+  {
+    std::string devnode;
+    if (DeviceManager::instance().match(decl, devnode)) {
+      return devnode;  // backend matched successfully
+    }
+  }
+
+  // LEGACY match
   if (decl.type == "hidraw") {
     return DispatcherUdev::instance().enumerate_and_match(
         "hidraw", [&](struct udev_device *dev) {
@@ -359,13 +368,7 @@ bool try_evdev_grab(InputCtx &ctx) {
   return true;
 }
 
-static InputCtx attach_device_helper(
-    const std::string &devnode,
-    const InputDecl &in,
-    std::unordered_map<std::string, InputCtx> &input_map,
-    std::unordered_map<std::string, std::vector<struct input_event>> &frames,
-    int epfd
-) {
+static InputCtx attach_device_helper(const std::string &devnode, const InputDecl &in) {
   InputCtx ctx;
   ctx.decl = in;
 
@@ -442,6 +445,12 @@ void parse_inputs_from_lua(sol::this_state ts) {
 }
 
 bool attach_input_device(const std::string &devnode, const InputDecl &decl) {
+  if (DeviceManager::instance().attach(decl, devnode)) {
+    return true;
+  }
+
+  // Legacy attach
+  InputCtx ctx;
   auto &state = AelkeyState::instance();
 
   // already attached?
@@ -450,7 +459,7 @@ bool attach_input_device(const std::string &devnode, const InputDecl &decl) {
     return false;
   }
 
-  InputCtx ctx = attach_device_helper(devnode, decl, state.input_map, state.frames, state.epfd);
+  ctx = attach_device_helper(devnode, decl);
 
   // failure check
   if (!ctx.active) {
@@ -469,6 +478,11 @@ bool attach_input_device(const std::string &devnode, const InputDecl &decl) {
 }
 
 InputDecl detach_input_device(const std::string &dev_id) {
+  if (auto maybe_decl = DeviceManager::instance().detach(dev_id)) {
+    return *maybe_decl;
+  }
+
+  // Legacy detach
   InputDecl decl{};
 
   auto &state = AelkeyState::instance();
