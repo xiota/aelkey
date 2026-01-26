@@ -6,7 +6,6 @@
 #include <iostream>
 #include <string>
 
-#include <fcntl.h>
 #include <glob.h>
 #include <libevdev/libevdev-uinput.h>
 #include <libevdev/libevdev.h>
@@ -15,17 +14,8 @@
 #include <sol/sol.hpp>
 #include <sys/epoll.h>
 #include <sys/ioctl.h>
-#include <unistd.h>
 
 #include "aelkey_state.h"
-#include "device_helpers.h"
-#include "device_manager.h"
-#include "dispatcher_evdev.h"
-#include "dispatcher_gatt.h"
-#include "dispatcher_hidraw.h"
-#include "dispatcher_libusb.h"
-#include "dispatcher_registry.h"
-#include "dispatcher_udev.h"
 
 // Parse a single InputDecl from a Lua table.
 InputDecl parse_input(sol::table tbl) {
@@ -141,15 +131,6 @@ InputDecl parse_input(sol::table tbl) {
   return decl;
 }
 
-std::string match_device(const InputDecl &decl) {
-  std::string devnode;
-  if (DeviceManager::instance().match(decl, devnode)) {
-    return devnode;  // backend matched successfully
-  }
-
-  return {};
-}
-
 void parse_inputs_from_lua(sol::this_state ts) {
   sol::state_view lua(ts);
 
@@ -171,20 +152,4 @@ void parse_inputs_from_lua(sol::this_state ts) {
       }
     }
   });
-}
-
-bool attach_input_device(const std::string &devnode, const InputDecl &decl) {
-  if (DeviceManager::instance().attach(decl, devnode)) {
-    return true;
-  }
-
-  return false;
-}
-
-InputDecl detach_input_device(const std::string &dev_id) {
-  if (auto maybe_decl = DeviceManager::instance().detach(dev_id)) {
-    return *maybe_decl;
-  }
-
-  return {};
 }

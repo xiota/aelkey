@@ -93,11 +93,14 @@ src_files = files(
   'source/aelkey_loop.cc',
   'source/aelkey_usb.cc',
   'source/aelkey_util.cc',
+  'source/device_backend_evdev.cc',
   'source/device_backend_gatt.cc',
+  'source/device_backend_hidraw.cc',
   'source/device_helpers.cc',
   'source/device_input.cc',
   'source/device_output.cc',
   'source/dispatcher_haptics.cc',
+  'source/dispatcher_udev.cc',
 )
 
 shared_library(

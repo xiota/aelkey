@@ -1,12 +1,16 @@
 #pragma once
 
+#include <iostream>
 #include <unordered_map>
 
+#include <fcntl.h>
 #include <libevdev/libevdev.h>
 #include <linux/input.h>
+#include <unistd.h>
 
 #include "aelkey_state.h"
 #include "device_input.h"
+#include "device_manager.h"
 #include "dispatcher.h"
 #include "dispatcher_registry.h"
 #include "dispatcher_udev.h"
@@ -24,10 +28,9 @@ class DispatcherEvdev : public Dispatcher<DispatcherEvdev> {
     return "evdev";
   }
 
-  // Called by attach_input_device() after creating InputCtx
   bool open_device(const std::string &devnode, InputCtx &ctx) {
     // Open evdev node
-    ctx.fd = ::open(devnode.c_str(), O_RDWR | O_NONBLOCK);
+    ctx.fd = open(devnode.c_str(), O_RDWR | O_NONBLOCK);
     if (ctx.fd < 0) {
       perror("open evdev");
       return false;
@@ -71,7 +74,6 @@ class DispatcherEvdev : public Dispatcher<DispatcherEvdev> {
     return true;
   }
 
-  // Called by detach_input_device()
   void close_device(InputCtx &ctx) {
     // Unregister from epoll
     if (ctx.fd >= 0) {
@@ -116,9 +118,9 @@ class DispatcherEvdev : public Dispatcher<DispatcherEvdev> {
 
     // HUP/ERR → detach device
     if (events & (EPOLLHUP | EPOLLERR)) {
-      InputDecl removed = detach_input_device(ctx.decl.id);
-      if (!removed.id.empty()) {
-        DispatcherUdev::instance().notify_state_change(removed, "remove");
+      auto removed = DeviceManager::instance().detach(ctx.decl.id);
+      if (removed && !removed->id.empty()) {
+        DispatcherUdev::instance().notify_state_change(*removed, "remove");
       }
       return;
     }

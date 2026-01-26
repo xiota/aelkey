@@ -10,6 +10,7 @@
 
 #include "aelkey_hid.h"
 #include "aelkey_state.h"
+#include "device_manager.h"
 #include "dispatcher_udev.h"
 
 // Map libusb_transfer_type enum → string
@@ -129,7 +130,7 @@ static void LIBUSB_CALL dispatch_libusb(libusb_transfer *transfer) {
     }
 
     case LIBUSB_TRANSFER_NO_DEVICE:
-      detach_input_device(ctx->decl.id);
+      DeviceManager::instance().detach(ctx->decl.id);
       DispatcherUdev::instance().notify_state_change(ctx->decl, "remove");
       break;
 
@@ -140,7 +141,7 @@ static void LIBUSB_CALL dispatch_libusb(libusb_transfer *transfer) {
       int rc = libusb_get_device_descriptor(libusb_get_device(ctx->usb_handle), &desc);
       if (rc != 0) {
         // device is gone
-        detach_input_device(ctx->decl.id);
+        DeviceManager::instance().detach(ctx->decl.id);
         DispatcherUdev::instance().notify_state_change(ctx->decl, "remove");
       } else {
         // fatal or cancelled, just clean up this transfer

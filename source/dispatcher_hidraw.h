@@ -1,12 +1,12 @@
 #pragma once
 
 #include <string>
-#include <unistd.h>
 #include <unordered_map>
 #include <vector>
 
 #include <fcntl.h>
 #include <sol/sol.hpp>
+#include <unistd.h>
 
 #include "aelkey_state.h"
 #include "device_helpers.h"  // for match_string, etc.

@@ -6,6 +6,7 @@
 
 #include "aelkey_state.h"
 #include "device_input.h"
+#include "device_manager.h"
 #include "device_output.h"
 #include "dispatcher_udev.h"
 
@@ -31,12 +32,12 @@ static void create_outputs_from_decls() {
 static void attach_inputs_from_decls(sol::this_state ts) {
   auto &state = AelkeyState::instance();
   for (auto &decl : state.input_decls) {
-    std::string devnode = match_device(decl);
-    if (devnode.empty()) {
+    std::string devnode;
+    if (!DeviceManager::instance().match(decl, devnode)) {
       continue;
     }
 
-    if (attach_input_device(devnode, decl)) {
+    if (DeviceManager::instance().attach(decl, devnode)) {
       decl.devnode = devnode;
       DispatcherUdev::instance().notify_state_change(decl, "add");
     }
@@ -88,10 +89,13 @@ sol::object device_open(sol::this_state ts, sol::optional<std::string> dev_id_op
       continue;
     }
 
-    std::string devnode = match_device(decl);
-    decl.devnode = devnode;
+    std::string devnode;
+    if (!DeviceManager::instance().match(decl, devnode)) {
+      continue;
+    }
 
-    if (!devnode.empty() && attach_input_device(devnode, decl)) {
+    if (DeviceManager::instance().attach(decl, devnode)) {
+      decl.devnode = devnode;
       DispatcherUdev::instance().notify_state_change(decl, "add");
       ok = true;
     }
@@ -106,8 +110,8 @@ sol::object device_open(sol::this_state ts, sol::optional<std::string> dev_id_op
 sol::object device_close(sol::this_state ts, const std::string &dev_id) {
   sol::state_view lua(ts);
 
-  InputDecl removed = detach_input_device(dev_id);
-  bool ok = !removed.id.empty();
+  auto removed = DeviceManager::instance().detach(dev_id);
+  bool ok = removed && !removed->id.empty();
 
   return sol::make_object(lua, ok);
 }

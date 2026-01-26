@@ -61,7 +61,6 @@ sol::object loop_start(sol::this_state ts) {
 
     for (int i = 0; i < n; ++i) {
       int fd_ready = events[i].data.fd;
-      uint32_t evmask = events[i].events;
 
       // If epoll stored a pointer, treat it as a Dispatcher.
       void *ptr = events[i].data.ptr;

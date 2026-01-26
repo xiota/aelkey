@@ -55,12 +55,5 @@ struct InputCtx {
 // Parse a single input declaration from a Lua table.
 InputDecl parse_input(sol::table tbl);
 
-// Match an InputDecl to an actual device node or identifier.
-std::string match_device(const InputDecl &decl);
-
 // Parse global "inputs" table from the given Lua state and fill aelkey_state.input_decls.
 void parse_inputs_from_lua(sol::this_state ts);
-
-// Attach/detach input devices.
-bool attach_input_device(const std::string &devnode, const InputDecl &decl);
-InputDecl detach_input_device(const std::string &dev_id);
