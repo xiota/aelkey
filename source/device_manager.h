@@ -5,6 +5,7 @@
 #include <unordered_map>
 
 #include "device_backend.h"
+#include "device_backend_libusb.h"
 #include "device_input.h"
 #include "dispatcher_registry.h"
 #include "singleton.h"
@@ -79,7 +80,7 @@ class DeviceManager : public Singleton<DeviceManager> {
   DeviceManager() {
     // backends_["evdev"]  = &DeviceBackendEvdev::instance();
     // backends_["hidraw"] = &DeviceBackendHidraw::instance();
-    // backends_["libusb"] = &DeviceBackendLibUSB::instance();
+    backends_["libusb"] = &DeviceBackendLibUSB::instance();
     // backends_["gatt"]   = &DeviceBackendGATT::instance();
   }
 

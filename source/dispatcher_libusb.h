@@ -1,11 +1,10 @@
 #pragma once
 
-#include <unordered_map>
-
 #include <libusb-1.0/libusb.h>
 #include <poll.h>
 #include <sys/epoll.h>
 
+#include "device_backend_libusb.h"
 #include "dispatcher.h"
 
 class DispatcherLibUSB : public Dispatcher<DispatcherLibUSB> {
@@ -13,28 +12,27 @@ class DispatcherLibUSB : public Dispatcher<DispatcherLibUSB> {
 
  protected:
   DispatcherLibUSB() = default;
-  ~DispatcherLibUSB() {
-    if (libusb_) {
-      libusb_exit(libusb_);
-      libusb_ = nullptr;
-    }
-  }
+  ~DispatcherLibUSB() = default;
 
  public:
   const char *type() const override {
     return "libusb";
   }
 
-  void ensure_initialized() {
-    if (!libusb_) {
-      if (libusb_init(&libusb_) != 0) {
-        throw std::runtime_error("Failed to init libusb");
-      }
+  void init() override {
+    static bool initialized = false;
+    if (initialized) {
+      return;
     }
+    initialized = true;
+
+    // Ensure backend is initialized
+    auto &backend = DeviceBackendLibUSB::instance();
+    backend.ensure_initialized();
 
     // Install pollfd notifiers
     libusb_set_pollfd_notifiers(
-        libusb_,
+        backend.context(),
         [](int fd, short events, void *user_data) {
           static_cast<DispatcherLibUSB *>(user_data)->on_add_fd(fd, events);
         },
@@ -67,50 +65,12 @@ class DispatcherLibUSB : public Dispatcher<DispatcherLibUSB> {
     }
   }
 
-  libusb_device_handle *open_device(uint16_t vendor, uint16_t product) {
-    ensure_initialized();
+  void handle_event(EpollPayload *, uint32_t) override {
+    auto &backend = DeviceBackendLibUSB::instance();
 
-    libusb_device_handle *handle = libusb_open_device_with_vid_pid(libusb_, vendor, product);
-
-    if (!handle) {
-      std::fprintf(stderr, "Failed to open libusb device %04x:%04x\n", vendor, product);
-      return nullptr;
-    }
-
-    return handle;
-  }
-
-  int claim_interface(libusb_device_handle *devh, int iface) {
-    if (iface < 0) {
-      iface = 0;
-    }
-
-    // Detach kernel driver if needed
-    if (libusb_kernel_driver_active(devh, iface) == 1) {
-      int d = libusb_detach_kernel_driver(devh, iface);
-      if (d != 0) {
-        std::fprintf(stderr, "Failed to detach kernel driver: %s\n", libusb_error_name(d));
-        return d;
-      }
-    }
-
-    // Claim the interface
-    int r = libusb_claim_interface(devh, iface);
-    if (r != 0) {
-      std::fprintf(stderr, "Failed to claim interface %d: %s\n", iface, libusb_error_name(r));
-      return r;
-    }
-
-    return 0;
-  }
-
-  void handle_event(EpollPayload *, uint32_t) {
     timeval tv{ 0, 0 };
-    libusb_handle_events_timeout_completed(libusb_, &tv, nullptr);
+    libusb_handle_events_timeout_completed(backend.context(), &tv, nullptr);
   }
-
- private:
-  libusb_context *libusb_ = nullptr;
 };
 
 template class Dispatcher<DispatcherLibUSB>;

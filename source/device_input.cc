@@ -11,7 +11,6 @@
 #include <libevdev/libevdev-uinput.h>
 #include <libevdev/libevdev.h>
 #include <libudev.h>
-#include <libusb-1.0/libusb.h>
 #include <linux/hidraw.h>
 #include <sol/sol.hpp>
 #include <sys/epoll.h>
@@ -25,6 +24,7 @@
 #include "dispatcher_gatt.h"
 #include "dispatcher_hidraw.h"
 #include "dispatcher_libusb.h"
+#include "dispatcher_registry.h"
 #include "dispatcher_udev.h"
 
 // Parse a single InputDecl from a Lua table.
@@ -312,16 +312,6 @@ std::string match_device(const InputDecl &decl) {
           return std::string{};
         }
     );
-  } else if (decl.type == "libusb") {
-    return DispatcherUdev::instance().enumerate_and_match("usb", [&](struct udev_device *dev) {
-      const char *vid = udev_device_get_property_value(dev, "ID_VENDOR_ID");
-      const char *pid = udev_device_get_property_value(dev, "ID_MODEL_ID");
-      if (vid && pid && std::stoi(vid, nullptr, 16) == decl.vendor &&
-          std::stoi(pid, nullptr, 16) == decl.product) {
-        return std::string{ udev_device_get_syspath(dev) };
-      }
-      return std::string{};
-    });
   } else if (decl.type == "gatt") {
     return DispatcherGATT::instance().match_device(decl, nullptr);
   }
@@ -380,23 +370,6 @@ static InputCtx attach_device_helper(const std::string &devnode, const InputDecl
 
     std::cout << "Attached hidraw: " << devnode << std::endl;
     ctx.active = true;
-  } else if (in.type == "libusb") {
-    auto &usb = DispatcherLibUSB::instance();
-    ctx.usb_handle = usb.open_device(in.vendor, in.product);
-    if (!ctx.usb_handle) {
-      return ctx;
-    }
-
-    if (usb.claim_interface(ctx.usb_handle, in.interface) != 0) {
-      libusb_close(ctx.usb_handle);
-      ctx.usb_handle = nullptr;
-      return ctx;
-    }
-
-    std::cout << "Attached libusb device: " << in.id << std::endl;
-    ctx.active = true;
-
-    // no ctx.fd, epoll integration handled by pollfd notifiers
   } else if (in.type == "gatt") {
     auto &gatt = DispatcherGATT::instance();
     gatt.init();
@@ -498,15 +471,6 @@ InputDecl detach_input_device(const std::string &dev_id) {
     DispatcherEvdev::instance().close_device(ctx);
   } else if (ctx.decl.type == "gatt") {
     DispatcherGATT::instance().detach_device(ctx);
-  } else if (ctx.usb_handle) {  // libusb
-    for (auto *t : ctx.transfers) {
-      libusb_cancel_transfer(t);
-    }
-    ctx.transfers.clear();
-
-    libusb_close(ctx.usb_handle);
-    ctx.usb_handle = nullptr;
-    ctx.active = false;
   }
 
   // Remove from maps
