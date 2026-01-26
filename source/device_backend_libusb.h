@@ -55,7 +55,6 @@ class DeviceBackendLibUSB : public DeviceBackend, public Singleton<DeviceBackend
     InputCtx ctx;
     ctx.decl = decl;
     ctx.usb_handle = handle;
-    ctx.active = true;
     ctx.transfers = {};
 
     // Track handle internally for detach()

@@ -87,7 +87,6 @@ sol::object loop_start(sol::this_state ts) {
     if (ctx.usb_handle) {
       libusb_close(ctx.usb_handle);
       ctx.usb_handle = nullptr;
-      ctx.active = false;
     }
   }
   state.input_map.clear();

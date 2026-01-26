@@ -101,7 +101,6 @@ class DeviceBackendGATT : public DeviceBackend, public Singleton<DeviceBackendGA
     ctx.decl = decl;
     ctx.decl.devnode = devnode;
     ctx.gatt_path = gatt_path;
-    ctx.active = true;
     return ctx;
   }
 
@@ -121,7 +120,6 @@ class DeviceBackendGATT : public DeviceBackend, public Singleton<DeviceBackendGA
       stop_notify(ctx.decl.devnode);
     }
 
-    ctx.active = false;
     std::fprintf(stderr, "Detached GATT characteristic: %s\n", ctx.decl.devnode.c_str());
     return true;
   }

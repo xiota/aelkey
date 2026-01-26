@@ -107,7 +107,6 @@ DeviceBackendHidraw::attach(const InputDecl &decl, const std::string &devnode) {
   InputCtx ctx;
   ctx.decl = decl;
   ctx.decl.devnode = devnode;
-  ctx.active = true;
   return ctx;
 }
 

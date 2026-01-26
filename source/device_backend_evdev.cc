@@ -81,7 +81,6 @@ DeviceBackendEvdev::attach(const InputDecl &decl, const std::string &devnode) {
   ctx.decl = decl;
 
   if (DispatcherEvdev::instance().open_device(devnode, ctx)) {
-    ctx.active = true;
     return ctx;
   }
 

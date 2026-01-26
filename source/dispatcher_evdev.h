@@ -57,7 +57,6 @@ class DispatcherEvdev : public Dispatcher<DispatcherEvdev> {
     }
 
     std::cout << "Attached evdev: " << libevdev_get_name(idev) << std::endl;
-    ctx.active = true;
 
     // Initial grab attempt
     if (ctx.decl.grab) {
@@ -93,8 +92,6 @@ class DispatcherEvdev : public Dispatcher<DispatcherEvdev> {
       close(ctx.fd);
       ctx.fd = -1;
     }
-
-    ctx.active = false;
   }
 
   // EPOLL callback
