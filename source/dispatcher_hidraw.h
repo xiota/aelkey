@@ -31,7 +31,6 @@ class DispatcherHidraw : public Dispatcher<DispatcherHidraw> {
     close(fd);
   }
 
-  // Called by device_input.cc after match_device()
   int open_device(const std::string &devnode, const InputDecl &decl) {
     int fd = ::open(devnode.c_str(), O_RDWR | O_NONBLOCK);
     if (fd < 0) {
@@ -55,7 +54,6 @@ class DispatcherHidraw : public Dispatcher<DispatcherHidraw> {
     return fd;
   }
 
-  // Called by detach_input_device()
   void remove_device(const std::string &id) {
     for (auto it = devices_.begin(); it != devices_.end(); ++it) {
       if (it->second.id == id) {
