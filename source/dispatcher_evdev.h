@@ -10,6 +10,7 @@
 #include "dispatcher.h"
 #include "dispatcher_registry.h"
 #include "dispatcher_udev.h"
+#include "singleton.h"
 
 class DispatcherEvdev : public Dispatcher<DispatcherEvdev> {
   friend class Singleton<DispatcherEvdev>;
@@ -24,7 +25,7 @@ class DispatcherEvdev : public Dispatcher<DispatcherEvdev> {
   }
 
   // Called by attach_input_device() after creating InputCtx
-  bool open_device(InputCtx &ctx, const std::string &devnode) {
+  bool open_device(const std::string &devnode, InputCtx &ctx) {
     // Open evdev node
     ctx.fd = ::open(devnode.c_str(), O_RDWR | O_NONBLOCK);
     if (ctx.fd < 0) {
@@ -193,6 +194,45 @@ class DispatcherEvdev : public Dispatcher<DispatcherEvdev> {
         break;
       }
     }
+  }
+
+  bool try_evdev_grab(InputCtx &ctx) {
+    if (!ctx.grab_pending || !ctx.idev) {
+      return false;
+    }
+
+    // First: check kernel key bitmap via EVIOCGKEY
+    unsigned long key_bits[(KEY_MAX + 1) / (sizeof(unsigned long) * 8)] = { 0 };
+    if (ioctl(ctx.fd, EVIOCGKEY(sizeof(key_bits)), key_bits) >= 0) {
+      for (int code = 0; code <= KEY_MAX; ++code) {
+        if (key_bits[code / (sizeof(unsigned long) * 8)] &
+            (1UL << (code % (sizeof(unsigned long) * 8)))) {
+          return false;  // kernel thinks key is down
+        }
+      }
+    }
+
+    // Second: check libevdev's internal state
+    for (int code = 0; code <= KEY_MAX; ++code) {
+      int value = 0;
+      if (libevdev_fetch_event_value(ctx.idev, EV_KEY, code, &value) == 0 && value == 1) {
+        return false;  // libevdev thinks key is down
+      }
+    }
+
+    // Attempt grab
+    int rc = libevdev_grab(ctx.idev, LIBEVDEV_GRAB);
+    if (rc < 0) {
+      std::fprintf(
+          stderr, "Deferred grab failed for %s: %s\n", ctx.decl.id.c_str(), strerror(-rc)
+      );
+      return false;
+    }
+
+    std::cout << "Grabbed device exclusively: " << ctx.decl.id << std::endl;
+    ctx.grab_pending = false;
+    ctx.grabbed = true;
+    return true;
   }
 
   // fd → device id (stable)

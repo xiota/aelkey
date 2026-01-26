@@ -142,132 +142,12 @@ InputDecl parse_input(sol::table tbl) {
 }
 
 std::string match_device(const InputDecl &decl) {
-  {
-    std::string devnode;
-    if (DeviceManager::instance().match(decl, devnode)) {
-      return devnode;  // backend matched successfully
-    }
-  }
-
-  // LEGACY match
-  if (decl.type == "evdev") {
-    return DispatcherUdev::instance().enumerate_and_match(
-        "input", [&](struct udev_device *dev) {
-          const char *devnode = udev_device_get_devnode(dev);
-          if (!devnode) {
-            return std::string{};
-          }
-          int fd = open(devnode, O_RDONLY | O_NONBLOCK);
-          if (fd < 0) {
-            return std::string{};
-          }
-
-          struct libevdev *evdev = nullptr;
-          if (libevdev_new_from_fd(fd, &evdev) == 0) {
-            bool match = true;
-            if (decl.bus && libevdev_get_id_bustype(evdev) != decl.bus) {
-              match = false;
-            }
-            if (decl.vendor && libevdev_get_id_vendor(evdev) != decl.vendor) {
-              match = false;
-            }
-            if (decl.product && libevdev_get_id_product(evdev) != decl.product) {
-              match = false;
-            }
-            if (!decl.name.empty() &&
-                !match_string(decl.name, (libevdev_get_name(evdev) ?: ""))) {
-              match = false;
-            }
-            if (!decl.phys.empty() &&
-                !match_string(decl.phys, (libevdev_get_phys(evdev) ?: ""))) {
-              match = false;
-            }
-            if (!decl.uniq.empty() &&
-                !match_string(decl.uniq, (libevdev_get_uniq(evdev) ?: ""))) {
-              match = false;
-            }
-
-            for (auto &[type, code] : decl.capabilities) {
-              if (!libevdev_has_event_code(evdev, type, code)) {
-                match = false;
-                break;
-              }
-            }
-
-            if (match) {
-              std::cout << "Matched " << decl.id << " → " << devnode << " ("
-                        << (libevdev_get_name(evdev) ?: "") << ")\n";
-              libevdev_free(evdev);
-              close(fd);
-              return std::string{ devnode };
-            }
-          }
-          libevdev_free(evdev);
-          close(fd);
-          return std::string{};
-        }
-    );
+  std::string devnode;
+  if (DeviceManager::instance().match(decl, devnode)) {
+    return devnode;  // backend matched successfully
   }
 
   return {};
-}
-
-bool try_evdev_grab(InputCtx &ctx) {
-  if (!ctx.grab_pending || !ctx.idev) {
-    return false;
-  }
-
-  // First: check kernel key bitmap via EVIOCGKEY
-  unsigned long key_bits[(KEY_MAX + 1) / (sizeof(unsigned long) * 8)] = { 0 };
-  if (ioctl(ctx.fd, EVIOCGKEY(sizeof(key_bits)), key_bits) >= 0) {
-    for (int code = 0; code <= KEY_MAX; ++code) {
-      if (key_bits[code / (sizeof(unsigned long) * 8)] &
-          (1UL << (code % (sizeof(unsigned long) * 8)))) {
-        return false;  // kernel thinks key is down
-      }
-    }
-  }
-
-  // Second: check libevdev's internal state
-  for (int code = 0; code <= KEY_MAX; ++code) {
-    int value = 0;
-    if (libevdev_fetch_event_value(ctx.idev, EV_KEY, code, &value) == 0 && value == 1) {
-      return false;  // libevdev thinks key is down
-    }
-  }
-
-  // Attempt grab
-  int rc = libevdev_grab(ctx.idev, LIBEVDEV_GRAB);
-  if (rc < 0) {
-    std::fprintf(
-        stderr, "Deferred grab failed for %s: %s\n", ctx.decl.id.c_str(), strerror(-rc)
-    );
-    return false;
-  }
-
-  std::cout << "Grabbed device exclusively: " << ctx.decl.id << std::endl;
-  ctx.grab_pending = false;
-  ctx.grabbed = true;
-  return true;
-}
-
-static InputCtx attach_device_helper(const std::string &devnode, const InputDecl &in) {
-  InputCtx ctx;
-  ctx.decl = in;
-
-  if (in.type == "evdev") {
-    if (!DispatcherEvdev::instance().open_device(ctx, devnode)) {
-      // open_device failed → ctx.active stays false
-      return ctx;
-    }
-
-    ctx.active = true;
-  } else {
-    std::fprintf(stderr, "Unknown input type: %s\n", in.type.c_str());
-    return ctx;
-  }
-
-  return ctx;
 }
 
 void parse_inputs_from_lua(sol::this_state ts) {
@@ -298,32 +178,7 @@ bool attach_input_device(const std::string &devnode, const InputDecl &decl) {
     return true;
   }
 
-  // Legacy attach
-  InputCtx ctx;
-  auto &state = AelkeyState::instance();
-
-  // already attached?
-  if (state.input_map.find(decl.id) != state.input_map.end()) {
-    std::cout << "Device already attached: " << decl.id << std::endl;
-    return false;
-  }
-
-  ctx = attach_device_helper(devnode, decl);
-
-  // failure check
-  if (!ctx.active) {
-    std::fprintf(
-        stderr,
-        "Failed to attach input: %s (%s)\n",
-        decl.id.c_str(),
-        devnode.empty() ? decl.type.c_str() : devnode.c_str()
-    );
-    return false;
-  }
-
-  // store context keyed by string id
-  state.input_map[decl.id] = std::move(ctx);
-  return true;
+  return false;
 }
 
 InputDecl detach_input_device(const std::string &dev_id) {
@@ -331,25 +186,5 @@ InputDecl detach_input_device(const std::string &dev_id) {
     return *maybe_decl;
   }
 
-  // Legacy detach
-  InputDecl decl{};
-
-  auto &state = AelkeyState::instance();
-  auto im = state.input_map.find(dev_id);
-  if (im == state.input_map.end()) {
-    return decl;  // nothing to detach
-  }
-
-  InputCtx &ctx = im->second;
-  decl = ctx.decl;
-
-  if (ctx.decl.type == "evdev") {
-    DispatcherEvdev::instance().close_device(ctx);
-  }
-
-  // Remove from maps
-  state.input_map.erase(im);
-  state.frames.erase(dev_id);
-
-  return decl;
+  return {};
 }

@@ -64,5 +64,3 @@ void parse_inputs_from_lua(sol::this_state ts);
 // Attach/detach input devices.
 bool attach_input_device(const std::string &devnode, const InputDecl &decl);
 InputDecl detach_input_device(const std::string &dev_id);
-
-bool try_evdev_grab(InputCtx &ctx);
