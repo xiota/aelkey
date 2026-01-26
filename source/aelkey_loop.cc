@@ -60,15 +60,9 @@ sol::object loop_start(sol::this_state ts) {
     }
 
     for (int i = 0; i < n; ++i) {
-      int fd_ready = events[i].data.fd;
-
-      // If epoll stored a pointer, treat it as a Dispatcher.
-      void *ptr = events[i].data.ptr;
-      void *fd_cast = reinterpret_cast<void *>(static_cast<uintptr_t>(fd_ready));
-      if (ptr != nullptr && ptr != fd_cast) {
-        auto *payload = static_cast<EpollPayload *>(ptr);
+      auto *payload = static_cast<EpollPayload *>(events[i].data.ptr);
+      if (payload && payload->dispatcher) {
         payload->dispatcher->handle_event(payload, events[i].events);
-        continue;
       }
     }
   }
