@@ -21,6 +21,10 @@ class DispatcherLibUSB : public Dispatcher<DispatcherLibUSB> {
   }
 
  public:
+  const char *type() const override {
+    return "libusb";
+  }
+
   void ensure_initialized() {
     if (!libusb_) {
       if (libusb_init(&libusb_) != 0) {

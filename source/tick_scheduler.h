@@ -32,6 +32,10 @@ class TickScheduler : public Dispatcher<TickScheduler> {
   }
 
  public:
+  const char *type() const override {
+    return "tick";
+  }
+
   void unregister_fd(int fd) {
     DispatcherBase::unregister_fd(fd);
     close(fd);

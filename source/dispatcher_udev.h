@@ -29,7 +29,10 @@ class DispatcherUdev : public Dispatcher<DispatcherUdev> {
   }
 
  public:
-  // Initialization
+  const char *type() const override {
+    return "udev";
+  }
+
   void ensure_initialized() {
     if (udev_ctx_) {
       return;

@@ -6,6 +6,7 @@
 
 #include "device_backend.h"
 #include "device_input.h"
+#include "dispatcher_registry.h"
 #include "singleton.h"
 
 class DeviceManager : public Singleton<DeviceManager> {
@@ -24,6 +25,10 @@ class DeviceManager : public Singleton<DeviceManager> {
     auto &state = AelkeyState::instance();
     if (state.input_map.contains(decl.id)) {
       return std::nullopt;
+    }
+
+    if (auto *dispatcher = get_dispatcher_for_type(decl.type)) {
+      dispatcher->init();
     }
 
     DeviceBackend *backend = backend_for_type(decl.type);

@@ -1,6 +1,7 @@
 #pragma once
 
-#include <vector>
+#include <string>
+#include <unordered_map>
 
 #include <sys/epoll.h>
 
@@ -8,21 +9,34 @@
 #include "dispatcher.h"
 
 // Registry of all dispatcher singletons
-inline std::vector<DispatcherBase *> &dispatcher_registry() {
-  static std::vector<DispatcherBase *> registry;
+inline auto &dispatcher_registry() {
+  static std::unordered_map<std::string, DispatcherBase *> registry;
   return registry;
 }
 
-// Auto-registration helper, identical to TweakUiRegistry<T>
+// Auto-registration helper
 template <typename T>
 struct DispatcherRegistry {
   DispatcherRegistry() {
-    dispatcher_registry().push_back(&T::instance());
+    auto &registry = dispatcher_registry();
+    registry[T::instance().type()] = &T::instance();
   }
 };
 
 inline void init_all_dispatchers() {
-  for (DispatcherBase *d : dispatcher_registry()) {
+  for (auto &[type, dispatcher] : dispatcher_registry()) {
+    dispatcher->init();
+  }
+}
+
+inline DispatcherBase *get_dispatcher_for_type(const std::string &type) {
+  auto &registry = dispatcher_registry();
+  auto it = registry.find(type);
+  return (it != registry.end()) ? it->second : nullptr;
+}
+
+inline void init_dispatcher_for_type(const std::string &type) {
+  if (auto *d = get_dispatcher_for_type(type)) {
     d->init();
   }
 }

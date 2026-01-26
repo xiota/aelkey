@@ -19,6 +19,10 @@ class DispatcherEvdev : public Dispatcher<DispatcherEvdev> {
   ~DispatcherEvdev() = default;
 
  public:
+  const char *type() const override {
+    return "evdev";
+  }
+
   // Called by attach_input_device() after creating InputCtx
   bool open_device(InputCtx &ctx, const std::string &devnode) {
     // Open evdev node

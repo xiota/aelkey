@@ -32,6 +32,10 @@ class DispatcherGATT : public Dispatcher<DispatcherGATT> {
   }
 
  public:
+  const char *type() const override {
+    return "gatt";
+  }
+
   void init() override {
     ensure_initialized();
   }

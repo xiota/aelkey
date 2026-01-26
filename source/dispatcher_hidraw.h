@@ -22,6 +22,10 @@ class DispatcherHidraw : public Dispatcher<DispatcherHidraw> {
   ~DispatcherHidraw() = default;
 
  public:
+  const char *type() const override {
+    return "hidraw";
+  }
+
   void unregister_fd(int fd) {
     DispatcherBase::unregister_fd(fd);
     close(fd);

@@ -23,6 +23,10 @@ class DispatcherHaptics : public Dispatcher<DispatcherHaptics> {
   }
 
  public:
+  const char *type() const override {
+    return "haptics";
+  }
+
   // Register a virtual FF source (uinput device)
   void register_source(const std::string &id, int uinput_fd, const std::string &callback);
 

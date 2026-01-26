@@ -29,6 +29,8 @@ class DispatcherBase {
   virtual void init() {}
   virtual void handle_event(EpollPayload *payload, uint32_t events) {};
 
+  virtual const char *type() const = 0;
+
   EpollPayload *get_payload(int fd) const {
     auto it = pollfds_.find(fd);
     return (it != pollfds_.end()) ? it->second : nullptr;
