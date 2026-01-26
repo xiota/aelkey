@@ -312,8 +312,6 @@ std::string match_device(const InputDecl &decl) {
           return std::string{};
         }
     );
-  } else if (decl.type == "gatt") {
-    return DispatcherGATT::instance().match_device(decl, nullptr);
   }
 
   return {};
@@ -370,15 +368,6 @@ static InputCtx attach_device_helper(const std::string &devnode, const InputDecl
 
     std::cout << "Attached hidraw: " << devnode << std::endl;
     ctx.active = true;
-  } else if (in.type == "gatt") {
-    auto &gatt = DispatcherGATT::instance();
-    gatt.init();
-
-    // devnode is the characteristic path discovered in match_device()
-    InputDecl decl_copy = in;
-    decl_copy.devnode = devnode;  // <- important
-
-    ctx = gatt.attach_device(decl_copy);
   } else if (in.type == "evdev") {
     if (!DispatcherEvdev::instance().open_device(ctx, devnode)) {
       // open_device failed → ctx.active stays false
@@ -469,8 +458,6 @@ InputDecl detach_input_device(const std::string &dev_id) {
 
   if (ctx.decl.type == "evdev") {
     DispatcherEvdev::instance().close_device(ctx);
-  } else if (ctx.decl.type == "gatt") {
-    DispatcherGATT::instance().detach_device(ctx);
   }
 
   // Remove from maps

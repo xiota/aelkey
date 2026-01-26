@@ -1,4 +1,4 @@
-#include "dispatcher_gatt.h"
+#include "device_backend_gatt.h"
 
 #include <cstring>
 #include <iostream>
@@ -6,12 +6,14 @@
 #include <string_view>
 
 #include <dbus/dbus.h>
+#include <sol/sol.hpp>
 #include <sys/epoll.h>
 
 #include "aelkey_state.h"
+#include "device_backend_gatt.h"
 #include "device_helpers.h"
 
-void DispatcherGATT::ensure_initialized() {
+void DeviceBackendGATT::ensure_initialized() {
   if (conn_) {
     return;
   }
@@ -26,14 +28,13 @@ void DispatcherGATT::ensure_initialized() {
 
   if (!dbus_connection_get_unix_fd(conn_, &fd_)) {
     std::fprintf(stderr, "GATT: failed to get D-Bus fd\n");
+    fd_ = -1;
+    conn_ = nullptr;
     return;
   }
-
-  // Register with dispatcher/epoll
-  register_fd(fd_, EPOLLIN);
 }
 
-void DispatcherGATT::pump_messages(sol::this_state ts) {
+void DeviceBackendGATT::pump_messages() {
   if (!conn_) {
     return;
   }
@@ -48,13 +49,13 @@ void DispatcherGATT::pump_messages(sol::this_state ts) {
       break;
     }
 
-    process_one_message(ts, msg);
+    process_one_message(msg);
     dbus_message_unref(msg);
   }
 }
 
-void DispatcherGATT::process_one_message(sol::this_state ts, DBusMessage *msg) {
-  sol::state_view lua(ts);
+void DeviceBackendGATT::process_one_message(DBusMessage *msg) {
+  sol::state_view lua(AelkeyState::instance().lua_vm);
 
   const char *path = dbus_message_get_path(msg);
   if (!path) {
@@ -146,7 +147,7 @@ void DispatcherGATT::process_one_message(sol::this_state ts, DBusMessage *msg) {
   }
 }
 
-void DispatcherGATT::start_notify(const std::string &char_path) {
+void DeviceBackendGATT::start_notify(const std::string &char_path) {
   DBusMessage *msg = dbus_message_new_method_call(
       "org.bluez", char_path.c_str(), "org.bluez.GattCharacteristic1", "StartNotify"
   );
@@ -158,7 +159,7 @@ void DispatcherGATT::start_notify(const std::string &char_path) {
   }
 }
 
-void DispatcherGATT::stop_notify(const std::string &char_path) {
+void DeviceBackendGATT::stop_notify(const std::string &char_path) {
   DBusMessage *msg = dbus_message_new_method_call(
       "org.bluez", char_path.c_str(), "org.bluez.GattCharacteristic1", "StopNotify"
   );
@@ -170,7 +171,7 @@ void DispatcherGATT::stop_notify(const std::string &char_path) {
   }
 }
 
-GattPathType DispatcherGATT::classify_gatt_path(const std::string &path) {
+GattPathType DeviceBackendGATT::classify_gatt_path(const std::string &path) {
   if (path.find("/char") != std::string::npos) {
     return GattPathType::Characteristic;
   }
@@ -180,7 +181,7 @@ GattPathType DispatcherGATT::classify_gatt_path(const std::string &path) {
   return GattPathType::Device;
 }
 
-std::string DispatcherGATT::derive_device_path_from_char_path(const std::string &char_path) {
+std::string DeviceBackendGATT::derive_device_path_from_char_path(const std::string &char_path) {
   std::string prefix = "/service";
   size_t pos = char_path.find(prefix);
   if (pos == std::string::npos) {
@@ -189,7 +190,7 @@ std::string DispatcherGATT::derive_device_path_from_char_path(const std::string 
   return char_path.substr(0, pos);
 }
 
-DBusMessage *DispatcherGATT::get_managed_objects() {
+DBusMessage *DeviceBackendGATT::get_managed_objects() {
   DBusMessage *msg = dbus_message_new_method_call(
       "org.bluez", "/", "org.freedesktop.DBus.ObjectManager", "GetManagedObjects"
   );
@@ -199,7 +200,7 @@ DBusMessage *DispatcherGATT::get_managed_objects() {
   return resp;
 }
 
-std::string DispatcherGATT::get_characteristic_uuid(const std::string &path) {
+std::string DeviceBackendGATT::get_characteristic_uuid(const std::string &path) {
   DBusMessage *msg = get_managed_objects();
   if (!msg) {
     return "";
@@ -297,7 +298,7 @@ std::string DispatcherGATT::get_characteristic_uuid(const std::string &path) {
   return "";
 }
 
-std::vector<std::string> DispatcherGATT::get_characteristic_flags(const std::string &path) {
+std::vector<std::string> DeviceBackendGATT::get_characteristic_flags(const std::string &path) {
   std::vector<std::string> out;
 
   DBusMessage *msg = get_managed_objects();
@@ -372,7 +373,7 @@ std::vector<std::string> DispatcherGATT::get_characteristic_flags(const std::str
   return out;
 }
 
-void DispatcherGATT::print_characteristic_inspect_line(const std::string &ch) {
+void DeviceBackendGATT::print_characteristic_inspect_line(const std::string &ch) {
   // Extract service and characteristic handles from DBus path
   std::string service_hex = "0000";
   std::string char_hex = "0000";
@@ -412,7 +413,7 @@ void DispatcherGATT::print_characteristic_inspect_line(const std::string &ch) {
             << ", flags=" << fl.str() << std::endl;
 }
 
-bool DispatcherGATT::characteristic_supports_notify(const std::string &char_path) {
+bool DeviceBackendGATT::characteristic_supports_notify(const std::string &char_path) {
   DBusMessage *msg;
   DBusMessage *reply;
   DBusMessageIter args;
@@ -460,8 +461,76 @@ bool DispatcherGATT::characteristic_supports_notify(const std::string &char_path
   return supports;
 }
 
+std::string DeviceBackendGATT::resolve_gatt_paths(
+    const InputDecl &decl,
+    std::vector<std::string> *found_characteristics
+) {
+  ensure_initialized();
+
+  DBusMessage *resp = get_managed_objects();
+  if (!resp) {
+    return {};
+  }
+
+  DBusMessageIter iter, dict;
+
+  dbus_message_iter_init(resp, &iter);
+  dbus_message_iter_recurse(&iter, &dict);
+
+  auto devices = get_matching_devices(decl, dict);
+  if (devices.empty()) {
+    dbus_message_unref(resp);
+    return {};
+  }
+
+  if (!decl.service && !found_characteristics) {
+    dbus_message_unref(resp);
+    return devices[0];
+  }
+
+  dbus_message_iter_init(resp, &iter);
+  dbus_message_iter_recurse(&iter, &dict);
+
+  auto services = get_matching_services(decl, devices, dict);
+  if (services.empty()) {
+    dbus_message_unref(resp);
+    return {};
+  }
+
+  if (!decl.characteristic && !found_characteristics) {
+    dbus_message_unref(resp);
+    return services[0];
+  }
+
+  dbus_message_iter_init(resp, &iter);
+  dbus_message_iter_recurse(&iter, &dict);
+
+  auto characteristics = get_matching_characteristics(decl, services, dict);
+
+  if (found_characteristics) {
+    *found_characteristics = characteristics;
+  }
+
+  dbus_message_unref(resp);
+
+  if (!decl.service) {
+    return devices[0];
+  }
+
+  if (!decl.characteristic) {
+    return services[0];
+  }
+
+  if (characteristics.empty()) {
+    std::fprintf(stderr, "GATT match: no matching characteristic found\n");
+    return {};
+  }
+
+  return characteristics[0];
+}
+
 std::vector<std::string>
-DispatcherGATT::get_matching_devices(const InputDecl &decl, DBusMessageIter &array) {
+DeviceBackendGATT::get_matching_devices(const InputDecl &decl, DBusMessageIter &array) {
   std::vector<std::string> result;
 
   DBusMessageIter it = array;
@@ -547,7 +616,7 @@ DispatcherGATT::get_matching_devices(const InputDecl &decl, DBusMessageIter &arr
   return result;
 }
 
-std::vector<std::string> DispatcherGATT::get_matching_services(
+std::vector<std::string> DeviceBackendGATT::get_matching_services(
     const InputDecl &decl,
     const std::vector<std::string> &candidate_devices,
     DBusMessageIter &array
@@ -601,7 +670,7 @@ std::vector<std::string> DispatcherGATT::get_matching_services(
   return result;
 }
 
-std::vector<std::string> DispatcherGATT::get_matching_characteristics(
+std::vector<std::string> DeviceBackendGATT::get_matching_characteristics(
     const InputDecl &decl,
     const std::vector<std::string> &candidate_services,
     DBusMessageIter &array
@@ -654,153 +723,7 @@ std::vector<std::string> DispatcherGATT::get_matching_characteristics(
   return result;
 }
 
-InputCtx DispatcherGATT::attach_device(const InputDecl &decl) {
-  InputCtx ctx;
-  ctx.decl = decl;
-
-  ensure_initialized();
-  if (!conn_) {
-    std::fprintf(stderr, "GATT: no D-Bus connection\n");
-    return ctx;
-  }
-
-  if (decl.devnode.empty()) {
-    std::fprintf(stderr, "GATT: no GATT path in devnode for %s\n", decl.id.c_str());
-    return ctx;
-  }
-
-  GattPathType type = classify_gatt_path(decl.devnode);
-
-  if (type == GattPathType::Characteristic) {
-    ctx.gatt_path = derive_device_path_from_char_path(decl.devnode);
-    if (ctx.gatt_path.empty()) {
-      std::fprintf(
-          stderr, "GATT: failed to derive device path from %s\n", decl.devnode.c_str()
-      );
-    }
-  } else {
-    ctx.gatt_path = decl.devnode;
-  }
-
-  if (type != GattPathType::Characteristic) {
-    std::vector<std::string> found_characteristics;
-    match_device(decl, &found_characteristics);
-
-    for (const auto &ch : found_characteristics) {
-      print_characteristic_inspect_line(ch);
-
-      if (characteristic_supports_notify(ch)) {
-        std::string rule =
-            "type='signal',interface='org.freedesktop.DBus.Properties',"
-            "member='PropertiesChanged',path='" +
-            ch + "'";
-
-        dbus_bus_add_match(conn_, rule.c_str(), nullptr);
-        start_notify(ch);
-      }
-    }
-
-    dbus_connection_flush(conn_);
-  } else {
-    print_characteristic_inspect_line(decl.devnode);
-
-    std::string rule =
-        "type='signal',interface='org.freedesktop.DBus.Properties',"
-        "member='PropertiesChanged',path='" +
-        decl.devnode + "'";
-
-    dbus_bus_add_match(conn_, rule.c_str(), nullptr);
-    dbus_connection_flush(conn_);
-
-    start_notify(decl.devnode);
-  }
-
-  ctx.active = true;
-  return ctx;
-}
-
-void DispatcherGATT::detach_device(InputCtx &ctx) {
-  if (!conn_) {
-    return;
-  }
-
-  if (!ctx.decl.devnode.empty()) {
-    stop_notify(ctx.decl.devnode);
-  }
-
-  ctx.active = false;
-  std::fprintf(stderr, "Detached GATT characteristic: %s\n", ctx.decl.devnode.c_str());
-}
-
-std::string DispatcherGATT::match_device(
-    const InputDecl &decl,
-    std::vector<std::string> *found_characteristics
-) {
-  ensure_initialized();
-
-  DBusMessage *resp = get_managed_objects();
-  if (!resp) {
-    return {};
-  }
-
-  DBusMessageIter iter, dict;
-
-  dbus_message_iter_init(resp, &iter);
-  dbus_message_iter_recurse(&iter, &dict);
-
-  auto devices = get_matching_devices(decl, dict);
-  if (devices.empty()) {
-    dbus_message_unref(resp);
-    return {};
-  }
-
-  if (!decl.service && !found_characteristics) {
-    dbus_message_unref(resp);
-    return devices[0];
-  }
-
-  dbus_message_iter_init(resp, &iter);
-  dbus_message_iter_recurse(&iter, &dict);
-
-  auto services = get_matching_services(decl, devices, dict);
-  if (services.empty()) {
-    dbus_message_unref(resp);
-    return {};
-  }
-
-  if (!decl.characteristic && !found_characteristics) {
-    dbus_message_unref(resp);
-    return services[0];
-  }
-
-  dbus_message_iter_init(resp, &iter);
-  dbus_message_iter_recurse(&iter, &dict);
-
-  auto characteristics = get_matching_characteristics(decl, services, dict);
-
-  if (found_characteristics) {
-    *found_characteristics = characteristics;
-  }
-
-  dbus_message_unref(resp);
-
-  if (!decl.service) {
-    return devices[0];
-  }
-
-  if (!decl.characteristic) {
-    return services[0];
-  }
-
-  if (characteristics.empty()) {
-    std::fprintf(stderr, "GATT match: no matching characteristic found\n");
-    return {};
-  }
-
-  return characteristics[0];
-}
-
-bool DispatcherGATT::read_characteristic(
+bool DeviceBackendGATT::read_characteristic(
     const std::string &char_path,
     std::vector<uint8_t> &out_data
 ) {
@@ -851,7 +774,7 @@ bool DispatcherGATT::read_characteristic(
   return true;
 }
 
-bool DispatcherGATT::write_characteristic(
+bool DeviceBackendGATT::write_characteristic(
     const std::string &char_path,
     const uint8_t *data,
     size_t len,

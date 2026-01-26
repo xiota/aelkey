@@ -6,7 +6,7 @@
 #include <sol/sol.hpp>
 
 #include "aelkey_state.h"
-#include "dispatcher_gatt.h"
+#include "device_backend_gatt.h"
 
 // Lookup InputCtx by device id
 static InputCtx *get_ctx(sol::state_view lua, const std::string &dev_id) {
@@ -65,7 +65,7 @@ sol::object gatt_read(sol::this_state ts, sol::table opts) {
   std::string char_path = resolve_char_path(lua, ctx, service, characteristic);
 
   std::vector<uint8_t> data;
-  bool ok = DispatcherGATT::instance().read_characteristic(char_path, data);
+  bool ok = DeviceBackendGATT::instance().read_characteristic(char_path, data);
 
   if (!ok) {
     throw sol::error("GATT read failed");
@@ -100,7 +100,7 @@ sol::object gatt_write(sol::this_state ts, sol::table opts) {
 
   std::string char_path = resolve_char_path(lua, ctx, service, characteristic);
 
-  bool ok = DispatcherGATT::instance().write_characteristic(
+  bool ok = DeviceBackendGATT::instance().write_characteristic(
       char_path, reinterpret_cast<const uint8_t *>(bytes.data()), bytes.size(), with_resp
   );
 
