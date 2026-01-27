@@ -1,5 +1,6 @@
 #pragma once
 
+#include <format>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -97,10 +98,11 @@ class DeviceBackendGATT : public DeviceBackend, public Singleton<DeviceBackendGA
       start_notify(devnode);
     }
 
+    gatt_paths_[decl.id] = gatt_path;
+
     InputCtx ctx;
     ctx.decl = decl;
     ctx.decl.devnode = devnode;
-    ctx.gatt_path = gatt_path;
     return ctx;
   }
 
@@ -120,7 +122,8 @@ class DeviceBackendGATT : public DeviceBackend, public Singleton<DeviceBackendGA
       stop_notify(ctx.decl.devnode);
     }
 
-    std::fprintf(stderr, "Detached GATT characteristic: %s\n", ctx.decl.devnode.c_str());
+    gatt_paths_.erase(id);
+
     return true;
   }
 
@@ -132,6 +135,37 @@ class DeviceBackendGATT : public DeviceBackend, public Singleton<DeviceBackendGA
       size_t len,
       bool with_resp
   );
+
+  std::string get_gatt_path(const std::string &id) const {
+    auto it = gatt_paths_.find(id);
+    if (it == gatt_paths_.end()) {
+      return {};
+    }
+    return it->second;
+  }
+
+  // Resolve characteristic path using optional service/characteristic overrides
+  std::string
+  resolve_char_path(const std::string &id, int service = -1, int characteristic = -1) {
+    std::string gp = get_gatt_path(id);
+    if (gp.empty()) {
+      return {};
+    }
+
+    // No overrides → use primary characteristic
+    if (service <= 0 && characteristic <= 0) {
+      return gp;
+    }
+
+    // Overrides must both be provided
+    if (service <= 0 || characteristic <= 0) {
+      return {};
+    }
+
+    // Construct BlueZ object path:
+    // /org/bluez/hci0/dev_xx/serviceXXXX/charYYYY
+    return std::format("{}/service{:04X}/char{:04X}", gp, service, characteristic);
+  }
 
   // Optional: expose for advanced callers
   DBusConnection *connection() const {
@@ -183,4 +217,8 @@ class DeviceBackendGATT : public DeviceBackend, public Singleton<DeviceBackendGA
       const std::vector<std::string> &candidate_services,
       DBusMessageIter &array
   );
+
+ private:
+  // dev_id -> gatt_path, /org/bluez/hci0/dev_XX_XX_XX_XX_XX_XX
+  std::unordered_map<std::string, std::string> gatt_paths_;
 };

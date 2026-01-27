@@ -43,10 +43,6 @@ struct InputCtx {
   bool grab_pending = false;
   bool grabbed = false;
 
-  // The BlueZ device path, e.g. "/org/bluez/hci0/dev_XX_XX_XX_XX_XX_XX"
-  // This is the root under which all GATT services/characteristics live.
-  std::string gatt_path;
-
   HapticsSinkCtx haptics;
 };
 
