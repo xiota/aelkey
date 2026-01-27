@@ -40,9 +40,6 @@ struct InputCtx {
   libusb_device_handle *usb_handle = nullptr;
   std::vector<libusb_transfer *> transfers;
 
-  bool grab_pending = false;
-  bool grabbed = false;
-
   HapticsSinkCtx haptics;
 };
 

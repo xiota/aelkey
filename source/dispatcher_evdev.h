@@ -60,7 +60,7 @@ class DispatcherEvdev : public Dispatcher<DispatcherEvdev> {
 
     // Initial grab attempt
     if (ctx.decl.grab) {
-      ctx.grab_pending = true;
+      grab_needed_[ctx.fd] = true;
       try_evdev_grab(ctx);
     }
 
@@ -78,6 +78,7 @@ class DispatcherEvdev : public Dispatcher<DispatcherEvdev> {
     if (ctx.fd >= 0) {
       unregister_fd(ctx.fd);
       devices_.erase(ctx.fd);
+      grab_needed_.erase(ctx.fd);
     }
 
     // Free libevdev
@@ -196,11 +197,16 @@ class DispatcherEvdev : public Dispatcher<DispatcherEvdev> {
   }
 
   bool try_evdev_grab(InputCtx &ctx) {
-    if (!ctx.grab_pending || !ctx.idev) {
+    auto it = grab_needed_.find(ctx.fd);
+    if (it == grab_needed_.end()) {
       return false;
     }
 
-    // First: check kernel key bitmap via EVIOCGKEY
+    if (!it->second || !ctx.idev) {
+      return false;
+    }
+
+    // check kernel key bitmap via EVIOCGKEY
     unsigned long key_bits[(KEY_MAX + 1) / (sizeof(unsigned long) * 8)] = { 0 };
     if (ioctl(ctx.fd, EVIOCGKEY(sizeof(key_bits)), key_bits) >= 0) {
       for (int code = 0; code <= KEY_MAX; ++code) {
@@ -211,7 +217,7 @@ class DispatcherEvdev : public Dispatcher<DispatcherEvdev> {
       }
     }
 
-    // Second: check libevdev's internal state
+    // check libevdev's internal state
     for (int code = 0; code <= KEY_MAX; ++code) {
       int value = 0;
       if (libevdev_fetch_event_value(ctx.idev, EV_KEY, code, &value) == 0 && value == 1) {
@@ -222,20 +228,18 @@ class DispatcherEvdev : public Dispatcher<DispatcherEvdev> {
     // Attempt grab
     int rc = libevdev_grab(ctx.idev, LIBEVDEV_GRAB);
     if (rc < 0) {
-      std::fprintf(
-          stderr, "Deferred grab failed for %s: %s\n", ctx.decl.id.c_str(), strerror(-rc)
-      );
       return false;
     }
 
-    std::cout << "Grabbed device exclusively: " << ctx.decl.id << std::endl;
-    ctx.grab_pending = false;
-    ctx.grabbed = true;
+    grab_needed_[ctx.fd] = false;
     return true;
   }
 
   // fd → device id (stable)
   std::unordered_map<int, std::string> devices_;
+
+  // keyed by fd
+  std::unordered_map<int, bool> grab_needed_;
 };
 
 template class Dispatcher<DispatcherEvdev>;
