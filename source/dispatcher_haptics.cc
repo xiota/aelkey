@@ -24,13 +24,20 @@ void DispatcherHaptics::register_source(
     int uinput_fd,
     const std::string &callback
 ) {
+  // Always create or replace the logical haptics source bucket.
+  // A source is a persistent namespace for virtual effects and
+  // must exist independently of any physical device.
+  // This allows effects to be defined before sinks are available.
   HapticsSourceCtx ctx;
   ctx.id = id;
   ctx.fd = uinput_fd;
   ctx.callback = callback;
-
-  register_fd(uinput_fd, EPOLLIN);
   sources_[id] = std::move(ctx);
+
+  // register epoll only for real fd
+  if (uinput_fd >= 0) {
+    register_fd(uinput_fd, EPOLLIN);
+  }
 }
 
 void DispatcherHaptics::propagate_erase_to_sinks(const std::string &source_id, int virt_id) {
