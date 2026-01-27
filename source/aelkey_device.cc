@@ -6,9 +6,9 @@
 
 #include "aelkey_state.h"
 #include "device_declarations.h"
-#include "device_input.h"
 #include "device_manager.h"
 #include "device_output.h"
+#include "device_parser.h"
 #include "dispatcher_udev.h"
 
 // Create all uinput output devices declared in aelkey_state.output_decls

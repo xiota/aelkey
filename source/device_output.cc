@@ -1,14 +1,15 @@
 #include "device_output.h"
 
+#include <cstdio>
 #include <iostream>
 #include <string>
 #include <vector>
 
+#include <libevdev/libevdev-uinput.h>
 #include <libevdev/libevdev.h>
-#include <sol/sol.hpp>
 
-#include "aelkey_state.h"
 #include "device_capabilities.h"
+#include "device_declarations.h"
 #include "dispatcher_haptics.h"
 
 // Provide sensible max ranges for ABS axes
@@ -229,109 +230,4 @@ libevdev_uinput *create_output_device(const OutputDecl &out) {
 
   libevdev_free(dev);
   return uidev;
-}
-
-OutputDecl parse_output(sol::table tbl) {
-  OutputDecl decl;
-
-  // id
-  if (sol::object v = tbl["id"]; v.valid() && v.is<std::string>()) {
-    decl.id = v.as<std::string>();
-  }
-
-  // type
-  if (sol::object v = tbl["type"]; v.valid() && v.is<std::string>()) {
-    decl.type = v.as<std::string>();
-  }
-
-  // vendor
-  if (sol::object v = tbl["vendor"]; v.valid() && v.is<int>()) {
-    decl.vendor = v.as<int>();
-  }
-
-  // product
-  if (sol::object v = tbl["product"]; v.valid() && v.is<int>()) {
-    decl.product = v.as<int>();
-  }
-
-  // version
-  if (sol::object v = tbl["version"]; v.valid() && v.is<int>()) {
-    decl.version = v.as<int>();
-  }
-
-  // bus
-  if (sol::object v = tbl["bus"]; v.valid() && v.is<std::string>()) {
-    std::string busstr = v.as<std::string>();
-    if (busstr == "usb") {
-      decl.bus = BUS_USB;
-    } else if (busstr == "bluetooth") {
-      decl.bus = BUS_BLUETOOTH;
-    } else if (busstr == "pci") {
-      decl.bus = BUS_PCI;
-    }
-  }
-
-  // name
-  if (sol::object v = tbl["name"]; v.valid() && v.is<std::string>()) {
-    decl.name = v.as<std::string>();
-  }
-
-  // haptics callback
-  if (sol::object v = tbl["on_haptics"]; v.valid() && v.is<std::string>()) {
-    decl.on_haptics = v.as<std::string>();
-  }
-
-  // capabilities
-  if (sol::object caps_obj = tbl["capabilities"];
-      caps_obj.valid() && caps_obj.is<sol::table>()) {
-    sol::table caps = caps_obj.as<sol::table>();
-    caps.for_each([&](sol::object /*k*/, sol::object v) {
-      if (v.is<std::string>()) {
-        decl.capabilities.push_back(v.as<std::string>());
-      }
-    });
-  }
-
-  return decl;
-}
-
-void parse_outputs_from_lua(sol::this_state ts) {
-  sol::state_view lua(ts);
-
-  auto &state = AelkeyState::instance();
-  state.output_decls.clear();
-
-  sol::object obj = lua["outputs"];
-  if (!obj.valid() || !obj.is<sol::table>()) {
-    return;
-  }
-
-  sol::table outputs = obj.as<sol::table>();
-
-  outputs.for_each([&](sol::object /*k*/, sol::object v) {
-    if (v.is<sol::table>()) {
-      OutputDecl decl = parse_output(v.as<sol::table>());
-      if (!decl.id.empty()) {
-        state.output_decls.push_back(decl);
-      }
-    }
-  });
-}
-
-// This helper is still pure C++ and can be used from elsewhere
-// once aelkey_state.output_decls has been filled.
-void create_outputs_from_decls() {
-  auto &state = AelkeyState::instance();
-  for (auto &out : state.output_decls) {
-    if (out.id.empty()) {
-      continue;
-    }
-    if (state.uinput_devices.count(out.id)) {
-      continue;
-    }
-    libevdev_uinput *uidev = create_output_device(out);
-    if (uidev) {
-      state.uinput_devices[out.id] = uidev;
-    }
-  }
 }

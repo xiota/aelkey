@@ -97,8 +97,8 @@ src_files = files(
   'source/device_backend_gatt.cc',
   'source/device_backend_hidraw.cc',
   'source/device_helpers.cc',
-  'source/device_input.cc',
   'source/device_output.cc',
+  'source/device_parser.cc',
   'source/dispatcher_haptics.cc',
   'source/dispatcher_udev.cc',
 )

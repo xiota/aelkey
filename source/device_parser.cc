@@ -1,10 +1,11 @@
-#include "device_input.h"
+#include "device_parser.h"
 
 #include <climits>  // for PATH_MAX
 #include <cstring>
 #include <fstream>
 #include <iostream>
 #include <string>
+#include <vector>
 
 #include <glob.h>
 #include <libevdev/libevdev-uinput.h>
@@ -16,6 +17,9 @@
 #include <sys/ioctl.h>
 
 #include "aelkey_state.h"
+#include "device_capabilities.h"
+#include "device_output.h"
+#include "dispatcher_haptics.h"
 
 // Parse a single InputDecl from a Lua table.
 InputDecl parse_input(sol::table tbl) {
@@ -149,6 +153,93 @@ void parse_inputs_from_lua(sol::this_state ts) {
       InputDecl decl = parse_input(v.as<sol::table>());
       if (!decl.id.empty()) {
         state.input_decls.push_back(decl);
+      }
+    }
+  });
+}
+
+OutputDecl parse_output(sol::table tbl) {
+  OutputDecl decl;
+
+  // id
+  if (sol::object v = tbl["id"]; v.valid() && v.is<std::string>()) {
+    decl.id = v.as<std::string>();
+  }
+
+  // type
+  if (sol::object v = tbl["type"]; v.valid() && v.is<std::string>()) {
+    decl.type = v.as<std::string>();
+  }
+
+  // vendor
+  if (sol::object v = tbl["vendor"]; v.valid() && v.is<int>()) {
+    decl.vendor = v.as<int>();
+  }
+
+  // product
+  if (sol::object v = tbl["product"]; v.valid() && v.is<int>()) {
+    decl.product = v.as<int>();
+  }
+
+  // version
+  if (sol::object v = tbl["version"]; v.valid() && v.is<int>()) {
+    decl.version = v.as<int>();
+  }
+
+  // bus
+  if (sol::object v = tbl["bus"]; v.valid() && v.is<std::string>()) {
+    std::string busstr = v.as<std::string>();
+    if (busstr == "usb") {
+      decl.bus = BUS_USB;
+    } else if (busstr == "bluetooth") {
+      decl.bus = BUS_BLUETOOTH;
+    } else if (busstr == "pci") {
+      decl.bus = BUS_PCI;
+    }
+  }
+
+  // name
+  if (sol::object v = tbl["name"]; v.valid() && v.is<std::string>()) {
+    decl.name = v.as<std::string>();
+  }
+
+  // haptics callback
+  if (sol::object v = tbl["on_haptics"]; v.valid() && v.is<std::string>()) {
+    decl.on_haptics = v.as<std::string>();
+  }
+
+  // capabilities
+  if (sol::object caps_obj = tbl["capabilities"];
+      caps_obj.valid() && caps_obj.is<sol::table>()) {
+    sol::table caps = caps_obj.as<sol::table>();
+    caps.for_each([&](sol::object /*k*/, sol::object v) {
+      if (v.is<std::string>()) {
+        decl.capabilities.push_back(v.as<std::string>());
+      }
+    });
+  }
+
+  return decl;
+}
+
+void parse_outputs_from_lua(sol::this_state ts) {
+  sol::state_view lua(ts);
+
+  auto &state = AelkeyState::instance();
+  state.output_decls.clear();
+
+  sol::object obj = lua["outputs"];
+  if (!obj.valid() || !obj.is<sol::table>()) {
+    return;
+  }
+
+  sol::table outputs = obj.as<sol::table>();
+
+  outputs.for_each([&](sol::object /*k*/, sol::object v) {
+    if (v.is<sol::table>()) {
+      OutputDecl decl = parse_output(v.as<sol::table>());
+      if (!decl.id.empty()) {
+        state.output_decls.push_back(decl);
       }
     }
   });

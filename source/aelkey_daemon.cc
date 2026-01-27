@@ -4,7 +4,7 @@
 
 #include "aelkey_state.h"
 #include "device_declarations.h"
-#include "device_input.h"
+#include "device_parser.h"
 #include "lua_scripts.h"
 
 // set_callback(cb)
