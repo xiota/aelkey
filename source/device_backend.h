@@ -3,7 +3,7 @@
 #include <optional>
 #include <string>
 
-#include "device_input.h"
+#include "device_declarations.h"
 
 class DeviceBackend {
  protected:

@@ -9,8 +9,8 @@
 #include <unistd.h>
 
 #include "aelkey_state.h"
-#include "device_helpers.h"  // for match_string, etc.
-#include "device_input.h"    // for InputDecl
+#include "device_declarations.h"
+#include "device_helpers.h"
 #include "dispatcher.h"
 #include "dispatcher_registry.h"
 

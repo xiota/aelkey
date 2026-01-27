@@ -10,8 +10,7 @@
 #include <libusb-1.0/libusb.h>
 
 #include "aelkey_core.h"
-#include "device_input.h"
-#include "device_output.h"
+#include "device_declarations.h"
 #include "singleton.h"
 
 class AelkeyState : public Singleton<AelkeyState> {

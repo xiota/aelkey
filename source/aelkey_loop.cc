@@ -16,7 +16,7 @@
 
 #include "aelkey_device.h"
 #include "aelkey_state.h"
-#include "device_input.h"
+#include "device_declarations.h"
 #include "device_manager.h"
 #include "dispatcher.h"
 #include "dispatcher_udev.h"

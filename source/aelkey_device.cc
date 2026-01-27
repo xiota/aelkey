@@ -5,6 +5,7 @@
 #include <unistd.h>
 
 #include "aelkey_state.h"
+#include "device_declarations.h"
 #include "device_input.h"
 #include "device_manager.h"
 #include "device_output.h"

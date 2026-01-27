@@ -7,7 +7,7 @@
 #include <sol/sol.hpp>
 
 #include "aelkey_state.h"
-#include "device_input.h"
+#include "device_declarations.h"
 #include "device_manager.h"
 #include "dispatcher_registry.h"
 

@@ -3,6 +3,7 @@
 #include <sol/sol.hpp>
 
 #include "aelkey_state.h"
+#include "device_declarations.h"
 #include "device_input.h"
 #include "lua_scripts.h"
 

@@ -4,8 +4,8 @@
 #include <string>
 
 #include "device_backend.h"
+#include "device_declarations.h"
 #include "device_helpers.h"
-#include "device_input.h"
 #include "singleton.h"
 
 class DeviceBackendHidraw : public DeviceBackend, public Singleton<DeviceBackendHidraw> {

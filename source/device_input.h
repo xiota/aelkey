@@ -1,37 +1,8 @@
 #pragma once
 
-#include <string>
-#include <unordered_map>
-#include <vector>
-
-#include <libevdev/libevdev.h>
-#include <libusb-1.0/libusb.h>
 #include <sol/sol.hpp>
 
-struct InputDecl {
-  std::string id;
-  std::string type;
-  int vendor = 0;
-  int product = 0;
-  int bus = 0;
-  int interface = -1;
-  std::string name;
-  std::string phys;
-  std::string uniq;
-
-  bool grab = false;
-  std::vector<std::pair<int, int>> capabilities;
-
-  int service = 0;
-  int characteristic = 0;
-
-  std::string devnode;
-
-  std::string on_event;  // HID input events
-  std::string on_state;  // lifecycle events
-
-  int fd = -1;
-};
+#include "device_declarations.h"
 
 // Parse a single input declaration from a Lua table.
 InputDecl parse_input(sol::table tbl);

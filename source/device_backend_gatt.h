@@ -9,7 +9,7 @@
 
 #include "aelkey_state.h"
 #include "device_backend.h"
-#include "device_input.h"
+#include "device_declarations.h"
 #include "singleton.h"
 
 enum class GattPathType { Device, Service, Characteristic };
@@ -125,7 +125,7 @@ class DeviceBackendGATT : public DeviceBackend, public Singleton<DeviceBackendGA
     return true;
   }
 
-  // Public API used by device_input / Lua wrappers
+  // Public API used by Lua wrappers
   bool read_characteristic(const std::string &char_path, std::vector<uint8_t> &out_data);
   bool write_characteristic(
       const std::string &char_path,

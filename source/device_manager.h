@@ -9,7 +9,7 @@
 #include "device_backend_gatt.h"
 #include "device_backend_hidraw.h"
 #include "device_backend_libusb.h"
-#include "device_input.h"
+#include "device_declarations.h"
 #include "dispatcher_registry.h"
 #include "singleton.h"
 

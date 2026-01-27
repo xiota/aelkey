@@ -5,8 +5,8 @@
 
 #include "aelkey_state.h"
 #include "device_backend.h"
+#include "device_declarations.h"
 #include "device_helpers.h"
-#include "device_input.h"
 #include "singleton.h"
 
 class DeviceBackendEvdev : public DeviceBackend, public Singleton<DeviceBackendEvdev> {
