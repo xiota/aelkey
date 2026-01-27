@@ -35,7 +35,6 @@ struct InputDecl {
 
 struct InputCtx {
   InputDecl decl;
-  libevdev *idev = nullptr;
   int fd = -1;
 
   HapticsSinkCtx haptics;

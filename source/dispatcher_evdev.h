@@ -44,7 +44,7 @@ class DispatcherEvdev : public Dispatcher<DispatcherEvdev> {
       ctx.fd = -1;
       return false;
     }
-    ctx.idev = idev;
+    idev_map_[ctx.fd] = idev;
 
     // Initialize frame buffer
     auto &state = AelkeyState::instance();
@@ -82,11 +82,11 @@ class DispatcherEvdev : public Dispatcher<DispatcherEvdev> {
     }
 
     // Free libevdev
-    if (ctx.idev) {
-      libevdev_grab(ctx.idev, LIBEVDEV_UNGRAB);
-      libevdev_free(ctx.idev);
-      ctx.idev = nullptr;
-    }
+    with_idev(ctx.fd, [&](libevdev *idev) {
+      libevdev_grab(idev, LIBEVDEV_UNGRAB);
+      libevdev_free(idev);
+    });
+    idev_map_.erase(ctx.fd);
 
     // Close FD
     if (ctx.fd >= 0) {
@@ -131,8 +131,31 @@ class DispatcherEvdev : public Dispatcher<DispatcherEvdev> {
   }
 
  private:
+  // --- libevdev helpers ---
+  // Retrieve libevdev* for a given fd, or nullptr if not found.
+  libevdev *get_idev(int fd) {
+    auto it = idev_map_.find(fd);
+    return (it != idev_map_.end()) ? it->second : nullptr;
+  }
+
+  // Call a lambda with libevdev* if it exists.
+  // Usage: with_idev(fd, [&](libevdev* idev) { ... });
+  template <typename F>
+  void with_idev(int fd, F &&fn) {
+    auto it = idev_map_.find(fd);
+    if (it != idev_map_.end()) {
+      fn(it->second);
+    }
+  }
+
+  // Check if an idev exists for this fd.
+  bool idev_exists(int fd) const {
+    return idev_map_.count(fd) > 0;
+  }
+
   void dispatch_evdev_logic(InputCtx &ctx) {
-    if (!ctx.idev) {
+    libevdev *idev = get_idev(ctx.fd);
+    if (!idev) {
       return;
     }
 
@@ -147,7 +170,7 @@ class DispatcherEvdev : public Dispatcher<DispatcherEvdev> {
 
     struct input_event ev;
     while (true) {
-      int rc = libevdev_next_event(ctx.idev, LIBEVDEV_READ_FLAG_NORMAL, &ev);
+      int rc = libevdev_next_event(idev, LIBEVDEV_READ_FLAG_NORMAL, &ev);
       if (rc == 0) {
         frame.push_back(ev);
 
@@ -198,11 +221,12 @@ class DispatcherEvdev : public Dispatcher<DispatcherEvdev> {
 
   bool try_evdev_grab(InputCtx &ctx) {
     auto it = grab_needed_.find(ctx.fd);
-    if (it == grab_needed_.end()) {
+    if (it == grab_needed_.end() || !it->second) {
       return false;
     }
 
-    if (!it->second || !ctx.idev) {
+    libevdev *idev = get_idev(ctx.fd);
+    if (!idev) {
       return false;
     }
 
@@ -220,13 +244,13 @@ class DispatcherEvdev : public Dispatcher<DispatcherEvdev> {
     // check libevdev's internal state
     for (int code = 0; code <= KEY_MAX; ++code) {
       int value = 0;
-      if (libevdev_fetch_event_value(ctx.idev, EV_KEY, code, &value) == 0 && value == 1) {
+      if (libevdev_fetch_event_value(idev, EV_KEY, code, &value) == 0 && value == 1) {
         return false;  // libevdev thinks key is down
       }
     }
 
     // Attempt grab
-    int rc = libevdev_grab(ctx.idev, LIBEVDEV_GRAB);
+    int rc = libevdev_grab(idev, LIBEVDEV_GRAB);
     if (rc < 0) {
       return false;
     }
@@ -238,7 +262,10 @@ class DispatcherEvdev : public Dispatcher<DispatcherEvdev> {
   // fd → device id (stable)
   std::unordered_map<int, std::string> devices_;
 
-  // keyed by fd
+  // fd → libevdev*
+  std::unordered_map<int, libevdev *> idev_map_;
+
+  // fd → flag
   std::unordered_map<int, bool> grab_needed_;
 };
 
