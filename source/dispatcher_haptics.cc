@@ -7,7 +7,6 @@
 #include <unistd.h>
 
 #include "aelkey_state.h"
-#include "haptics_context.h"
 
 void DispatcherHaptics::cleanup_sources() {
   for (auto &[id, src] : sources_) {

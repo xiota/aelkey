@@ -8,7 +8,6 @@
 
 #include "aelkey_state.h"
 #include "dispatcher_haptics.h"
-#include "haptics_context.h"
 
 sol::table haptics_create(sol::table tbl) {
   auto &disp = DispatcherHaptics::instance();
