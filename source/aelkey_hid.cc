@@ -21,13 +21,13 @@ sol::object hid_get_feature_report(sol::this_state ts, const std::string &id, in
     return sol::make_object(lua, std::string());
   }
 
-  InputCtx &ctx = it->second;
+  InputDecl &decl = it->second;
 
   const int max_size = 256;
   std::vector<unsigned char> buf(max_size);
   buf[0] = static_cast<unsigned char>(report_id);
 
-  if (ioctl(ctx.fd, HIDIOCGFEATURE(max_size), buf.data()) < 0) {
+  if (ioctl(decl.fd, HIDIOCGFEATURE(max_size), buf.data()) < 0) {
     return sol::make_object(lua, std::string());
   }
 
@@ -48,17 +48,17 @@ sol::object hid_get_report_descriptor(sol::this_state ts, const std::string &id)
     return sol::make_object(lua, std::string());
   }
 
-  InputCtx &ctx = it->second;
+  InputDecl &decl = it->second;
 
   int desc_size;
-  if (ioctl(ctx.fd, HIDIOCGRDESCSIZE, &desc_size) < 0) {
+  if (ioctl(decl.fd, HIDIOCGRDESCSIZE, &desc_size) < 0) {
     return sol::make_object(lua, std::string());
   }
 
   struct hidraw_report_descriptor rpt_desc;
   rpt_desc.size = desc_size;
 
-  if (ioctl(ctx.fd, HIDIOCGRDESC, &rpt_desc) < 0) {
+  if (ioctl(decl.fd, HIDIOCGRDESC, &rpt_desc) < 0) {
     return sol::make_object(lua, std::string());
   }
 
@@ -79,12 +79,12 @@ sol::object hid_read_input_report(sol::this_state ts, const std::string &id) {
     return sol::make_object(lua, std::string());
   }
 
-  InputCtx &ctx = it->second;
+  InputDecl &decl = it->second;
 
   const int max_size = 256;
   std::vector<unsigned char> buf(max_size);
 
-  ssize_t n = read(ctx.fd, buf.data(), max_size);
+  ssize_t n = read(decl.fd, buf.data(), max_size);
   if (n <= 0) {
     return sol::make_object(lua, std::string());
   }
@@ -105,9 +105,9 @@ hid_send_feature_report(sol::this_state ts, const std::string &id, const std::st
     return sol::make_object(lua, false);
   }
 
-  InputCtx &ctx = it->second;
+  InputDecl &decl = it->second;
 
-  if (ioctl(ctx.fd, HIDIOCSFEATURE(data.size()), data.data()) < 0) {
+  if (ioctl(decl.fd, HIDIOCSFEATURE(data.size()), data.data()) < 0) {
     return sol::make_object(lua, false);
   }
 
@@ -127,9 +127,9 @@ hid_send_output_report(sol::this_state ts, const std::string &id, const std::str
     return sol::make_object(lua, false);
   }
 
-  InputCtx &ctx = it->second;
+  InputDecl &decl = it->second;
 
-  ssize_t n = write(ctx.fd, data.data(), data.size());
+  ssize_t n = write(decl.fd, data.data(), data.size());
   if (n < 0 || static_cast<size_t>(n) != data.size()) {
     return sol::make_object(lua, false);
   }

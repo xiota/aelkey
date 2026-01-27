@@ -41,16 +41,16 @@ class DeviceBackendGATT : public DeviceBackend, public Singleton<DeviceBackendGA
     return true;
   }
 
-  std::optional<InputCtx> attach(const InputDecl &decl, const std::string &devnode) override {
+  bool attach(const std::string &devnode, InputDecl &decl) override {
     ensure_initialized();
     if (!conn_) {
       std::fprintf(stderr, "GATT: no D-Bus connection\n");
-      return std::nullopt;
+      return false;
     }
 
     if (devnode.empty()) {
       std::fprintf(stderr, "GATT: no GATT path in devnode for %s\n", decl.id.c_str());
-      return std::nullopt;
+      return false;
     }
 
     GattPathType type = classify_gatt_path(devnode);
@@ -100,10 +100,8 @@ class DeviceBackendGATT : public DeviceBackend, public Singleton<DeviceBackendGA
 
     gatt_paths_[decl.id] = gatt_path;
 
-    InputCtx ctx;
-    ctx.decl = decl;
-    ctx.decl.devnode = devnode;
-    return ctx;
+    decl.devnode = devnode;
+    return true;
   }
 
   bool detach(const std::string &id) override {
@@ -117,9 +115,9 @@ class DeviceBackendGATT : public DeviceBackend, public Singleton<DeviceBackendGA
       return false;
     }
 
-    InputCtx &ctx = it->second;
-    if (!ctx.decl.devnode.empty()) {
-      stop_notify(ctx.decl.devnode);
+    InputDecl &decl = it->second;
+    if (!decl.devnode.empty()) {
+      stop_notify(decl.devnode);
     }
 
     gatt_paths_.erase(id);

@@ -22,7 +22,7 @@ class AelkeyState : public Singleton<AelkeyState> {
 
   int epfd = -1;
   std::unordered_map<std::string, libevdev_uinput *> uinput_devices;
-  std::unordered_map<std::string, InputCtx> input_map;
+  std::unordered_map<std::string, InputDecl> input_map;
   std::unordered_map<std::string, std::vector<struct input_event>> frames;
 
   bool loop_should_stop = false;

@@ -34,7 +34,7 @@ class DeviceBackendLibUSB : public DeviceBackend, public Singleton<DeviceBackend
     return true;
   }
 
-  std::optional<InputCtx> attach(const InputDecl &decl, const std::string &devnode) override {
+  bool attach(const std::string &devnode, InputDecl &decl) override {
     ensure_initialized();
 
     uint16_t vendor = decl.vendor;
@@ -43,22 +43,18 @@ class DeviceBackendLibUSB : public DeviceBackend, public Singleton<DeviceBackend
     libusb_device_handle *handle = libusb_open_device_with_vid_pid(libusb_, vendor, product);
 
     if (!handle) {
-      return std::nullopt;
+      return false;
     }
 
     if (claim_interface(handle, decl.interface) != 0) {
       libusb_close(handle);
-      return std::nullopt;
+      return false;
     }
-
-    // Build InputCtx
-    InputCtx ctx;
-    ctx.decl = decl;
 
     // Track handle internally for detach()
     devices_[decl.id] = handle;
 
-    return ctx;
+    return true;
   }
 
   bool detach(const std::string &id) override {

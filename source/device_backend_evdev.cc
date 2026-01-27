@@ -75,16 +75,12 @@ bool DeviceBackendEvdev::match(const InputDecl &decl, std::string &devnode_out) 
   return false;
 }
 
-std::optional<InputCtx>
-DeviceBackendEvdev::attach(const InputDecl &decl, const std::string &devnode) {
-  InputCtx ctx;
-  ctx.decl = decl;
-
-  if (DispatcherEvdev::instance().open_device(devnode, ctx)) {
-    return ctx;
+bool DeviceBackendEvdev::attach(const std::string &devnode, InputDecl &decl) {
+  if (DispatcherEvdev::instance().open_device(devnode, decl)) {
+    return true;
   }
 
-  return std::nullopt;
+  return false;
 }
 
 bool DeviceBackendEvdev::detach(const std::string &id) {

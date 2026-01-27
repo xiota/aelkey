@@ -63,7 +63,7 @@ static void destroy_transfer(libusb_transfer *t) {
   }
 
   if (t->user_data) {
-    delete static_cast<std::pair<InputCtx *, lua_State *> *>(t->user_data);
+    delete static_cast<std::pair<InputDecl *, lua_State *> *>(t->user_data);
     t->user_data = nullptr;
   }
 
@@ -76,25 +76,25 @@ static void LIBUSB_CALL dispatch_libusb(libusb_transfer *transfer) {
     return;
   }
 
-  auto *ud = static_cast<std::pair<InputCtx *, lua_State *> *>(transfer->user_data);
+  auto *ud = static_cast<std::pair<InputDecl *, lua_State *> *>(transfer->user_data);
   if (!ud) {
     destroy_transfer(transfer);
     return;
   }
 
-  InputCtx *ctx = ud->first;
+  InputDecl *decl = ud->first;
   lua_State *L = ud->second;
 
   sol::state_view lua(L);
 
-  if (!ctx->decl.on_event.empty()) {
-    sol::object cb_obj = lua[ctx->decl.on_event];
+  if (!decl->on_event.empty()) {
+    sol::object cb_obj = lua[decl->on_event];
     if (cb_obj.is<sol::function>()) {
       sol::function cb = cb_obj.as<sol::function>();
 
       sol::table ev = lua.create_table();
 
-      ev["device"] = ctx->decl.id;
+      ev["device"] = decl->id;
       ev["data"] = std::string_view(
           reinterpret_cast<const char *>(transfer->buffer), transfer->actual_length
       );
@@ -125,8 +125,8 @@ static void LIBUSB_CALL dispatch_libusb(libusb_transfer *transfer) {
     }
 
     case LIBUSB_TRANSFER_NO_DEVICE:
-      DeviceManager::instance().detach(ctx->decl.id);
-      DispatcherUdev::instance().notify_state_change(ctx->decl, "remove");
+      DeviceManager::instance().detach(decl->id);
+      DispatcherUdev::instance().notify_state_change(*decl, "remove");
       break;
 
     case LIBUSB_TRANSFER_CANCELLED:
@@ -135,7 +135,7 @@ static void LIBUSB_CALL dispatch_libusb(libusb_transfer *transfer) {
       libusb_device_descriptor desc;
 
       auto &backend = DeviceBackendLibUSB::instance();
-      libusb_device_handle *handle = backend.get_handle(ctx->decl.id);
+      libusb_device_handle *handle = backend.get_handle(decl->id);
 
       int rc = -1;
       if (handle) {
@@ -143,8 +143,8 @@ static void LIBUSB_CALL dispatch_libusb(libusb_transfer *transfer) {
       }
       if (rc != 0) {
         // device is gone
-        DeviceManager::instance().detach(ctx->decl.id);
-        DispatcherUdev::instance().notify_state_change(ctx->decl, "remove");
+        DeviceManager::instance().detach(decl->id);
+        DispatcherUdev::instance().notify_state_change(*decl, "remove");
       } else {
         // fatal or cancelled
         destroy_transfer(transfer);
@@ -426,7 +426,7 @@ sol::object usb_submit_transfer(sol::this_state ts, sol::table opts) {
     result["status"] = libusb_error_name(LIBUSB_ERROR_NO_DEVICE);
     return result;
   }
-  InputCtx *ctx = &it->second;
+  InputDecl *decl = &it->second;
 
   // endpoint
   int endpoint = opts.get<int>("endpoint");
@@ -478,7 +478,7 @@ sol::object usb_submit_transfer(sol::this_state ts, sol::table opts) {
   xfer->timeout = timeout;
   xfer->buffer = buf;
   xfer->length = size;
-  xfer->user_data = new std::pair<InputCtx *, lua_State *>(ctx, L);
+  xfer->user_data = new std::pair<InputDecl *, lua_State *>(decl, L);
   xfer->callback = dispatch_libusb;
 
   int rc = libusb_submit_transfer(xfer);

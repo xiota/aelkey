@@ -110,17 +110,14 @@ void DeviceBackendGATT::process_one_message(DBusMessage *msg) {
     dbus_message_iter_next(&dict);
   }
 
-  // Route to correct InputCtx (same logic as before)
   auto &state = AelkeyState::instance();
-  for (auto &kv : state.input_map) {
-    InputCtx &ctx = kv.second;
-
-    if (ctx.decl.type != "gatt") {
+  for (auto &[_, decl] : state.input_map) {
+    if (decl.type != "gatt") {
       continue;
     }
 
-    if (!ctx.decl.on_event.empty()) {
-      sol::object obj = lua[ctx.decl.on_event];
+    if (!decl.on_event.empty()) {
+      sol::object obj = lua[decl.on_event];
       if (!obj.is<sol::function>()) {
         continue;
       }
@@ -128,7 +125,7 @@ void DeviceBackendGATT::process_one_message(DBusMessage *msg) {
       sol::function cb = obj.as<sol::function>();
 
       sol::table tbl = lua.create_table();
-      tbl["device"] = ctx.decl.id;
+      tbl["device"] = decl.id;
       tbl["path"] = path;
       tbl["data"] =
           std::string_view(reinterpret_cast<const char *>(bytes.data()), bytes.size());

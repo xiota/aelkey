@@ -202,7 +202,7 @@ void DispatcherUdev::handle_udev_add(struct udev_device *dev) {
           break;
         }
 
-        if (DeviceManager::instance().attach(decl, devnode)) {
+        if (DeviceManager::instance().attach(devnode, decl)) {
           decl.devnode = devnode;
           notify_state_change(decl, "add");
         }
@@ -219,7 +219,7 @@ void DispatcherUdev::handle_udev_add(struct udev_device *dev) {
           break;
         }
 
-        if (DeviceManager::instance().attach(decl, matched)) {
+        if (DeviceManager::instance().attach(matched, decl)) {
           decl.devnode = matched;
           notify_state_change(decl, "add");
         }

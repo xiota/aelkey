@@ -29,69 +29,69 @@ class DispatcherEvdev : public Dispatcher<DispatcherEvdev> {
     return "evdev";
   }
 
-  bool open_device(const std::string &devnode, InputCtx &ctx) {
+  bool open_device(const std::string &devnode, InputDecl &decl) {
     // Open evdev node
-    ctx.fd = open(devnode.c_str(), O_RDWR | O_NONBLOCK);
-    if (ctx.fd < 0) {
+    decl.fd = open(devnode.c_str(), O_RDWR | O_NONBLOCK);
+    if (decl.fd < 0) {
       perror("open evdev");
       return false;
     }
 
     // Initialize libevdev
     struct libevdev *idev = nullptr;
-    if (libevdev_new_from_fd(ctx.fd, &idev) < 0) {
+    if (libevdev_new_from_fd(decl.fd, &idev) < 0) {
       std::fprintf(stderr, "Failed to init libevdev for %s\n", devnode.c_str());
-      close(ctx.fd);
-      ctx.fd = -1;
+      close(decl.fd);
+      decl.fd = -1;
       return false;
     }
-    idev_map_[ctx.fd] = idev;
+    idev_map_[decl.fd] = idev;
 
     // Initialize frame buffer
     auto &state = AelkeyState::instance();
-    state.frames[ctx.decl.id] = {};
+    state.frames[decl.id] = {};
 
     // Detect FF support
     if (libevdev_has_event_type(idev, EV_FF)) {
-      DispatcherHaptics::instance().register_sink(ctx.decl.id, ctx.fd);
+      DispatcherHaptics::instance().register_sink(decl.id, decl.fd);
     }
 
     std::cout << "Attached evdev: " << libevdev_get_name(idev) << std::endl;
 
     // Initial grab attempt
-    if (ctx.decl.grab) {
-      grab_needed_[ctx.fd] = true;
-      try_evdev_grab(ctx);
+    if (decl.grab) {
+      grab_needed_[decl.fd] = true;
+      try_evdev_grab(decl);
     }
 
     // Register FD with epoll
-    register_fd(ctx.fd, EPOLLIN | EPOLLHUP | EPOLLERR);
+    register_fd(decl.fd, EPOLLIN | EPOLLHUP | EPOLLERR);
 
     // store stable device ID
-    devices_[ctx.fd] = ctx.decl.id;
+    devices_[decl.fd] = decl.id;
 
     return true;
   }
 
-  void close_device(InputCtx &ctx) {
+  void close_device(InputDecl &decl) {
     // Unregister from epoll
-    if (ctx.fd >= 0) {
-      unregister_fd(ctx.fd);
-      devices_.erase(ctx.fd);
-      grab_needed_.erase(ctx.fd);
+    if (decl.fd >= 0) {
+      unregister_fd(decl.fd);
+      devices_.erase(decl.fd);
+      grab_needed_.erase(decl.fd);
     }
 
     // Free libevdev
-    with_idev(ctx.fd, [&](libevdev *idev) {
+    with_idev(decl.fd, [&](libevdev *idev) {
       libevdev_grab(idev, LIBEVDEV_UNGRAB);
       libevdev_free(idev);
     });
-    idev_map_.erase(ctx.fd);
+    idev_map_.erase(decl.fd);
 
     // Close FD
-    if (ctx.fd >= 0) {
-      close(ctx.fd);
-      ctx.fd = -1;
+    if (decl.fd >= 0) {
+      close(decl.fd);
+      decl.fd = -1;
     }
   }
 
@@ -103,20 +103,19 @@ class DispatcherEvdev : public Dispatcher<DispatcherEvdev> {
     if (it == devices_.end()) {
       return;
     }
-
     const std::string &id = it->second;
+
     auto &state = AelkeyState::instance();
 
-    auto ctx_it = state.input_map.find(id);
-    if (ctx_it == state.input_map.end()) {
+    auto decl_it = state.input_map.find(id);
+    if (decl_it == state.input_map.end()) {
       return;  // device already detached
     }
-
-    InputCtx &ctx = ctx_it->second;
+    InputDecl &decl = decl_it->second;
 
     // HUP/ERR → detach device
     if (events & (EPOLLHUP | EPOLLERR)) {
-      auto removed = DeviceManager::instance().detach(ctx.decl.id);
+      auto removed = DeviceManager::instance().detach(decl.id);
       if (removed && !removed->id.empty()) {
         DispatcherUdev::instance().notify_state_change(*removed, "remove");
       }
@@ -127,7 +126,7 @@ class DispatcherEvdev : public Dispatcher<DispatcherEvdev> {
       return;
     }
 
-    dispatch_evdev_logic(ctx);
+    dispatch_evdev_logic(decl);
   }
 
  private:
@@ -153,14 +152,14 @@ class DispatcherEvdev : public Dispatcher<DispatcherEvdev> {
     return idev_map_.count(fd) > 0;
   }
 
-  void dispatch_evdev_logic(InputCtx &ctx) {
-    libevdev *idev = get_idev(ctx.fd);
+  void dispatch_evdev_logic(InputDecl &decl) {
+    libevdev *idev = get_idev(decl.fd);
     if (!idev) {
       return;
     }
 
     auto &state = AelkeyState::instance();
-    auto fit = state.frames.find(ctx.decl.id);
+    auto fit = state.frames.find(decl.id);
     if (fit == state.frames.end()) {
       return;
     }
@@ -175,8 +174,8 @@ class DispatcherEvdev : public Dispatcher<DispatcherEvdev> {
         frame.push_back(ev);
 
         if (ev.type == EV_SYN && ev.code == SYN_REPORT) {
-          if (!ctx.decl.on_event.empty()) {
-            sol::object obj = lua[ctx.decl.on_event];
+          if (!decl.on_event.empty()) {
+            sol::object obj = lua[decl.on_event];
             if (obj.is<sol::function>()) {
               sol::function cb = obj.as<sol::function>();
 
@@ -185,7 +184,7 @@ class DispatcherEvdev : public Dispatcher<DispatcherEvdev> {
               for (const auto &e : frame) {
                 sol::table evt = lua.create_table();
 
-                evt["device"] = ctx.decl.id;
+                evt["device"] = decl.id;
 
                 const char *tname = libevdev_event_type_get_name(e.type);
                 const char *cname = libevdev_event_code_get_name(e.type, e.code);
@@ -219,20 +218,20 @@ class DispatcherEvdev : public Dispatcher<DispatcherEvdev> {
     }
   }
 
-  bool try_evdev_grab(InputCtx &ctx) {
-    auto it = grab_needed_.find(ctx.fd);
+  bool try_evdev_grab(InputDecl &decl) {
+    auto it = grab_needed_.find(decl.fd);
     if (it == grab_needed_.end() || !it->second) {
       return false;
     }
 
-    libevdev *idev = get_idev(ctx.fd);
+    libevdev *idev = get_idev(decl.fd);
     if (!idev) {
       return false;
     }
 
     // check kernel key bitmap via EVIOCGKEY
     unsigned long key_bits[(KEY_MAX + 1) / (sizeof(unsigned long) * 8)] = { 0 };
-    if (ioctl(ctx.fd, EVIOCGKEY(sizeof(key_bits)), key_bits) >= 0) {
+    if (ioctl(decl.fd, EVIOCGKEY(sizeof(key_bits)), key_bits) >= 0) {
       for (int code = 0; code <= KEY_MAX; ++code) {
         if (key_bits[code / (sizeof(unsigned long) * 8)] &
             (1UL << (code % (sizeof(unsigned long) * 8)))) {
@@ -255,7 +254,7 @@ class DispatcherEvdev : public Dispatcher<DispatcherEvdev> {
       return false;
     }
 
-    grab_needed_[ctx.fd] = false;
+    grab_needed_[decl.fd] = false;
     return true;
   }
 

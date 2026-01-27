@@ -97,17 +97,15 @@ bool DeviceBackendHidraw::match(const InputDecl &decl, std::string &devnode_out)
   return false;
 }
 
-std::optional<InputCtx>
-DeviceBackendHidraw::attach(const InputDecl &decl, const std::string &devnode) {
+bool DeviceBackendHidraw::attach(const std::string &devnode, InputDecl &decl) {
   int fd = DispatcherHidraw::instance().open_device(devnode, decl);
   if (fd < 0) {
-    return std::nullopt;
+    return false;
   }
 
-  InputCtx ctx;
-  ctx.decl = decl;
-  ctx.decl.devnode = devnode;
-  return ctx;
+  decl.devnode = devnode;
+  decl.fd = fd;
+  return true;
 }
 
 bool DeviceBackendHidraw::detach(const std::string &id) {

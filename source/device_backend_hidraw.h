@@ -17,7 +17,7 @@ class DeviceBackendHidraw : public DeviceBackend, public Singleton<DeviceBackend
 
  public:
   bool match(const InputDecl &decl, std::string &devnode_out) override;
-  std::optional<InputCtx> attach(const InputDecl &decl, const std::string &devnode) override;
+  bool attach(const std::string &devnode, InputDecl &decl) override;
   bool detach(const std::string &id) override;
 
   int fd() const override {

@@ -29,10 +29,7 @@ struct InputDecl {
 
   std::string on_event;  // HID input events
   std::string on_state;  // lifecycle events
-};
 
-struct InputCtx {
-  InputDecl decl;
   int fd = -1;
 };
 

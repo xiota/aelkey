@@ -37,7 +37,7 @@ static void attach_inputs_from_decls(sol::this_state ts) {
       continue;
     }
 
-    if (DeviceManager::instance().attach(decl, devnode)) {
+    if (DeviceManager::instance().attach(devnode, decl)) {
       decl.devnode = devnode;
       DispatcherUdev::instance().notify_state_change(decl, "add");
     }
@@ -94,7 +94,7 @@ sol::object device_open(sol::this_state ts, sol::optional<std::string> dev_id_op
       continue;
     }
 
-    if (DeviceManager::instance().attach(decl, devnode)) {
+    if (DeviceManager::instance().attach(devnode, decl)) {
       decl.devnode = devnode;
       DispatcherUdev::instance().notify_state_change(decl, "add");
       ok = true;
@@ -127,7 +127,7 @@ sol::object device_get_info(sol::this_state ts, const std::string &dev_id) {
     return sol::make_object(lua, sol::nil);
   }
 
-  const InputDecl &decl = it->second.decl;
+  const InputDecl &decl = it->second;
 
   sol::table tbl = lua.create_table();
   tbl["id"] = decl.id;

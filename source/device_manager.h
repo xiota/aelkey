@@ -25,10 +25,10 @@ class DeviceManager : public Singleton<DeviceManager> {
     return backend->match(decl, devnode_out);
   }
 
-  std::optional<InputCtx> attach(const InputDecl &decl, const std::string &devnode) {
+  bool attach(const std::string &devnode, InputDecl &decl) {
     auto &state = AelkeyState::instance();
     if (state.input_map.contains(decl.id)) {
-      return std::nullopt;
+      return false;
     }
 
     if (auto *dispatcher = get_dispatcher_for_type(decl.type)) {
@@ -37,16 +37,15 @@ class DeviceManager : public Singleton<DeviceManager> {
 
     DeviceBackend *backend = backend_for_type(decl.type);
     if (!backend) {
-      return std::nullopt;
+      return false;
     }
 
-    auto maybe_ctx = backend->attach(decl, devnode);
-    if (!maybe_ctx) {
-      return std::nullopt;
+    if (!backend->attach(devnode, decl)) {
+      return false;
     }
 
-    state.input_map[decl.id] = *maybe_ctx;
-    return state.input_map[decl.id];
+    state.input_map[decl.id] = decl;
+    return true;
   }
 
   std::optional<InputDecl> detach(const std::string &dev_id) {
@@ -56,8 +55,7 @@ class DeviceManager : public Singleton<DeviceManager> {
       return std::nullopt;
     }
 
-    InputCtx &ctx = it->second;
-    InputDecl decl = ctx.decl;
+    InputDecl &decl = it->second;
 
     DeviceBackend *backend = backend_for_type(decl.type);
     if (!backend) {
