@@ -17,6 +17,7 @@
 #include "aelkey_device.h"
 #include "aelkey_state.h"
 #include "device_input.h"
+#include "device_manager.h"
 #include "dispatcher.h"
 #include "dispatcher_udev.h"
 
@@ -68,23 +69,18 @@ sol::object loop_start(sol::this_state ts) {
   }
 
   // Cleanup all resources
+
   // Detach all devices
+  std::vector<std::string> ids;
+  ids.reserve(state.input_map.size());
+
   for (auto &kv : state.input_map) {
-    InputCtx &ctx = kv.second;
-
-    if (ctx.decl.type == "evdev") {
-      // DispatcherEvdev already cleaned it up
-      continue;
-    }
-
-    // Libusb cleanup
-    if (ctx.usb_handle) {
-      libusb_close(ctx.usb_handle);
-      ctx.usb_handle = nullptr;
-    }
+    ids.push_back(kv.first);
   }
-  state.input_map.clear();
-  state.frames.clear();
+  for (const auto &id : ids) {
+    // mutates aelkey_state.input_map
+    DeviceManager::instance().detach(id);
+  }
 
   // Destroy uinput devices
   for (auto &kv : state.uinput_devices) {
