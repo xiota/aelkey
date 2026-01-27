@@ -7,43 +7,7 @@
 #include "aelkey_state.h"
 #include "device_declarations.h"
 #include "device_manager.h"
-#include "device_output.h"
-#include "device_parser.h"
 #include "dispatcher_udev.h"
-
-// Create all uinput output devices declared in aelkey_state.output_decls
-static void create_outputs_from_decls() {
-  auto &state = AelkeyState::instance();
-  for (auto &out : state.output_decls) {
-    if (out.id.empty()) {
-      continue;
-    }
-    if (state.uinput_devices.count(out.id)) {
-      continue;
-    }
-
-    libevdev_uinput *uidev = create_output_device(out);
-    if (uidev) {
-      state.uinput_devices[out.id] = uidev;
-    }
-  }
-}
-
-// Attach all input devices declared in aelkey_state.input_decls
-static void attach_inputs_from_decls(sol::this_state ts) {
-  auto &state = AelkeyState::instance();
-  for (auto &decl : state.input_decls) {
-    std::string devnode;
-    if (!DeviceManager::instance().match(decl, devnode)) {
-      continue;
-    }
-
-    if (DeviceManager::instance().attach(devnode, decl)) {
-      decl.devnode = devnode;
-      DispatcherUdev::instance().notify_state_change(decl, "add");
-    }
-  }
-}
 
 // Lua: open_device([dev_id])
 // Ret: boolean
@@ -61,12 +25,12 @@ sol::object device_open(sol::this_state ts, sol::optional<std::string> dev_id_op
     DispatcherUdev::instance().ensure_initialized();
 
     // Parse declarations from Lua
-    parse_outputs_from_lua(ts);
-    parse_inputs_from_lua(ts);
+    state.parse_outputs_from_lua(ts);
+    state.parse_inputs_from_lua(ts);
 
     // Create output devices and attach input devices
-    create_outputs_from_decls();
-    attach_inputs_from_decls(ts);
+    state.create_outputs_from_decls();
+    state.attach_inputs_from_decls(ts);
 
     return sol::make_object(lua, true);
   }
@@ -78,9 +42,9 @@ sol::object device_open(sol::this_state ts, sol::optional<std::string> dev_id_op
 
   // Parse declarations if not already parsed
   if (state.input_decls.empty() && state.output_decls.empty()) {
-    parse_outputs_from_lua(ts);
-    parse_inputs_from_lua(ts);
-    create_outputs_from_decls();
+    state.parse_outputs_from_lua(ts);
+    state.parse_inputs_from_lua(ts);
+    state.create_outputs_from_decls();
   }
 
   // Attach only the requested device

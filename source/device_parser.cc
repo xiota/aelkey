@@ -18,8 +18,9 @@
 
 #include "aelkey_state.h"
 #include "device_capabilities.h"
-#include "device_output.h"
 #include "dispatcher_haptics.h"
+
+namespace DeviceParser {
 
 // Parse a single InputDecl from a Lua table.
 InputDecl parse_input(sol::table tbl) {
@@ -135,29 +136,6 @@ InputDecl parse_input(sol::table tbl) {
   return decl;
 }
 
-void parse_inputs_from_lua(sol::this_state ts) {
-  sol::state_view lua(ts);
-
-  auto &state = AelkeyState::instance();
-  state.input_decls.clear();
-
-  sol::object obj = lua["inputs"];
-  if (!obj.valid() || !obj.is<sol::table>()) {
-    return;
-  }
-
-  sol::table inputs = obj.as<sol::table>();
-
-  inputs.for_each([&](sol::object /*k*/, sol::object v) {
-    if (v.is<sol::table>()) {
-      InputDecl decl = parse_input(v.as<sol::table>());
-      if (!decl.id.empty()) {
-        state.input_decls.push_back(decl);
-      }
-    }
-  });
-}
-
 OutputDecl parse_output(sol::table tbl) {
   OutputDecl decl;
 
@@ -222,25 +200,4 @@ OutputDecl parse_output(sol::table tbl) {
   return decl;
 }
 
-void parse_outputs_from_lua(sol::this_state ts) {
-  sol::state_view lua(ts);
-
-  auto &state = AelkeyState::instance();
-  state.output_decls.clear();
-
-  sol::object obj = lua["outputs"];
-  if (!obj.valid() || !obj.is<sol::table>()) {
-    return;
-  }
-
-  sol::table outputs = obj.as<sol::table>();
-
-  outputs.for_each([&](sol::object /*k*/, sol::object v) {
-    if (v.is<sol::table>()) {
-      OutputDecl decl = parse_output(v.as<sol::table>());
-      if (!decl.id.empty()) {
-        state.output_decls.push_back(decl);
-      }
-    }
-  });
-}
+}  // namespace AelkeyParser

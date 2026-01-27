@@ -42,7 +42,7 @@ sol::object daemon_watch(sol::this_state ts, const std::string &ref, sol::table 
     }
 
     sol::table t = entry.as<sol::table>();
-    InputDecl decl = parse_input(t);
+    InputDecl decl = DeviceParser::parse_input(t);
 
     // Only allow udev-visible types
     if (decl.type == "evdev" || decl.type == "hidraw" || decl.type == "libusb") {

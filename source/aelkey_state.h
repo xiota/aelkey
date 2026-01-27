@@ -2,19 +2,34 @@
 
 #include <string>
 #include <unordered_map>
-#include <unordered_set>
 #include <vector>
 
-#include <dbus/dbus.h>
 #include <libevdev/libevdev-uinput.h>
-#include <libusb-1.0/libusb.h>
+#include <linux/input.h>
+#include <sol/sol.hpp>
 
-#include "aelkey_core.h"
 #include "device_declarations.h"
 #include "singleton.h"
 
 class AelkeyState : public Singleton<AelkeyState> {
   friend class Singleton<AelkeyState>;
+
+ private:
+  AelkeyState() = default;
+  ~AelkeyState() = default;
+
+ public:
+  // Attach all input devices declared in input_decls
+  void attach_inputs_from_decls(sol::this_state ts);
+
+  // Create all uinput output devices declared in output_decls
+  void create_outputs_from_decls();
+
+  // Parse global "inputs" table from the given Lua state
+  void parse_inputs_from_lua(sol::this_state ts);
+
+  // Parse global "outputs" table from the given Lua state
+  void parse_outputs_from_lua(sol::this_state ts);
 
  public:
   lua_State *lua_vm = nullptr;
@@ -33,7 +48,4 @@ class AelkeyState : public Singleton<AelkeyState> {
   std::unordered_map<std::string, std::vector<InputDecl>> watch_map;
 
   std::string on_watchlist;
-
- protected:
-  AelkeyState() = default;
 };
