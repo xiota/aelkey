@@ -54,8 +54,6 @@ class DeviceBackendLibUSB : public DeviceBackend, public Singleton<DeviceBackend
     // Build InputCtx
     InputCtx ctx;
     ctx.decl = decl;
-    ctx.usb_handle = handle;
-    ctx.transfers = {};
 
     // Track handle internally for detach()
     devices_[decl.id] = handle;
@@ -121,6 +119,11 @@ class DeviceBackendLibUSB : public DeviceBackend, public Singleton<DeviceBackend
 
   libusb_context *context() const {
     return libusb_;
+  }
+
+  libusb_device_handle *get_handle(const std::string &id) const {
+    auto it = devices_.find(id);
+    return (it != devices_.end()) ? it->second : nullptr;
   }
 
  private:

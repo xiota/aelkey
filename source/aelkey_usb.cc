@@ -10,6 +10,7 @@
 
 #include "aelkey_hid.h"
 #include "aelkey_state.h"
+#include "device_backend_libusb.h"
 #include "device_manager.h"
 #include "dispatcher_udev.h"
 
@@ -69,12 +70,6 @@ static void destroy_transfer(libusb_transfer *t) {
   libusb_free_transfer(t);
 }
 
-static void cleanup_transfer(InputCtx *ctx, libusb_transfer *transfer) {
-  auto &vec = ctx->transfers;
-  vec.erase(std::remove(vec.begin(), vec.end(), transfer), vec.end());
-  destroy_transfer(transfer);
-}
-
 // libusb async callback → Lua
 static void LIBUSB_CALL dispatch_libusb(libusb_transfer *transfer) {
   if (!transfer || !transfer->user_data) {
@@ -124,7 +119,7 @@ static void LIBUSB_CALL dispatch_libusb(libusb_transfer *transfer) {
     case LIBUSB_TRANSFER_TIMED_OUT: {
       // transient / normal: try resubmit
       if (libusb_submit_transfer(transfer) != 0) {
-        cleanup_transfer(ctx, transfer);
+        destroy_transfer(transfer);
       }
       break;
     }
@@ -138,14 +133,21 @@ static void LIBUSB_CALL dispatch_libusb(libusb_transfer *transfer) {
     case LIBUSB_TRANSFER_ERROR:
     default: {
       libusb_device_descriptor desc;
-      int rc = libusb_get_device_descriptor(libusb_get_device(ctx->usb_handle), &desc);
+
+      auto &backend = DeviceBackendLibUSB::instance();
+      libusb_device_handle *handle = backend.get_handle(ctx->decl.id);
+
+      int rc = -1;
+      if (handle) {
+        rc = libusb_get_device_descriptor(libusb_get_device(handle), &desc);
+      }
       if (rc != 0) {
         // device is gone
         DeviceManager::instance().detach(ctx->decl.id);
         DispatcherUdev::instance().notify_state_change(ctx->decl, "remove");
       } else {
-        // fatal or cancelled, just clean up this transfer
-        cleanup_transfer(ctx, transfer);
+        // fatal or cancelled
+        destroy_transfer(transfer);
       }
       break;
     }
@@ -161,17 +163,16 @@ sol::object usb_bulk_transfer(sol::this_state ts, sol::table opts) {
   // device id
   std::string dev_id = opts.get<std::string>("device");
 
-  auto &state = AelkeyState::instance();
-  auto it = state.input_map.find(dev_id);
-  if (it == state.input_map.end() || !it->second.usb_handle) {
+  auto &backend = DeviceBackendLibUSB::instance();
+  libusb_device_handle *handle = backend.get_handle(dev_id);
+  if (!handle) {
     sol::table result = lua.create_table();
     result["device"] = dev_id;
     result["data"] = "";
     result["size"] = 0;
-    result["status"] = LIBUSB_ERROR_NO_DEVICE;
-    return sol::make_object(lua, result);
+    result["status"] = libusb_error_name(LIBUSB_ERROR_NO_DEVICE);
+    return result;
   }
-  libusb_device_handle *handle = it->second.usb_handle;
 
   // endpoint
   int endpoint = opts.get<int>("endpoint");
@@ -222,7 +223,7 @@ sol::object usb_bulk_transfer(sol::this_state ts, sol::table opts) {
   result["size"] = transferred;
   result["status"] = status;
 
-  return sol::make_object(lua, result);
+  return result;
 }
 
 // control_transfer{device, request_type, request, value, index, length, [timeout]}
@@ -234,17 +235,16 @@ sol::object usb_control_transfer(sol::this_state ts, sol::table opts) {
   // device id
   std::string dev_id = opts.get<std::string>("device");
 
-  auto &state = AelkeyState::instance();
-  auto it = state.input_map.find(dev_id);
-  if (it == state.input_map.end() || !it->second.usb_handle) {
+  auto &backend = DeviceBackendLibUSB::instance();
+  libusb_device_handle *handle = backend.get_handle(dev_id);
+  if (!handle) {
     sol::table result = lua.create_table();
     result["device"] = dev_id;
     result["data"] = "";
     result["size"] = 0;
-    result["status"] = LIBUSB_ERROR_NO_DEVICE;
-    return sol::make_object(lua, result);
+    result["status"] = libusb_error_name(LIBUSB_ERROR_NO_DEVICE);
+    return result;
   }
-  libusb_device_handle *handle = it->second.usb_handle;
 
   // request_type (bmRequestType)
   int request_type = opts.get<int>("request_type");
@@ -320,7 +320,7 @@ sol::object usb_control_transfer(sol::this_state ts, sol::table opts) {
   result["size"] = transferred;
   result["status"] = status;
 
-  return sol::make_object(lua, result);
+  return result;
 }
 
 // interrupt_transfer{device, endpoint, size, [timeout]}
@@ -332,17 +332,16 @@ sol::object usb_interrupt_transfer(sol::this_state ts, sol::table opts) {
   // device id
   std::string dev_id = opts.get<std::string>("device");
 
-  auto &state = AelkeyState::instance();
-  auto it = state.input_map.find(dev_id);
-  if (it == state.input_map.end() || !it->second.usb_handle) {
+  auto &backend = DeviceBackendLibUSB::instance();
+  libusb_device_handle *handle = backend.get_handle(dev_id);
+  if (!handle) {
     sol::table result = lua.create_table();
     result["device"] = dev_id;
     result["data"] = "";
     result["size"] = 0;
-    result["status"] = LIBUSB_ERROR_NO_DEVICE;
-    return sol::make_object(lua, result);
+    result["status"] = libusb_error_name(LIBUSB_ERROR_NO_DEVICE);
+    return result;
   }
-  libusb_device_handle *handle = it->second.usb_handle;
 
   // endpoint
   int endpoint = opts.get<int>("endpoint");
@@ -394,7 +393,7 @@ sol::object usb_interrupt_transfer(sol::this_state ts, sol::table opts) {
   result["size"] = transferred;
   result["status"] = status;
 
-  return sol::make_object(lua, result);
+  return result;
 }
 
 // submit_transfer{device, endpoint, type, size, [timeout]}
@@ -406,18 +405,27 @@ sol::object usb_submit_transfer(sol::this_state ts, sol::table opts) {
   // device id
   std::string dev_id = opts.get<std::string>("device");
 
-  auto &state = AelkeyState::instance();
-  auto it = state.input_map.find(dev_id);
-  if (it == state.input_map.end() || !it->second.usb_handle) {
+  auto &backend = DeviceBackendLibUSB::instance();
+  libusb_device_handle *handle = backend.get_handle(dev_id);
+  if (!handle) {
     sol::table result = lua.create_table();
     result["device"] = dev_id;
     result["endpoint"] = opts.get<int>("endpoint");
     result["transfer"] = sol::lua_nil;
-    result["status"] = LIBUSB_ERROR_NO_DEVICE;
-    return sol::make_object(lua, result);
+    result["status"] = libusb_error_name(LIBUSB_ERROR_NO_DEVICE);
+    return result;
   }
 
-  libusb_device_handle *dev_handle = it->second.usb_handle;
+  auto &state = AelkeyState::instance();
+  auto it = state.input_map.find(dev_id);
+  if (it == state.input_map.end()) {
+    sol::table result = lua.create_table();
+    result["device"] = dev_id;
+    result["endpoint"] = opts.get<int>("endpoint");
+    result["transfer"] = sol::lua_nil;
+    result["status"] = libusb_error_name(LIBUSB_ERROR_NO_DEVICE);
+    return result;
+  }
   InputCtx *ctx = &it->second;
 
   // endpoint
@@ -447,8 +455,8 @@ sol::object usb_submit_transfer(sol::this_state ts, sol::table opts) {
     result["device"] = dev_id;
     result["endpoint"] = endpoint;
     result["transfer"] = sol::lua_nil;
-    result["status"] = LIBUSB_ERROR_NO_MEM;
-    return sol::make_object(lua, result);
+    result["status"] = libusb_error_name(LIBUSB_ERROR_NO_MEM);
+    return result;
   }
 
   unsigned char *buf =
@@ -459,12 +467,12 @@ sol::object usb_submit_transfer(sol::this_state ts, sol::table opts) {
     result["device"] = dev_id;
     result["endpoint"] = endpoint;
     result["transfer"] = sol::lua_nil;
-    result["status"] = LIBUSB_ERROR_NO_MEM;
-    return sol::make_object(lua, result);
+    result["status"] = libusb_error_name(LIBUSB_ERROR_NO_MEM);
+    return result;
   }
 
   // fill transfer
-  xfer->dev_handle = dev_handle;
+  xfer->dev_handle = handle;
   xfer->endpoint = static_cast<uint8_t>(endpoint);
   xfer->type = static_cast<uint8_t>(type);
   xfer->timeout = timeout;
@@ -475,19 +483,15 @@ sol::object usb_submit_transfer(sol::this_state ts, sol::table opts) {
 
   int rc = libusb_submit_transfer(xfer);
   if (rc != 0) {
-    std::fprintf(stderr, "libusb_submit_transfer error: %s\n", libusb_error_name(rc));
     destroy_transfer(xfer);
 
     sol::table result = lua.create_table();
     result["device"] = dev_id;
     result["endpoint"] = endpoint;
     result["transfer"] = sol::lua_nil;
-    result["status"] = rc;
-    return sol::make_object(lua, result);
+    result["status"] = libusb_error_name(rc);
+    return result;
   }
-
-  // Track the transfer in the device context
-  ctx->transfers.push_back(xfer);
 
   // return a simple handle table with cancel/resubmit
   sol::table t = lua.create_table();

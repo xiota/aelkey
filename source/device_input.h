@@ -37,8 +37,6 @@ struct InputCtx {
   InputDecl decl;
   libevdev *idev = nullptr;
   int fd = -1;
-  libusb_device_handle *usb_handle = nullptr;
-  std::vector<libusb_transfer *> transfers;
 
   HapticsSinkCtx haptics;
 };
