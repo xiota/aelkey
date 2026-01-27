@@ -13,6 +13,9 @@
 #include "dispatcher_registry.h"
 #include "haptics_context.h"
 
+static constexpr const char *HAPTICS_SOURCE_CUSTOM = "_aelkey_haptics_custom_";
+static constexpr const char *HAPTICS_SOURCE_ONESHOT = "_aelkey_haptics_oneshot_";
+
 class DispatcherHaptics : public Dispatcher<DispatcherHaptics> {
   friend class Singleton<DispatcherHaptics>;
 
@@ -27,16 +30,34 @@ class DispatcherHaptics : public Dispatcher<DispatcherHaptics> {
     return "haptics";
   }
 
+  // High-level operations (Lua-free)
+  int create_persistent_effect(
+      const std::string &source_id,
+      ff_effect &eff_out  // eff_out.id assigned here
+  );
+
+  bool erase_persistent_effect(const std::string &source_id, int virt_id);
+
+  int play_effect(
+      const std::string &sink_id,
+      const std::string &source_id,
+      int virt_id,
+      int magnitude,
+      const ff_effect *maybe_eff  // nullptr = persistent, non-null = oneshot
+  );
+
+  bool stop_effect(const std::string &sink_id, const std::string &source_id, int virt_id);
+
   // Register a virtual FF source (uinput device)
   void register_source(const std::string &id, int uinput_fd, const std::string &callback);
+
+  void register_sink(const std::string &id, int evdev_fd);
 
   // Lookup by id (for Lua API layer if needed)
   HapticsSourceCtx *get_source(const std::string &id) {
     auto it = sources_.find(id);
     return (it != sources_.end()) ? &it->second : nullptr;
   }
-
-  void register_sink(const std::string &id, int evdev_fd);
 
   HapticsSinkCtx *get_sink(const std::string &id) {
     auto it = sinks_.find(id);
@@ -69,12 +90,12 @@ class DispatcherHaptics : public Dispatcher<DispatcherHaptics> {
   // EPOLL callback
   void handle_event(EpollPayload *payload, uint32_t events) override;
 
+ private:
   // Helpers
   void propagate_erase_to_sinks(const std::string &source_id, int virt_id);
   static int upload_effect_to_sink(const std::string &sink_id, ff_effect &eff);
   static bool rebuild_effect(const ff_effect &src_eff, ff_effect &out_eff);
 
- private:
   void cleanup_sources();
   bool handle_upload(HapticsSourceCtx &hctx, int request_id);
   bool handle_erase(HapticsSourceCtx &hctx, int request_id);

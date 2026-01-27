@@ -97,6 +97,135 @@ int DispatcherHaptics::upload_effect_to_sink(const std::string &sink_id, ff_effe
   return eff.id;
 }
 
+int DispatcherHaptics::create_persistent_effect(
+    const std::string &source_id,
+    ff_effect &eff_out
+) {
+  HapticsSourceCtx *src = get_source(source_id);
+  if (!src) {
+    register_source(source_id, -1, "");
+    src = get_source(source_id);
+  }
+
+  static int internal_id_counter = 0;
+  if (eff_out.id == -1) {
+    eff_out.id = internal_id_counter++;
+  }
+
+  propagate_erase_to_sinks(source_id, eff_out.id);
+  src->effects[eff_out.id] = eff_out;
+
+  return eff_out.id;
+}
+
+bool DispatcherHaptics::erase_persistent_effect(const std::string &source_id, int virt_id) {
+  HapticsSourceCtx *src = get_source(source_id);
+  if (!src) {
+    return false;
+  }
+
+  propagate_erase_to_sinks(source_id, virt_id);
+  src->effects.erase(virt_id);
+  return true;
+}
+
+int DispatcherHaptics::play_effect(
+    const std::string &sink_id,
+    const std::string &source_id,
+    int virt_id,
+    int magnitude,
+    const ff_effect *maybe_eff
+) {
+  HapticsSinkCtx *sink = get_sink(sink_id);
+  if (!sink || sink->fd < 0) {
+    return -1;
+  }
+
+  int real_id = -1;
+  std::string actual_source = source_id;
+  int actual_virt = virt_id;
+
+  if (maybe_eff == nullptr) {
+    auto key = std::make_pair(source_id, virt_id);
+    auto it_slot = sink->slots.find(key);
+    if (it_slot != sink->slots.end()) {
+      real_id = it_slot->second;
+    } else {
+      HapticsSourceCtx *src = get_source(source_id);
+      if (!src) {
+        return -1;
+      }
+
+      auto it = src->effects.find(virt_id);
+      if (it == src->effects.end()) {
+        return -1;
+      }
+
+      ff_effect eff = it->second;
+      real_id = upload_effect_to_sink(sink_id, eff);
+      if (real_id < 0) {
+        return -1;
+      }
+
+      sink->slots[key] = real_id;
+    }
+  } else {
+    static int oneshot_counter = 0;
+    actual_source = HAPTICS_SOURCE_ONESHOT;
+    actual_virt = oneshot_counter++;
+
+    ff_effect eff = *maybe_eff;
+    real_id = upload_effect_to_sink(sink_id, eff);
+    if (real_id < 0) {
+      return -1;
+    }
+
+    auto key = std::make_pair(actual_source, actual_virt);
+    sink->slots[key] = real_id;
+  }
+
+  struct input_event ev{};
+  ev.type = EV_FF;
+  ev.code = real_id;
+  ev.value = magnitude;
+
+  if (write(sink->fd, &ev, sizeof(ev)) < 0) {
+    perror("write(EV_FF)");
+  }
+
+  return real_id;
+}
+
+bool DispatcherHaptics::stop_effect(
+    const std::string &sink_id,
+    const std::string &source_id,
+    int virt_id
+) {
+  HapticsSinkCtx *sink = get_sink(sink_id);
+  if (!sink || sink->fd < 0) {
+    return false;
+  }
+
+  auto key = std::make_pair(source_id, virt_id);
+  auto it = sink->slots.find(key);
+  if (it == sink->slots.end()) {
+    return false;
+  }
+
+  int real_id = it->second;
+
+  struct input_event ev{};
+  ev.type = EV_FF;
+  ev.code = real_id;
+  ev.value = 0;
+
+  if (write(sink->fd, &ev, sizeof(ev)) < 0) {
+    perror("write(EV_FF)");
+  }
+
+  return true;
+}
+
 ff_effect DispatcherHaptics::lua_to_ff_effect(sol::table t) {
   ff_effect eff{};
   eff.id = -1;
