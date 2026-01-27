@@ -11,66 +11,60 @@
 #include "haptics_context.h"
 
 void haptics_play(std::string sink_id, sol::table ev) {
-  auto &state = AelkeyState::instance();
+  auto &disp = DispatcherHaptics::instance();
 
-  // Find the sink device
-  auto it = state.input_map.find(sink_id);
-  if (it == state.input_map.end()) {
-    std::fprintf(stderr, "Haptics: invalid sink_id '%s'\n", sink_id.c_str());
-    return;
-  }
-
-  InputCtx &sink = it->second;
-  HapticsSinkCtx &hctx = sink.haptics;
-
-  if (!hctx.supported) {
+  if (!disp.is_haptics_supported(sink_id)) {
     std::fprintf(stderr, "Haptics: sink '%s' does not support FF\n", sink_id.c_str());
     return;
   }
 
+  HapticsSinkCtx *sink = disp.get_sink(sink_id);
+  if (!sink) {
+    return;
+  }
+
   // Extract source + virt_id from event
-  std::string source_id = ev["source"];
-  int virt_id = ev["id"];
+  std::string source_id = ev.get_or("source", std::string(""));
+  int virt_id = ev.get_or("id", -1);
   int magnitude = ev.get_or("value", 0);
 
   auto key = std::make_pair(source_id, virt_id);
 
-  // One-shot vs Persistent effect
+  // Persistent vs oneshot
   HapticsSourceCtx *src_ctx = nullptr;
   ff_effect *stored_eff = nullptr;
 
   if (!source_id.empty() && virt_id >= 0) {
-    src_ctx = DispatcherHaptics::instance().get_source(source_id);
+    src_ctx = disp.get_source(source_id);
     if (src_ctx) {
-      auto eff_it = src_ctx->effects.find(virt_id);
-      if (eff_it != src_ctx->effects.end()) {
-        stored_eff = &eff_it->second;
+      auto it = src_ctx->effects.find(virt_id);
+      if (it != src_ctx->effects.end()) {
+        stored_eff = &it->second;
       }
     }
   }
 
   bool persistent = (stored_eff != nullptr);
-
   int real_id = -1;
-  if (persistent) {
-    auto it_slot = hctx.slots.find(key);
 
-    if (it_slot != hctx.slots.end()) {
+  if (persistent) {
+    auto it_slot = sink->slots.find(key);
+    if (it_slot != sink->slots.end()) {
       real_id = it_slot->second;
     } else {
       ff_effect eff = *stored_eff;
 
-      real_id = DispatcherHaptics::upload_effect_to_sink(sink, hctx, eff);
+      real_id = DispatcherHaptics::upload_effect_to_sink(sink_id, eff);
       if (real_id < 0) {
         return;
       }
 
-      hctx.slots[key] = real_id;
+      sink->slots[key] = real_id;
     }
   } else {
     ff_effect eff = DispatcherHaptics::lua_to_ff_effect(ev);
 
-    real_id = DispatcherHaptics::upload_effect_to_sink(sink, hctx, eff);
+    real_id = DispatcherHaptics::upload_effect_to_sink(sink_id, eff);
     if (real_id < 0) {
       return;
     }
@@ -78,54 +72,45 @@ void haptics_play(std::string sink_id, sol::table ev) {
     static int internal_id_counter = 0;
     key = std::make_pair(HAPTICS_SOURCE_ONESHOT, internal_id_counter++);
 
-    hctx.slots[key] = real_id;
+    sink->slots[key] = real_id;
   }
 
-  // Play the effect
+  // Play effect
   struct input_event play_ev{};
   play_ev.type = EV_FF;
   play_ev.code = real_id;
   play_ev.value = magnitude;
 
-  if (write(sink.fd, &play_ev, sizeof(play_ev)) < 0) {
+  if (write(sink->fd, &play_ev, sizeof(play_ev)) < 0) {
     perror("write(EV_FF)");
   }
 }
 
 void haptics_stop(std::string sink_id, sol::table ev) {
-  auto &state = AelkeyState::instance();
+  auto &disp = DispatcherHaptics::instance();
 
-  auto it = state.input_map.find(sink_id);
-  if (it == state.input_map.end()) {
-    std::fprintf(stderr, "Haptics: invalid sink_id '%s'\n", sink_id.c_str());
+  HapticsSinkCtx *sink = disp.get_sink(sink_id);
+  if (!sink) {
     return;
   }
 
-  InputCtx &sink = it->second;
-  HapticsSinkCtx &hctx = sink.haptics;
-
-  if (!hctx.supported) {
-    return;
-  }
-
-  std::string source_id = ev["source"];
-  int virt_id = ev["id"];
+  std::string source_id = ev.get_or("source", std::string(""));
+  int virt_id = ev.get_or("id", -1);
 
   auto key = std::make_pair(source_id, virt_id);
-  auto it_slot = hctx.slots.find(key);
-
-  if (it_slot == hctx.slots.end()) {
-    return;  // nothing to stop
+  auto it = sink->slots.find(key);
+  if (it == sink->slots.end()) {
+    return;
   }
 
-  int real_id = it_slot->second;
+  int real_id = it->second;
 
   struct input_event stop_ev{};
   stop_ev.type = EV_FF;
   stop_ev.code = real_id;
   stop_ev.value = 0;
 
-  if (write(sink.fd, &stop_ev, sizeof(stop_ev)) < 0) {
+  if (write(sink->fd, &stop_ev, sizeof(stop_ev)) < 0) {
     perror("write(EV_FF)");
   }
 }
@@ -140,8 +125,6 @@ sol::table haptics_create(sol::table tbl) {
     DispatcherHaptics::instance().register_source(source_id, -1, "");
     src = DispatcherHaptics::instance().get_source(source_id);
   }
-
-  src->id = source_id;  // Ensure ID is set
 
   // Convert the table to our C struct
   ff_effect eff = DispatcherHaptics::lua_to_ff_effect(tbl);

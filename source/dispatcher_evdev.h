@@ -12,6 +12,7 @@
 #include "device_input.h"
 #include "device_manager.h"
 #include "dispatcher.h"
+#include "dispatcher_haptics.h"
 #include "dispatcher_registry.h"
 #include "dispatcher_udev.h"
 #include "singleton.h"
@@ -52,8 +53,7 @@ class DispatcherEvdev : public Dispatcher<DispatcherEvdev> {
 
     // Detect FF support
     if (libevdev_has_event_type(idev, EV_FF)) {
-      ctx.haptics.supported = true;
-      std::printf("Haptics: sink '%s' supports FF\n", ctx.decl.id.c_str());
+      DispatcherHaptics::instance().register_sink(ctx.decl.id, ctx.fd);
     }
 
     std::cout << "Attached evdev: " << libevdev_get_name(idev) << std::endl;

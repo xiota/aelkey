@@ -8,8 +8,6 @@
 #include <libusb-1.0/libusb.h>
 #include <sol/sol.hpp>
 
-#include "haptics_context.h"
-
 struct InputDecl {
   std::string id;
   std::string type;
@@ -36,8 +34,6 @@ struct InputDecl {
 struct InputCtx {
   InputDecl decl;
   int fd = -1;
-
-  HapticsSinkCtx haptics;
 };
 
 // Parse a single input declaration from a Lua table.

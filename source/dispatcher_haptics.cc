@@ -40,23 +40,29 @@ void DispatcherHaptics::register_source(
   }
 }
 
+void DispatcherHaptics::register_sink(const std::string &id, int evdev_fd) {
+  if (evdev_fd < 0) {
+    return;
+  }
+
+  HapticsSinkCtx ctx;
+  ctx.id = id;
+  ctx.fd = evdev_fd;
+  sinks_[id] = std::move(ctx);
+}
+
 void DispatcherHaptics::propagate_erase_to_sinks(const std::string &source_id, int virt_id) {
-  auto &state = AelkeyState::instance();
   auto key = std::make_pair(source_id, virt_id);
 
-  for (auto &[id, ictx] : state.input_map) {
-    if (!ictx.haptics.supported) {
-      continue;
-    }
-
-    auto &sink = ictx.haptics;
+  for (auto &[sink_id, sink] : sinks_) {
     auto it = sink.slots.find(key);
     if (it == sink.slots.end()) {
       continue;
     }
 
     int real_id = it->second;
-    if (ioctl(ictx.fd, EVIOCRMFF, real_id) < 0) {
+
+    if (ioctl(sink.fd, EVIOCRMFF, real_id) < 0) {
       perror("EVIOCRMFF");
     }
 
@@ -64,22 +70,23 @@ void DispatcherHaptics::propagate_erase_to_sinks(const std::string &source_id, i
   }
 }
 
-int DispatcherHaptics::upload_effect_to_sink(
-    InputCtx &sink,
-    HapticsSinkCtx &hctx,
-    ff_effect &eff
-) {
-  eff.id = -1;
+int DispatcherHaptics::upload_effect_to_sink(const std::string &sink_id, ff_effect &eff) {
+  auto &disp = DispatcherHaptics::instance();
+  HapticsSinkCtx *sink = disp.get_sink(sink_id);
+  if (!sink) {
+    return -1;
+  }
 
-  int rc = ioctl(sink.fd, EVIOCSFF, &eff);
+  eff.id = -1;
+  int rc = ioctl(sink->fd, EVIOCSFF, &eff);
 
   if (rc < 0 && errno == ENOSPC) {
-    for (const auto &[key_pair, r_id] : hctx.slots) {
-      ioctl(sink.fd, EVIOCRMFF, r_id);
+    for (const auto &[key_pair, r_id] : sink->slots) {
+      ioctl(sink->fd, EVIOCRMFF, r_id);
     }
-    hctx.slots.clear();
+    sink->slots.clear();
 
-    rc = ioctl(sink.fd, EVIOCSFF, &eff);
+    rc = ioctl(sink->fd, EVIOCSFF, &eff);
   }
 
   if (rc < 0) {

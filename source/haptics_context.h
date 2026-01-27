@@ -33,9 +33,9 @@ struct HapticsSourceCtx {
   std::unordered_map<int, ff_effect> effects;
 };
 
-// associated with input device via InputCtx
 struct HapticsSinkCtx {
-  bool supported = false;
+  std::string id;  // "gamepad"
+  int fd = -1;     // evdev FD
 
   // key: (source_id, virt_id) → real_id
   std::unordered_map<std::pair<std::string, int>, int, PairHash, PairEq> slots;
