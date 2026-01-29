@@ -36,8 +36,7 @@ class TickScheduler : public Dispatcher<TickScheduler> {
     return "tick";
   }
 
-  void unregister_fd(int fd) {
-    DispatcherBase::unregister_fd(fd);
+  void on_unregister(int fd) override {
     close(fd);
   }
 

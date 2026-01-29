@@ -15,8 +15,9 @@ struct DispatcherRegistry;
 class DispatcherBase;
 
 struct EpollPayload {
-  DispatcherBase *dispatcher;
-  int fd;
+  DispatcherBase *dispatcher = nullptr;
+  int fd = -1;
+  bool dead = false;
 };
 
 // Polymorphic base class for all dispatchers
@@ -54,18 +55,19 @@ class DispatcherBase {
     }
   }
 
+  virtual void on_unregister(int fd) {}
+
   virtual void unregister_fd(int fd) {
     auto &state = AelkeyState::instance();
 
-    auto it = pollfds_.find(fd);
-    if (it == pollfds_.end()) {
-      return;
-    }
-
     epoll_ctl(state.epfd, EPOLL_CTL_DEL, fd, nullptr);
 
-    // Erase destroys the EpollPayload immediately
-    pollfds_.erase(it);
+    // Defer destruction of payload
+    auto it = pollfds_.find(fd);
+    if (it != pollfds_.end()) {
+      it->second.dead = true;
+      deferred_unregs_.push_back(fd);
+    }
   }
 
   virtual void cleanup_fds() {
@@ -78,11 +80,25 @@ class DispatcherBase {
     pollfds_.clear();
   }
 
+  virtual void flush_deferred() {
+    for (int fd : deferred_unregs_) {
+      auto it = pollfds_.find(fd);
+      if (it != pollfds_.end()) {
+        pollfds_.erase(it);
+        on_unregister(fd);
+      }
+    }
+    deferred_unregs_.clear();
+  }
+
  protected:
   DispatcherBase() = default;
 
   // std::map ensures stable node addresses
   std::map<int, EpollPayload> pollfds_;
+
+  // to defer erase until safe
+  std::vector<int> deferred_unregs_;
 };
 
 // CRTP dispatcher class

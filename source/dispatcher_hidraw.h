@@ -26,8 +26,7 @@ class DispatcherHidraw : public Dispatcher<DispatcherHidraw> {
     return "hidraw";
   }
 
-  void unregister_fd(int fd) {
-    DispatcherBase::unregister_fd(fd);
+  void on_unregister(int fd) override {
     close(fd);
   }
 

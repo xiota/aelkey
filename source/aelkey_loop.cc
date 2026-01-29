@@ -20,6 +20,7 @@
 #include "device_manager.h"
 #include "dispatcher.h"
 #include "dispatcher_udev.h"
+#include "util/scoped_timer.h"
 
 sol::object loop_stop(sol::this_state ts) {
   sol::state_view lua(ts);
@@ -52,20 +53,18 @@ sol::object loop_start(sol::this_state ts) {
   auto &state = AelkeyState::instance();
   while (!state.loop_should_stop) {
     int n = epoll_wait(state.epfd, events, MAX_EVENTS, -1);  // block until event
-    if (n < 0) {
-      if (errno == EINTR) {
-        continue;
-      }
-      perror("epoll_wait");
-      break;
-    }
 
     for (int i = 0; i < n; ++i) {
       auto *payload = static_cast<EpollPayload *>(events[i].data.ptr);
-      if (payload && payload->dispatcher) {
-        payload->dispatcher->handle_event(payload, events[i].events);
+      if (payload->dead) {
+        continue;
       }
+      payload->dispatcher->handle_event(payload, events[i].events);
     }
+
+    // for (auto &[type, dispatcher] : dispatcher_registry()) {
+    //   dispatcher->flush_deferred();
+    // }
   }
 
   // Cleanup all resources
