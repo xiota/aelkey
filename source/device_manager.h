@@ -31,9 +31,7 @@ class DeviceManager : public Singleton<DeviceManager> {
       return false;
     }
 
-    if (auto *dispatcher = get_dispatcher_for_type(decl.type)) {
-      dispatcher->init();
-    }
+    init_dispatcher_for_type(decl.type);
 
     DeviceBackend *backend = backend_for_type(decl.type);
     if (!backend) {

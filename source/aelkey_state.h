@@ -18,6 +18,10 @@ class AelkeyState : public Singleton<AelkeyState> {
   AelkeyState() = default;
   ~AelkeyState() = default;
 
+  bool on_init() override;
+
+  bool auto_init_ = true;
+
  public:
   // Attach all input devices declared in input_decls
   void attach_inputs_from_decls(sol::this_state ts);

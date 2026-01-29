@@ -22,8 +22,6 @@ sol::object device_open(sol::this_state ts, sol::optional<std::string> dev_id_op
       return sol::make_object(lua, true);
     }
 
-    DispatcherUdev::instance().ensure_initialized();
-
     // Parse declarations from Lua
     state.parse_outputs_from_lua(ts);
     state.parse_inputs_from_lua(ts);
@@ -37,8 +35,6 @@ sol::object device_open(sol::this_state ts, sol::optional<std::string> dev_id_op
 
   // SINGLE DEVICE MODE
   std::string dev_id = dev_id_opt.value();
-
-  DispatcherUdev::instance().ensure_initialized();
 
   // Parse declarations if not already parsed
   if (state.input_decls.empty() && state.output_decls.empty()) {

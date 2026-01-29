@@ -13,15 +13,19 @@ struct InputDecl;
 
 class DispatcherUdev : public Dispatcher<DispatcherUdev> {
   friend class Singleton<DispatcherUdev>;
+  friend class Dispatcher<DispatcherUdev>;
 
  protected:
   DispatcherUdev() = default;
   ~DispatcherUdev();
 
+  bool on_init() override;
+
+  bool auto_init_ = true;
+
  public:
   const char *type() const override;
 
-  void ensure_initialized();
   void handle_event(EpollPayload *, uint32_t events) override;
 
   std::string enumerate_and_match(

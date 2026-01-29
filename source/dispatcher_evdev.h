@@ -19,6 +19,7 @@
 
 class DispatcherEvdev : public Dispatcher<DispatcherEvdev> {
   friend class Singleton<DispatcherEvdev>;
+  friend class Dispatcher<DispatcherEvdev>;
 
  protected:
   DispatcherEvdev() = default;

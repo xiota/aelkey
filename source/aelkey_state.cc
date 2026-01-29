@@ -7,6 +7,20 @@
 #include "device_parser.h"
 #include "dispatcher_udev.h"
 
+bool AelkeyState::on_init() {
+  // initialize epoll
+  if (epfd >= 0) {
+    return true;
+  }
+
+  epfd = epoll_create1(EPOLL_CLOEXEC);
+  if (epfd >= 0) {
+    return true;
+  }
+
+  return false;
+}
+
 void AelkeyState::attach_inputs_from_decls(sol::this_state ts) {
   for (auto &decl : input_decls) {
     std::string devnode;

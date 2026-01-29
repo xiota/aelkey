@@ -16,6 +16,7 @@
 
 class DispatcherHidraw : public Dispatcher<DispatcherHidraw> {
   friend class Singleton<DispatcherHidraw>;
+  friend class Dispatcher<DispatcherHidraw>;
 
  protected:
   DispatcherHidraw() = default;

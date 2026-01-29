@@ -23,12 +23,6 @@ struct DispatcherRegistry {
   }
 };
 
-inline void init_all_dispatchers() {
-  for (auto &[type, dispatcher] : dispatcher_registry()) {
-    dispatcher->init();
-  }
-}
-
 inline DispatcherBase *get_dispatcher_for_type(const std::string &type) {
   auto &registry = dispatcher_registry();
   auto it = registry.find(type);
@@ -37,6 +31,6 @@ inline DispatcherBase *get_dispatcher_for_type(const std::string &type) {
 
 inline void init_dispatcher_for_type(const std::string &type) {
   if (auto *d = get_dispatcher_for_type(type)) {
-    d->init();
+    d->lazy_init();
   }
 }

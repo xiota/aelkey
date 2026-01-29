@@ -27,21 +27,21 @@ const char *DispatcherUdev::type() const {
   return "udev";
 }
 
-void DispatcherUdev::ensure_initialized() {
+bool DispatcherUdev::on_init() {
   if (udev_ctx_) {
-    return;
+    return true;
   }
 
   udev_ctx_ = udev_new();
   if (!udev_ctx_) {
-    throw std::runtime_error("udev_new failed");
+    return false;
   }
 
   mon_ = udev_monitor_new_from_netlink(udev_ctx_, "udev");
   if (!mon_) {
     udev_unref(udev_ctx_);
     udev_ctx_ = nullptr;
-    throw std::runtime_error("udev_monitor_new_from_netlink failed");
+    return false;
   }
 
   udev_monitor_filter_add_match_subsystem_devtype(mon_, "input", nullptr);
@@ -53,10 +53,11 @@ void DispatcherUdev::ensure_initialized() {
   if (mon_fd_ < 0) {
     udev_monitor_unref(mon_);
     udev_ctx_ = nullptr;
-    throw std::runtime_error("udev_monitor_get_fd failed");
+    return false;
   }
 
   register_fd(mon_fd_, EPOLLIN);
+  return true;
 }
 
 void DispatcherUdev::handle_event(EpollPayload *, uint32_t events) {
@@ -85,8 +86,6 @@ std::string DispatcherUdev::enumerate_and_match(
     const char *subsystem,
     const std::function<std::string(struct udev_device *)> &matcher
 ) {
-  ensure_initialized();
-
   struct udev_enumerate *enumerate = udev_enumerate_new(udev_ctx_);
   if (!enumerate) {
     return {};

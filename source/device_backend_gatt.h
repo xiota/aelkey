@@ -26,9 +26,18 @@ class DeviceBackendGATT : public DeviceBackend, public Singleton<DeviceBackendGA
     }
   }
 
+  bool on_init() override;
+
+  bool auto_init_ = true;
+
  public:
   // device_backend_gatt.h (inside public:)
   bool match(const InputDecl &decl, std::string &devnode_out) override {
+    lazy_init();
+    if (!conn_) {
+      return false;
+    }
+
     if (decl.type != "gatt") {
       return false;
     }
@@ -42,9 +51,8 @@ class DeviceBackendGATT : public DeviceBackend, public Singleton<DeviceBackendGA
   }
 
   bool attach(const std::string &devnode, InputDecl &decl) override {
-    ensure_initialized();
+    lazy_init();
     if (!conn_) {
-      std::fprintf(stderr, "GATT: no D-Bus connection\n");
       return false;
     }
 
@@ -105,6 +113,7 @@ class DeviceBackendGATT : public DeviceBackend, public Singleton<DeviceBackendGA
   }
 
   bool detach(const std::string &id) override {
+    lazy_init();
     if (!conn_) {
       return false;
     }
@@ -169,9 +178,6 @@ class DeviceBackendGATT : public DeviceBackend, public Singleton<DeviceBackendGA
   DBusConnection *connection() const {
     return conn_;
   }
-
-  // --- init helpers ---
-  void ensure_initialized();
 
   // --- message dispatch ---
   void pump_messages();

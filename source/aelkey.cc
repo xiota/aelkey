@@ -104,17 +104,6 @@ extern "C" int luaopen_aelkey(lua_State *L) {
   state.lua_vm = L;
   sol::state_view lua(L);
 
-  // Ensure epoll + dispatchers initialized once
-  if (state.epfd < 0) {
-    int epfd = epoll_create1(EPOLL_CLOEXEC);
-    if (epfd < 0) {
-      perror("epoll_create1");
-    }
-    state.epfd = epfd;
-
-    DispatcherUdev::instance().ensure_initialized();
-  }
-
   try {
     // Block root access
     if (geteuid() == 0) {

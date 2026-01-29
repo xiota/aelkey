@@ -9,26 +9,14 @@
 
 class DispatcherLibUSB : public Dispatcher<DispatcherLibUSB> {
   friend class Singleton<DispatcherLibUSB>;
+  friend class Dispatcher<DispatcherLibUSB>;
 
  protected:
   DispatcherLibUSB() = default;
   ~DispatcherLibUSB() = default;
 
- public:
-  const char *type() const override {
-    return "libusb";
-  }
-
-  void init() override {
-    static bool initialized = false;
-    if (initialized) {
-      return;
-    }
-    initialized = true;
-
-    // Ensure backend is initialized
+  bool on_init() override {
     auto &backend = DeviceBackendLibUSB::instance();
-    backend.ensure_initialized();
 
     // Install pollfd notifiers
     libusb_set_pollfd_notifiers(
@@ -41,6 +29,13 @@ class DispatcherLibUSB : public Dispatcher<DispatcherLibUSB> {
         },
         this
     );
+
+    return true;
+  }
+
+ public:
+  const char *type() const override {
+    return "libusb";
   }
 
   void on_add_fd(int fd, short events) {

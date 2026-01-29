@@ -36,8 +36,6 @@ class DeviceBackendLibUSB : public DeviceBackend, public Singleton<DeviceBackend
   }
 
   bool attach(const std::string &devnode, InputDecl &decl) override {
-    ensure_initialized();
-
     uint16_t vendor = decl.vendor;
     uint16_t product = decl.product;
 
@@ -78,12 +76,16 @@ class DeviceBackendLibUSB : public DeviceBackend, public Singleton<DeviceBackend
   }
 
   // Backend-specific helpers
-  void ensure_initialized() {
-    if (!libusb_) {
-      if (libusb_init(&libusb_) != 0) {
-        throw std::runtime_error("Failed to init libusb");
-      }
+  bool on_init() override {
+    if (libusb_) {
+      return true;
     }
+
+    if (libusb_init(&libusb_) == 0) {
+      return true;
+    }
+
+    return false;
   }
 
   int claim_interface(libusb_device_handle *devh, int iface) {

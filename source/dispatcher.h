@@ -27,8 +27,9 @@ class DispatcherBase {
     cleanup_fds();
   }
 
-  virtual void init() {}
-  virtual void handle_event(EpollPayload *payload, uint32_t events) {};
+  virtual bool lazy_init() = 0;
+
+  virtual void handle_event(EpollPayload *payload, uint32_t events) {}
 
   virtual const char *type() const = 0;
 
@@ -105,6 +106,11 @@ class DispatcherBase {
 template <typename Derived>
 class Dispatcher : public DispatcherBase, public Singleton<Derived> {
   friend class Singleton<Derived>;
+
+ public:
+  bool lazy_init() override {
+    return Singleton<Derived>::lazy_init();
+  }
 
  protected:
   Dispatcher() = default;

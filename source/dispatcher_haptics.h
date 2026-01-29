@@ -35,6 +35,7 @@ struct HapticsSinkCtx {
 
 class DispatcherHaptics : public Dispatcher<DispatcherHaptics> {
   friend class Singleton<DispatcherHaptics>;
+  friend class Dispatcher<DispatcherHaptics>;
 
  protected:
   DispatcherHaptics() = default;

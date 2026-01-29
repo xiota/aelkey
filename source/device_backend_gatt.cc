@@ -12,29 +12,31 @@
 #include "aelkey_state.h"
 #include "device_backend_gatt.h"
 #include "device_helpers.h"
+#include "dispatcher_gatt.h"
 
-void DeviceBackendGATT::ensure_initialized() {
+bool DeviceBackendGATT::on_init() {
   if (conn_) {
-    return;
+    return true;
   }
 
   conn_ = dbus_bus_get(DBUS_BUS_SYSTEM, nullptr);
   if (!conn_) {
-    std::fprintf(stderr, "GATT: failed to connect to system D-Bus\n");
-    return;
+    return false;
   }
 
   dbus_connection_set_exit_on_disconnect(conn_, false);
 
   if (!dbus_connection_get_unix_fd(conn_, &fd_)) {
-    std::fprintf(stderr, "GATT: failed to get D-Bus fd\n");
     fd_ = -1;
     conn_ = nullptr;
-    return;
+    return false;
   }
+
+  return DispatcherGATT::instance().lazy_init();
 }
 
 void DeviceBackendGATT::pump_messages() {
+  lazy_init();
   if (!conn_) {
     return;
   }
@@ -462,8 +464,6 @@ std::string DeviceBackendGATT::resolve_gatt_paths(
     const InputDecl &decl,
     std::vector<std::string> *found_characteristics
 ) {
-  ensure_initialized();
-
   DBusMessage *resp = get_managed_objects();
   if (!resp) {
     return {};
@@ -726,9 +726,8 @@ bool DeviceBackendGATT::read_characteristic(
 ) {
   out_data.clear();
 
-  ensure_initialized();
+  lazy_init();
   if (!conn_) {
-    std::fprintf(stderr, "GATT read: no D-Bus connection\n");
     return false;
   }
 
@@ -747,7 +746,6 @@ bool DeviceBackendGATT::read_characteristic(
   dbus_message_unref(msg);
 
   if (!reply) {
-    std::fprintf(stderr, "GATT read: ReadValue failed\n");
     return false;
   }
 
@@ -777,9 +775,8 @@ bool DeviceBackendGATT::write_characteristic(
     size_t len,
     bool with_resp
 ) {
-  ensure_initialized();
+  lazy_init();
   if (!conn_) {
-    std::fprintf(stderr, "GATT write: no D-Bus connection\n");
     return false;
   }
 
@@ -827,7 +824,6 @@ bool DeviceBackendGATT::write_characteristic(
   dbus_message_unref(msg);
 
   if (!reply) {
-    std::fprintf(stderr, "GATT write: WriteValue failed\n");
     return false;
   }
 

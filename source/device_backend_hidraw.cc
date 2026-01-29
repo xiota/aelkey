@@ -114,10 +114,7 @@ bool DeviceBackendHidraw::detach(const std::string &id) {
 }
 
 int DeviceBackendHidraw::get_interface_num(const std::string &devnode) {
-  auto &udevdisp = DispatcherUdev::instance();
-  udevdisp.ensure_initialized();
-
-  struct udev *udev = udevdisp.get_udev();
+  struct udev *udev = DispatcherUdev::instance().get_udev();
 
   struct udev_device *dev = udev_device_new_from_subsystem_sysname(
       udev, "hidraw", devnode.substr(devnode.find_last_of('/') + 1).c_str()
