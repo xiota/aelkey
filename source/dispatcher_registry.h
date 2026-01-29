@@ -1,7 +1,7 @@
 #pragma once
 
+#include <map>
 #include <string>
-#include <unordered_map>
 
 #include <sys/epoll.h>
 
@@ -10,7 +10,7 @@
 
 // Registry of all dispatcher singletons
 inline auto &dispatcher_registry() {
-  static std::unordered_map<std::string, DispatcherBase *> registry;
+  static std::map<std::string, DispatcherBase *> registry;
   return registry;
 }
 

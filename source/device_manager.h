@@ -1,8 +1,8 @@
 #pragma once
 
+#include <map>
 #include <optional>
 #include <string>
-#include <unordered_map>
 
 #include "device_backend.h"
 #include "device_backend_evdev.h"
@@ -88,5 +88,5 @@ class DeviceManager : public Singleton<DeviceManager> {
   }
 
  private:
-  std::unordered_map<std::string, DeviceBackend *> backends_;
+  std::map<std::string, DeviceBackend *> backends_;
 };

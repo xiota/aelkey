@@ -1,7 +1,7 @@
 #pragma once
 
+#include <map>
 #include <string>
-#include <unordered_map>
 #include <vector>
 
 #include <libevdev/libevdev-uinput.h>
@@ -35,9 +35,9 @@ class AelkeyState : public Singleton<AelkeyState> {
   lua_State *lua_vm = nullptr;
 
   int epfd = -1;
-  std::unordered_map<std::string, libevdev_uinput *> uinput_devices;
-  std::unordered_map<std::string, InputDecl> input_map;
-  std::unordered_map<std::string, std::vector<struct input_event>> frames;
+  std::map<std::string, libevdev_uinput *> uinput_devices;
+  std::map<std::string, InputDecl> input_map;
+  std::map<std::string, std::vector<struct input_event>> frames;
 
   bool loop_should_stop = false;
   int sigint = 0;
@@ -45,7 +45,7 @@ class AelkeyState : public Singleton<AelkeyState> {
   std::vector<InputDecl> input_decls;
   std::vector<OutputDecl> output_decls;
 
-  std::unordered_map<std::string, std::vector<InputDecl>> watch_map;
+  std::map<std::string, std::vector<InputDecl>> watch_map;
 
   std::string on_watchlist;
 };

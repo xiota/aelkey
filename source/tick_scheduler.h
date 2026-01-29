@@ -2,8 +2,8 @@
 
 #include <cstdint>
 #include <functional>
+#include <map>
 #include <string>
-#include <unordered_map>
 
 #include <sol/sol.hpp>
 #include <sys/epoll.h>
@@ -153,7 +153,7 @@ class TickScheduler : public Dispatcher<TickScheduler> {
   }
 
  private:
-  std::unordered_map<int, TickCb> callbacks_;
+  std::map<int, TickCb> callbacks_;
 };
 
 template class Dispatcher<TickScheduler>;

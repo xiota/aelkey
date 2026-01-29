@@ -1,7 +1,7 @@
 #pragma once
 
 #include <iostream>
-#include <unordered_map>
+#include <map>
 
 #include <fcntl.h>
 #include <libevdev/libevdev.h>
@@ -259,13 +259,13 @@ class DispatcherEvdev : public Dispatcher<DispatcherEvdev> {
   }
 
   // fd → device id (stable)
-  std::unordered_map<int, std::string> devices_;
+  std::map<int, std::string> devices_;
 
   // fd → libevdev*
-  std::unordered_map<int, libevdev *> idev_map_;
+  std::map<int, libevdev *> idev_map_;
 
   // fd → flag
-  std::unordered_map<int, bool> grab_needed_;
+  std::map<int, bool> grab_needed_;
 };
 
 template class Dispatcher<DispatcherEvdev>;

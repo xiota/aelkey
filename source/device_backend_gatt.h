@@ -1,8 +1,8 @@
 #pragma once
 
 #include <format>
+#include <map>
 #include <string>
-#include <unordered_map>
 #include <vector>
 
 #include <dbus/dbus.h>
@@ -218,5 +218,5 @@ class DeviceBackendGATT : public DeviceBackend, public Singleton<DeviceBackendGA
 
  private:
   // dev_id -> gatt_path, /org/bluez/hci0/dev_XX_XX_XX_XX_XX_XX
-  std::unordered_map<std::string, std::string> gatt_paths_;
+  std::map<std::string, std::string> gatt_paths_;
 };

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdio>
+#include <map>
 #include <stdexcept>
 #include <string>
 
@@ -124,5 +125,5 @@ class DeviceBackendLibUSB : public DeviceBackend, public Singleton<DeviceBackend
 
  private:
   libusb_context *libusb_ = nullptr;
-  std::unordered_map<std::string, libusb_device_handle *> devices_;
+  std::map<std::string, libusb_device_handle *> devices_;
 };

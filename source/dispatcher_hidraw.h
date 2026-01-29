@@ -1,7 +1,7 @@
 #pragma once
 
+#include <map>
 #include <string>
-#include <unordered_map>
 #include <vector>
 
 #include <fcntl.h>
@@ -121,7 +121,7 @@ class DispatcherHidraw : public Dispatcher<DispatcherHidraw> {
     }
   }
 
-  std::unordered_map<int, InputDecl> devices_;
+  std::map<int, InputDecl> devices_;
 };
 
 template class Dispatcher<DispatcherHidraw>;
