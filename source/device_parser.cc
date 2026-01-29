@@ -200,4 +200,4 @@ OutputDecl parse_output(sol::table tbl) {
   return decl;
 }
 
-}  // namespace AelkeyParser
+}  // namespace DeviceParser

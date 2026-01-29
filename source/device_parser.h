@@ -12,4 +12,4 @@ InputDecl parse_input(sol::table tbl);
 // Parse a single output declaration from a Lua table.
 OutputDecl parse_output(sol::table tbl);
 
-}  // namespace AelkeyParser
+}  // namespace DeviceParser

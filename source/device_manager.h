@@ -66,10 +66,12 @@ class DeviceManager : public Singleton<DeviceManager> {
       return std::nullopt;
     }
 
+    std::optional<InputDecl> result{ decl };  // copy before erase
+
     state.input_map.erase(it);
     state.frames.erase(dev_id);
 
-    return decl;
+    return result;
   }
 
   DeviceBackend *backend_for_type(const std::string &type) {
