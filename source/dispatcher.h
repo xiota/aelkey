@@ -1,7 +1,7 @@
 #pragma once
 
 #include <cstdint>
-#include <unordered_map>
+#include <map>
 #include <vector>
 
 #include <sys/epoll.h>
@@ -33,25 +33,25 @@ class DispatcherBase {
 
   EpollPayload *get_payload(int fd) const {
     auto it = pollfds_.find(fd);
-    return (it != pollfds_.end()) ? it->second : nullptr;
+    return (it != pollfds_.end()) ? const_cast<EpollPayload *>(&it->second) : nullptr;
   }
 
   virtual void register_fd(int fd, uint32_t events) {
     auto &state = AelkeyState::instance();
 
-    auto *payload = new EpollPayload{ this, fd };
+    // Insert payload by value
+    EpollPayload payload{ this, fd };
+    auto [it, inserted] = pollfds_.emplace(fd, payload);
 
     struct epoll_event ev{};
     ev.events = events;
-    ev.data.ptr = payload;
+    ev.data.ptr = &it->second;  // stable pointer (std::map node)
 
     if (epoll_ctl(state.epfd, EPOLL_CTL_ADD, fd, &ev) < 0) {
       perror("epoll_ctl ADD");
-      delete payload;
+      pollfds_.erase(it);
       return;
     }
-
-    pollfds_[fd] = payload;
   }
 
   virtual void unregister_fd(int fd) {
@@ -64,7 +64,7 @@ class DispatcherBase {
 
     epoll_ctl(state.epfd, EPOLL_CTL_DEL, fd, nullptr);
 
-    delete it->second;
+    // Erase destroys the EpollPayload immediately
     pollfds_.erase(it);
   }
 
@@ -73,14 +73,16 @@ class DispatcherBase {
 
     for (auto &[fd, payload] : pollfds_) {
       epoll_ctl(state.epfd, EPOLL_CTL_DEL, fd, nullptr);
-      delete payload;
+      // payload is destroyed automatically when map is cleared
     }
     pollfds_.clear();
   }
 
  protected:
   DispatcherBase() = default;
-  std::unordered_map<int, EpollPayload *> pollfds_;
+
+  // std::map ensures stable node addresses
+  std::map<int, EpollPayload> pollfds_;
 };
 
 // CRTP dispatcher class
