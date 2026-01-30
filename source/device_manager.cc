@@ -5,6 +5,7 @@
 #include "device_backend_gatt.h"
 #include "device_backend_hidraw.h"
 #include "device_backend_libusb.h"
+#include "device_backend_midi.h"
 #include "dispatcher_evdev.h"
 #include "dispatcher_gatt.h"
 #include "dispatcher_haptics.h"
@@ -25,9 +26,10 @@ DeviceManager::DeviceManager() {
 
   // Register backends
   backends_["evdev"] = &DeviceBackendEvdev::instance();
+  backends_["gatt"] = &DeviceBackendGATT::instance();
   backends_["hidraw"] = &DeviceBackendHidraw::instance();
   backends_["libusb"] = &DeviceBackendLibUSB::instance();
-  backends_["gatt"] = &DeviceBackendGATT::instance();
+  backends_["midi"] = &DeviceBackendMidi::instance();
 }
 
 bool DeviceManager::match(const InputDecl &decl, std::string &devnode_out) {

@@ -8,6 +8,7 @@ project(
 
 # depends
 dbus_dep = dependency('dbus-1')
+jack_dep = dependency('jack')
 libevdev_dep = dependency('libevdev')
 libudev_dep = dependency('libudev')
 libusb_dep = dependency('libusb-1.0')
@@ -97,6 +98,7 @@ src_files = files(
   'source/device_backend_evdev.cc',
   'source/device_backend_gatt.cc',
   'source/device_backend_hidraw.cc',
+  'source/device_backend_midi.cc',
   'source/device_helpers.cc',
   'source/device_manager.cc',
   'source/device_output.cc',
@@ -112,6 +114,7 @@ shared_library(
   src_files,
   dependencies: [
     dbus_dep,
+    jack_dep,
     libevdev_dep,
     libudev_dep,
     libusb_dep,
