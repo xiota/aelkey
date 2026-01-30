@@ -2,7 +2,6 @@
 
 #include "device_backend_gatt.h"
 #include "dispatcher.h"
-#include "dispatcher_registry.h"
 
 class DispatcherGATT : public Dispatcher<DispatcherGATT> {
   friend class Singleton<DispatcherGATT>;

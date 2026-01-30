@@ -6,7 +6,6 @@
 #include <libudev.h>
 
 #include "dispatcher.h"
-#include "dispatcher_registry.h"
 #include "singleton.h"
 
 struct InputDecl;
