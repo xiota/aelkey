@@ -25,6 +25,10 @@ struct InputDecl {
   std::string on_event;  // HID input events
   std::string on_state;  // lifecycle events
 
+  // jack midi/audio
+  std::string client;
+  std::string port;
+
   int fd = -1;
 };
 
