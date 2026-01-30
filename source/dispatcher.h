@@ -67,7 +67,7 @@ class DispatcherBase {
     auto it = pollfds_.find(fd);
     if (it != pollfds_.end()) {
       it->second.dead = true;
-      deferred_unregs_.push_back(fd);
+      deferred_unregs_[cycle_].push_back(fd);
     }
   }
 
@@ -82,14 +82,17 @@ class DispatcherBase {
   }
 
   virtual void flush_deferred() {
-    for (int fd : deferred_unregs_) {
+    int previous = (cycle_ + 1) % 2;
+
+    for (int fd : deferred_unregs_[previous]) {
       auto it = pollfds_.find(fd);
       if (it != pollfds_.end()) {
-        pollfds_.erase(it);
         on_unregister(fd);
       }
     }
-    deferred_unregs_.clear();
+
+    deferred_unregs_[previous].clear();
+    cycle_ = previous;
   }
 
  protected:
@@ -99,7 +102,8 @@ class DispatcherBase {
   std::map<int, EpollPayload> pollfds_;
 
   // to defer erase until safe
-  std::vector<int> deferred_unregs_;
+  int cycle_ = 0;
+  std::vector<int> deferred_unregs_[2];
 };
 
 // CRTP dispatcher class
