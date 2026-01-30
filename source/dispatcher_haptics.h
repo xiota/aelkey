@@ -10,7 +10,6 @@
 #include "aelkey_state.h"
 #include "device_declarations.h"
 #include "dispatcher.h"
-#include "dispatcher_registry.h"
 
 static constexpr const char *HAPTICS_SOURCE_CUSTOM = "_aelkey_haptics_custom_";
 static constexpr const char *HAPTICS_SOURCE_ONESHOT = "_aelkey_haptics_oneshot_";

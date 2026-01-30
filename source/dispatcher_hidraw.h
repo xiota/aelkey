@@ -12,7 +12,6 @@
 #include "device_declarations.h"
 #include "device_helpers.h"
 #include "dispatcher.h"
-#include "dispatcher_registry.h"
 
 class DispatcherHidraw : public Dispatcher<DispatcherHidraw> {
   friend class Singleton<DispatcherHidraw>;

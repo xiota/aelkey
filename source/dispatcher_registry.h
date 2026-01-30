@@ -3,25 +3,12 @@
 #include <map>
 #include <string>
 
-#include <sys/epoll.h>
+class DispatcherBase;
 
-#include "aelkey_state.h"
-#include "dispatcher.h"
-
-// Registry of all dispatcher singletons
 inline auto &dispatcher_registry() {
   static std::map<std::string, DispatcherBase *> registry;
   return registry;
 }
-
-// Auto-registration helper
-template <typename T>
-struct DispatcherRegistry {
-  DispatcherRegistry() {
-    auto &registry = dispatcher_registry();
-    registry[T::instance().type()] = &T::instance();
-  }
-};
 
 inline DispatcherBase *get_dispatcher_for_type(const std::string &type) {
   auto &registry = dispatcher_registry();
@@ -29,8 +16,4 @@ inline DispatcherBase *get_dispatcher_for_type(const std::string &type) {
   return (it != registry.end()) ? it->second : nullptr;
 }
 
-inline void init_dispatcher_for_type(const std::string &type) {
-  if (auto *d = get_dispatcher_for_type(type)) {
-    d->lazy_init();
-  }
-}
+bool init_dispatcher_for_type(const std::string &type);

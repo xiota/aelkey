@@ -13,7 +13,6 @@
 #include "device_manager.h"
 #include "dispatcher.h"
 #include "dispatcher_haptics.h"
-#include "dispatcher_registry.h"
 #include "dispatcher_udev.h"
 #include "singleton.h"
 
