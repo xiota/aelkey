@@ -124,10 +124,11 @@ static void LIBUSB_CALL dispatch_libusb(libusb_transfer *transfer) {
       break;
     }
 
-    case LIBUSB_TRANSFER_NO_DEVICE:
-      DeviceManager::instance().detach(decl->id);
-      DispatcherUdev::instance().notify_state_change(*decl, "remove");
+    case LIBUSB_TRANSFER_NO_DEVICE: {
+      auto result = DeviceManager::instance().detach(decl->id);
+      DispatcherUdev::instance().notify_state_change(*result, "remove");
       break;
+    }
 
     case LIBUSB_TRANSFER_CANCELLED:
     case LIBUSB_TRANSFER_ERROR:
@@ -143,8 +144,8 @@ static void LIBUSB_CALL dispatch_libusb(libusb_transfer *transfer) {
       }
       if (rc != 0) {
         // device is gone
-        DeviceManager::instance().detach(decl->id);
-        DispatcherUdev::instance().notify_state_change(*decl, "remove");
+        auto result = DeviceManager::instance().detach(decl->id);
+        DispatcherUdev::instance().notify_state_change(*result, "remove");
       } else {
         // fatal or cancelled
         destroy_transfer(transfer);
