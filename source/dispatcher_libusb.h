@@ -18,9 +18,17 @@ class DispatcherLibUSB : public Dispatcher<DispatcherLibUSB> {
   bool on_init() override {
     auto &backend = DeviceBackendLibUSB::instance();
 
-    // Install pollfd notifiers
+    if (!backend.lazy_init()) {
+      return false;
+    }
+
+    libusb_context *ctx = backend.context();
+    if (!ctx) {
+      return false;
+    }
+
     libusb_set_pollfd_notifiers(
-        backend.context(),
+        ctx,
         [](int fd, short events, void *user_data) {
           static_cast<DispatcherLibUSB *>(user_data)->on_add_fd(fd, events);
         },
