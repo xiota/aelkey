@@ -62,7 +62,13 @@ sudo meson install -C build
 
 ## Documentation
 
-* [API reference](docs/aelkey-reference.md)
+[**Reference**](docs/readme.md)
+
+* [Device Tables](docs/ref-device-tables.md)
+* [General API](docs/ref-general-api.md)
+* [Input and Other Helpers](docs/ref-helpers.md)
+
+**Other**
 
 * [Mini Guide to Writing udev Rules](docs/guide-udev.md)
 
