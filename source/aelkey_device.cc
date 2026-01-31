@@ -17,11 +17,6 @@ sol::object device_open(sol::this_state ts, sol::optional<std::string> dev_id_op
 
   // GLOBAL MODE: no argument → open all devices
   if (!dev_id_opt.has_value()) {
-    // If devices already attached, skip
-    if (!state.input_map.empty() || !state.uinput_devices.empty()) {
-      return sol::make_object(lua, true);
-    }
-
     // Parse declarations from Lua
     state.parse_outputs_from_lua(ts);
     state.parse_inputs_from_lua(ts);

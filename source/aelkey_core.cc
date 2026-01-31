@@ -2,23 +2,26 @@
 
 #include <ctime>
 
-#include <libevdev/libevdev-uinput.h>
+#include <libevdev/libevdev.h>
 #include <sol/sol.hpp>
 #include <sys/epoll.h>
 #include <sys/timerfd.h>
 #include <unistd.h>
 
 #include "aelkey_state.h"
+#include "device_out_uinput.h"
 #include "tick_scheduler.h"
 
 // emit{ device=?, type=?, code=?, value=? }
 sol::object core_emit(sol::this_state ts, sol::table opts) {
   sol::state_view lua(ts);
-  auto &state = AelkeyState::instance();
 
-  // device (optional)
+  // device (required)
   sol::optional<std::string> dev_id_opt = opts["device"];
-  const char *dev_id = dev_id_opt ? dev_id_opt->c_str() : nullptr;
+  if (!dev_id_opt) {
+    throw sol::error("emit requires 'device'");
+  }
+  const std::string &dev_id = *dev_id_opt;
 
   // type
   int type = 0;
@@ -40,24 +43,15 @@ sol::object core_emit(sol::this_state ts, sol::table opts) {
     code = libevdev_event_code_from_name(type, cname.c_str());
   }
 
-  // value (required)
+  // value
   int value = opts.get<int>("value");
 
-  // device selection logic
-  if (!dev_id) {
-    if (state.uinput_devices.size() == 1) {
-      auto it = state.uinput_devices.begin();
-      libevdev_uinput_write_event(it->second, type, code, value);
-    } else {
-      throw sol::error("emit requires 'device' when multiple output devices are present");
-    }
-  } else {
-    auto it = state.uinput_devices.find(dev_id);
-    if (it == state.uinput_devices.end()) {
-      throw sol::error("Unknown device id: " + std::string(dev_id));
-    }
-    libevdev_uinput_write_event(it->second, type, code, value);
+  auto &outmgr = DeviceOutUinput::instance();
+  if (!outmgr.get(dev_id)) {
+    throw sol::error("Unknown device id: " + dev_id);
   }
+
+  outmgr.send(dev_id, type, code, value);
 
   return sol::make_object(lua, sol::lua_nil);
 }
@@ -65,20 +59,18 @@ sol::object core_emit(sol::this_state ts, sol::table opts) {
 // syn_report([device])
 sol::object core_syn_report(sol::this_state ts, sol::optional<std::string> dev_id_opt) {
   sol::state_view lua(ts);
-  auto &state = AelkeyState::instance();
+  auto &outmgr = DeviceOutUinput::instance();
 
-  if (dev_id_opt) {
-    const std::string &dev_id = *dev_id_opt;
-    auto it = state.uinput_devices.find(dev_id);
-    if (it == state.uinput_devices.end()) {
-      throw sol::error("Unknown device id: " + dev_id);
-    }
-    libevdev_uinput_write_event(it->second, EV_SYN, SYN_REPORT, 0);
-  } else {
-    for (auto &kv : state.uinput_devices) {
-      libevdev_uinput_write_event(kv.second, EV_SYN, SYN_REPORT, 0);
-    }
+  if (!dev_id_opt) {
+    throw sol::error("syn_report requires 'device'");
   }
+
+  const std::string &dev_id = *dev_id_opt;
+  if (!outmgr.get(dev_id)) {
+    throw sol::error("Unknown device id: " + dev_id);
+  }
+
+  outmgr.sync(dev_id);
 
   return sol::make_object(lua, sol::lua_nil);
 }
@@ -94,7 +86,6 @@ sol::object core_tick(sol::this_state ts, int ms, sol::object cb_obj) {
     if (ms == 0) {
       scheduler.cancel_all();
     }
-    // nil callback with non-zero ms → do nothing
     return sol::lua_nil;
   }
 

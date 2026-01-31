@@ -4,7 +4,6 @@
 #include <string>
 #include <vector>
 
-#include <libevdev/libevdev-uinput.h>
 #include <linux/input.h>
 #include <sol/sol.hpp>
 
@@ -39,7 +38,6 @@ class AelkeyState : public Singleton<AelkeyState> {
   lua_State *lua_vm = nullptr;
 
   int epfd = -1;
-  std::map<std::string, libevdev_uinput *> uinput_devices;
   std::map<std::string, InputDecl> input_map;
 
   bool loop_should_stop = false;

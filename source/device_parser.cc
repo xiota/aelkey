@@ -8,7 +8,6 @@
 #include <vector>
 
 #include <glob.h>
-#include <libevdev/libevdev-uinput.h>
 #include <libevdev/libevdev.h>
 #include <libudev.h>
 #include <linux/hidraw.h>

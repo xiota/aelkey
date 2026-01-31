@@ -1,4 +1,4 @@
-#include "device_output.h"
+#include "device_out_uinput.h"
 
 #include <cstdio>
 #include <iostream>
@@ -122,7 +122,7 @@ static void enable_codes(libevdev *dev, unsigned int type, const Codes &codes) {
   }
 }
 
-void enable_capability(libevdev *dev, const std::string &cap) {
+static void enable_capability(libevdev *dev, const std::string &cap) {
   unsigned int evtype = EV_KEY;
 
   if (cap.rfind("KEY_", 0) == 0 || cap.rfind("BTN_", 0) == 0) {
@@ -147,7 +147,7 @@ void enable_capability(libevdev *dev, const std::string &cap) {
   }
 }
 
-libevdev_uinput *create_output_device(const OutputDecl &out) {
+static libevdev_uinput *create_output_device(const OutputDecl &out) {
   struct libevdev *dev = libevdev_new();
   libevdev_set_name(dev, out.name.c_str());
   libevdev_set_id_bustype(dev, out.bus);
@@ -230,4 +230,32 @@ libevdev_uinput *create_output_device(const OutputDecl &out) {
 
   libevdev_free(dev);
   return uidev;
+}
+
+bool DeviceOutUinput::create(const OutputDecl &decl) {
+  libevdev_uinput *uidev = create_output_device(decl);
+  if (!uidev) {
+    return false;
+  }
+
+  // Store device by its declared ID
+  devices_[decl.id] = uidev;
+  return true;
+}
+
+libevdev_uinput *DeviceOutUinput::get(std::string id) const {
+  auto it = devices_.find(id);
+  return (it != devices_.end()) ? it->second : nullptr;
+}
+
+void DeviceOutUinput::send(const std::string &id, int type, int code, int value) {
+  if (auto *dev = get(id)) {
+    libevdev_uinput_write_event(dev, type, code, value);
+  }
+}
+
+void DeviceOutUinput::sync(std::string id) {
+  if (auto *dev = get(id)) {
+    libevdev_uinput_write_event(dev, EV_SYN, SYN_REPORT, 0);
+  }
 }

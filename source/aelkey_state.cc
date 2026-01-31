@@ -3,7 +3,7 @@
 #include <sol/sol.hpp>
 
 #include "device_in_manager.h"
-#include "device_output.h"
+#include "device_out_uinput.h"
 #include "device_parser.h"
 #include "dispatcher_udev.h"
 
@@ -36,18 +36,9 @@ void AelkeyState::attach_inputs_from_decls(sol::this_state ts) {
 }
 
 void AelkeyState::create_outputs_from_decls() {
-  for (auto &out : output_decls) {
-    if (out.id.empty()) {
-      continue;
-    }
-    if (uinput_devices.count(out.id)) {
-      continue;
-    }
-
-    libevdev_uinput *uidev = create_output_device(out);
-    if (uidev) {
-      uinput_devices[out.id] = uidev;
-    }
+  auto &outmgr = DeviceOutUinput::instance();
+  for (auto &decl : output_decls) {
+    outmgr.create(decl);
   }
 }
 

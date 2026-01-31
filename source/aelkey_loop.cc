@@ -5,7 +5,6 @@
 #include <string>
 #include <string_view>
 
-#include <libevdev/libevdev-uinput.h>
 #include <libudev.h>
 #include <libusb-1.0/libusb.h>
 #include <sys/epoll.h>
@@ -80,12 +79,6 @@ sol::object loop_start(sol::this_state ts) {
     // mutates aelkey_state.input_map
     DeviceInManager::instance().detach(id);
   }
-
-  // Destroy uinput devices
-  for (auto &kv : state.uinput_devices) {
-    libevdev_uinput_destroy(kv.second);
-  }
-  state.uinput_devices.clear();
 
   // Tear down global monitoring state
   if (state.epfd >= 0) {
