@@ -41,7 +41,6 @@ class AelkeyState : public Singleton<AelkeyState> {
   int epfd = -1;
   std::map<std::string, libevdev_uinput *> uinput_devices;
   std::map<std::string, InputDecl> input_map;
-  std::map<std::string, std::vector<struct input_event>> frames;
 
   bool loop_should_stop = false;
   int sigint = 0;

@@ -82,7 +82,6 @@ std::optional<InputDecl> DeviceManager::detach(const std::string &dev_id) {
   std::optional<InputDecl> result{ decl };
 
   state.input_map.erase(it);
-  state.frames.erase(dev_id);
 
   return result;
 }

@@ -15,6 +15,10 @@ class DispatcherLibUSB : public Dispatcher<DispatcherLibUSB> {
   DispatcherLibUSB() = default;
   ~DispatcherLibUSB() = default;
 
+  void on_unregister(int fd) override {
+    close(fd);
+  }
+
   bool on_init() override {
     auto &backend = DeviceBackendLibUSB::instance();
 

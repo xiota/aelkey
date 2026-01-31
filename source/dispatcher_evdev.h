@@ -16,6 +16,13 @@
 #include "dispatcher_udev.h"
 #include "singleton.h"
 
+struct EvdevDeviceState {
+  std::string id;                  // stable device identifier
+  libevdev *idev = nullptr;        // libevdev handle
+  std::vector<input_event> frame;  // event batching buffer
+  bool grab_needed = false;        // retry flag
+};
+
 class DispatcherEvdev : public Dispatcher<DispatcherEvdev> {
   friend class Singleton<DispatcherEvdev>;
   friend class Dispatcher<DispatcherEvdev>;
@@ -27,6 +34,10 @@ class DispatcherEvdev : public Dispatcher<DispatcherEvdev> {
  public:
   const char *type() const override {
     return "evdev";
+  }
+
+  void on_unregister(int fd) override {
+    close(fd);
   }
 
   bool open_device(const std::string &devnode, InputDecl &decl) {
@@ -45,11 +56,6 @@ class DispatcherEvdev : public Dispatcher<DispatcherEvdev> {
       decl.fd = -1;
       return false;
     }
-    idev_map_[decl.fd] = idev;
-
-    // Initialize frame buffer
-    auto &state = AelkeyState::instance();
-    state.frames[decl.id] = {};
 
     // Detect FF support
     if (libevdev_has_event_type(idev, EV_FF)) {
@@ -58,17 +64,20 @@ class DispatcherEvdev : public Dispatcher<DispatcherEvdev> {
 
     std::cout << "Attached evdev: " << libevdev_get_name(idev) << std::endl;
 
-    // Initial grab attempt
-    if (decl.grab) {
-      grab_needed_[decl.fd] = true;
-      try_evdev_grab(decl);
-    }
-
     // Register FD with epoll
     register_fd(decl.fd, EPOLLIN | EPOLLHUP | EPOLLERR);
 
-    // store stable device ID
-    devices_[decl.fd] = decl.id;
+    // Create device state entry
+    EvdevDeviceState st;
+    st.id = decl.id;
+    st.idev = idev;
+    st.grab_needed = decl.grab;
+    devs_[decl.fd] = std::move(st);
+
+    // Attempt grab after state is installed
+    if (decl.grab) {
+      try_evdev_grab(decl);
+    }
 
     return true;
   }
@@ -77,21 +86,16 @@ class DispatcherEvdev : public Dispatcher<DispatcherEvdev> {
     // Unregister from epoll
     if (decl.fd >= 0) {
       unregister_fd(decl.fd);
-      devices_.erase(decl.fd);
-      grab_needed_.erase(decl.fd);
     }
 
     // Free libevdev
-    with_idev(decl.fd, [&](libevdev *idev) {
-      libevdev_grab(idev, LIBEVDEV_UNGRAB);
-      libevdev_free(idev);
-    });
-    idev_map_.erase(decl.fd);
-
-    // Close FD
-    if (decl.fd >= 0) {
-      close(decl.fd);
-      decl.fd = -1;
+    auto it = devs_.find(decl.fd);
+    if (it != devs_.end()) {
+      if (it->second.idev) {
+        libevdev_grab(it->second.idev, LIBEVDEV_UNGRAB);
+        libevdev_free(it->second.idev);
+      }
+      devs_.erase(it);
     }
   }
 
@@ -99,14 +103,14 @@ class DispatcherEvdev : public Dispatcher<DispatcherEvdev> {
   void handle_event(EpollPayload *payload, uint32_t events) override {
     int fd = payload->fd;
 
-    auto it = devices_.find(fd);
-    if (it == devices_.end()) {
+    auto it = devs_.find(fd);
+    if (it == devs_.end()) {
       return;
     }
-    const std::string &id = it->second;
+    auto &st = it->second;
+    const std::string &id = st.id;
 
     auto &state = AelkeyState::instance();
-
     auto decl_it = state.input_map.find(id);
     if (decl_it == state.input_map.end()) {
       return;  // device already detached
@@ -130,41 +134,17 @@ class DispatcherEvdev : public Dispatcher<DispatcherEvdev> {
   }
 
  private:
-  // --- libevdev helpers ---
-  // Retrieve libevdev* for a given fd, or nullptr if not found.
-  libevdev *get_idev(int fd) {
-    auto it = idev_map_.find(fd);
-    return (it != idev_map_.end()) ? it->second : nullptr;
-  }
-
-  // Call a lambda with libevdev* if it exists.
-  // Usage: with_idev(fd, [&](libevdev* idev) { ... });
-  template <typename F>
-  void with_idev(int fd, F &&fn) {
-    auto it = idev_map_.find(fd);
-    if (it != idev_map_.end()) {
-      fn(it->second);
-    }
-  }
-
-  // Check if an idev exists for this fd.
-  bool idev_exists(int fd) const {
-    return idev_map_.count(fd) > 0;
-  }
-
   void dispatch_evdev_logic(InputDecl &decl) {
-    libevdev *idev = get_idev(decl.fd);
-    if (!idev) {
+    auto it = devs_.find(decl.fd);
+    if (it == devs_.end()) {
       return;
     }
+
+    auto &st = it->second;
+    libevdev *idev = st.idev;
+    auto &frame = st.frame;
 
     auto &state = AelkeyState::instance();
-    auto fit = state.frames.find(decl.id);
-    if (fit == state.frames.end()) {
-      return;
-    }
-    auto &frame = fit->second;
-
     sol::state_view lua(state.lua_vm);
 
     struct input_event ev;
@@ -219,15 +199,17 @@ class DispatcherEvdev : public Dispatcher<DispatcherEvdev> {
   }
 
   bool try_evdev_grab(InputDecl &decl) {
-    auto it = grab_needed_.find(decl.fd);
-    if (it == grab_needed_.end() || !it->second) {
+    auto it = devs_.find(decl.fd);
+    if (it == devs_.end()) {
       return false;
     }
 
-    libevdev *idev = get_idev(decl.fd);
-    if (!idev) {
+    auto &st = it->second;
+    if (!st.grab_needed) {
       return false;
     }
+
+    libevdev *idev = st.idev;
 
     // check kernel key bitmap via EVIOCGKEY
     unsigned long key_bits[(KEY_MAX + 1) / (sizeof(unsigned long) * 8)] = { 0 };
@@ -254,18 +236,12 @@ class DispatcherEvdev : public Dispatcher<DispatcherEvdev> {
       return false;
     }
 
-    grab_needed_[decl.fd] = false;
+    st.grab_needed = false;
     return true;
   }
 
-  // fd → device id (stable)
-  std::map<int, std::string> devices_;
-
-  // fd → libevdev*
-  std::map<int, libevdev *> idev_map_;
-
-  // fd → flag
-  std::map<int, bool> grab_needed_;
+  // fd → per-device state
+  std::map<int, EvdevDeviceState> devs_;
 };
 
 template class Dispatcher<DispatcherEvdev>;
