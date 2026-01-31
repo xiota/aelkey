@@ -48,7 +48,7 @@ uint32_t util_crc32(const std::string &data, uint32_t seed = 0) {
 }
 
 // now("ms"|"us"|"ns")
-uint64_t util_now(const std::string &unit = "ms") {
+uint64_t util_now(const std::string &unit) {
   struct timespec ts;
   clock_gettime(CLOCK_MONOTONIC, &ts);
 
