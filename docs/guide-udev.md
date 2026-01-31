@@ -1,13 +1,15 @@
-# Mini Guide to Writing udev Rules
+# Ælkey <span class="ak-trim-line"/>
 
-## Where rules live
+## Mini Guide to Writing udev Rules
+
+### Where rules live
 
 - Create or symlink active rules in `/etc/udev/rules.d/`.
   - They are processed in lexicographic order.
 - Prefix custom `uaccess` rules with 71 or 72.
   - They must be processed before `73-seat-late.rules`, but after `70-uaccess.rules`.
 
-## Useful commands
+### Useful commands
 
 - Obtain device information:
   - `lsusb` (USB)
@@ -33,7 +35,7 @@
   journalctl -u systemd-udevd
   ```
 
-## Basic structure
+### Basic structure
 
 A udev rule is a line with match conditions and actions:
 
@@ -46,7 +48,7 @@ MATCH_KEYS=="value", MATCH_KEYS=="value", ACTIONS
 
 `TAG+="uaccess"` grants access to the active user session via systemd‑logind.
 
-## Virtual output devices
+### Virtual output devices
 
 These rules are needed to create virtual output devices.
 ```udev
@@ -54,7 +56,7 @@ KERNEL=="uinput", SUBSYSTEM=="misc", TAG+="uaccess", OPTIONS+="static_node=uinpu
 KERNEL=="uhid", SUBSYSTEM=="misc", TAG+="uaccess", OPTIONS+="static_node=uhid"
 ```
 
-## General device access
+### General device access
 
 These rules are useful during development when you want broad access to all input and HID devices.
 Otherwise, writing device-specific rules is recommended.
@@ -64,7 +66,7 @@ SUBSYSTEM=="input", MODE="0660", TAG+="uaccess"
 SUBSYSTEM=="hidraw", MODE="0660", TAG+="uaccess"
 ```
 
-## Specific device access
+### Specific device access
 
 Rules vary by bus (USB, Bluetooth) and type (evdev, hidraw).
 
