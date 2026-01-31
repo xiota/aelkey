@@ -16,6 +16,11 @@
 struct MidiEvent {
   std::string id;             // InputDecl id
   std::vector<uint8_t> data;  // raw MIDI bytes
+  uint64_t timestamp_us;
+};
+
+struct MidiBatch {
+  std::vector<MidiEvent> events;
 };
 
 class DeviceBackendMidi : public DeviceBackend, public Singleton<DeviceBackendMidi> {
@@ -41,7 +46,7 @@ class DeviceBackendMidi : public DeviceBackend, public Singleton<DeviceBackendMi
   void push_event(const MidiEvent &ev);
   bool pop_event(MidiEvent &out);
 
-  void dispatch_to_lua(const MidiEvent &ev);
+  void dispatch_batch_to_lua(const std::string &id, const std::vector<MidiEvent> &events);
 
   std::string ensure_client_name(const InputDecl &decl);
   std::string make_default_port_name(const InputDecl &decl) const;
@@ -61,4 +66,5 @@ class DeviceBackendMidi : public DeviceBackend, public Singleton<DeviceBackendMi
   std::string client_name_;
 
   int tick_fd_ = -1;
+  std::map<std::string, MidiBatch> batches_;
 };

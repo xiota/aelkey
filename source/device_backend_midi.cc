@@ -5,6 +5,7 @@
 
 #include <unistd.h>
 
+#include "aelkey_util.h"
 #include "device_helpers.h"
 #include "tick_scheduler.h"
 
@@ -267,6 +268,7 @@ void DeviceBackendMidi::process(jack_nframes_t nframes) {
       MidiEvent me;
       me.id = id;
       me.data.assign(ev.buffer, ev.buffer + ev.size);
+      me.timestamp_us = util_now("us");
 
       push_event(me);
     }
@@ -331,11 +333,14 @@ bool DeviceBackendMidi::pop_event(MidiEvent &out) {
   return true;
 }
 
-void DeviceBackendMidi::dispatch_to_lua(const MidiEvent &ev) {
+void DeviceBackendMidi::dispatch_batch_to_lua(
+    const std::string &id,
+    const std::vector<MidiEvent> &events
+) {
   auto &state = AelkeyState::instance();
   sol::state_view lua(state.lua_vm);
 
-  auto it = state.input_map.find(ev.id);
+  auto it = state.input_map.find(id);
   if (it == state.input_map.end()) {
     return;
   }
@@ -352,24 +357,44 @@ void DeviceBackendMidi::dispatch_to_lua(const MidiEvent &ev) {
 
   sol::function cb = obj.as<sol::function>();
 
-  sol::table tbl = lua.create_table();
-  tbl["device"] = decl.id;
-  tbl["status"] = "ok";
-  tbl["size"] = static_cast<int>(ev.data.size());
-  tbl["data"] =
-      std::string_view(reinterpret_cast<const char *>(ev.data.data()), ev.data.size());
+  sol::table list = lua.create_table();
+  int idx = 1;
+
+  for (auto &ev : events) {
+    sol::table e = lua.create_table();
+
+    e["device"] = id;
+    e["timestamp"] = ev.timestamp_us;
+    e["data"] =
+        std::string_view(reinterpret_cast<const char *>(ev.data.data()), ev.data.size());
+    e["size"] = static_cast<int>(ev.data.size());
+    e["status"] = "ok";
+
+    list[idx++] = e;
+  }
 
   sol::protected_function pf = cb;
-  sol::protected_function_result res = pf(tbl);
+  sol::protected_function_result res = pf(list);
+
   if (!res.valid()) {
     sol::error err = res;
-    std::fprintf(stderr, "Lua MIDI callback error: %s\n", err.what());
+    std::fprintf(stderr, "Lua MIDI batch callback error: %s\n", err.what());
   }
 }
 
 void DeviceBackendMidi::pump_messages() {
   MidiEvent ev;
+
+  // Drain ringbuffer into per-device batches
   while (pop_event(ev)) {
-    dispatch_to_lua(ev);
+    batches_[ev.id].events.push_back(ev);
+  }
+
+  // Flush all device batches
+  for (auto &[id, batch] : batches_) {
+    if (!batch.events.empty()) {
+      dispatch_batch_to_lua(id, batch.events);
+      batch.events.clear();
+    }
   }
 }
