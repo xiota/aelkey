@@ -6,7 +6,7 @@
 #include <sol/sol.hpp>
 
 #include "aelkey_state.h"
-#include "device_backend_gatt.h"
+#include "device_in_gatt.h"
 
 // gatt.read{ device="id", service=0x0021, characteristic=0x0036 }
 // Returns raw data string
@@ -23,7 +23,7 @@ sol::object gatt_read(sol::this_state ts, sol::table opts) {
   // characteristic (optional)
   int characteristic = opts.get_or("characteristic", -1);
 
-  auto &gatt = DeviceBackendGATT::instance();
+  auto &gatt = DeviceInGatt::instance();
   std::string char_path = gatt.resolve_char_path(dev_id, service, characteristic);
 
   std::vector<uint8_t> data;
@@ -59,7 +59,7 @@ sol::object gatt_write(sol::this_state ts, sol::table opts) {
   // characteristic (optional)
   int characteristic = opts.get_or("characteristic", -1);
 
-  auto &gatt = DeviceBackendGATT::instance();
+  auto &gatt = DeviceInGatt::instance();
   std::string char_path = gatt.resolve_char_path(dev_id, service, characteristic);
 
   bool ok = gatt.write_characteristic(

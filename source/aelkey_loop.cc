@@ -17,7 +17,7 @@
 #include "aelkey_device.h"
 #include "aelkey_state.h"
 #include "device_declarations.h"
-#include "device_manager.h"
+#include "device_in_manager.h"
 #include "dispatcher.h"
 #include "dispatcher_udev.h"
 #include "util/scoped_timer.h"
@@ -78,7 +78,7 @@ sol::object loop_start(sol::this_state ts) {
   }
   for (const auto &id : ids) {
     // mutates aelkey_state.input_map
-    DeviceManager::instance().detach(id);
+    DeviceInManager::instance().detach(id);
   }
 
   // Destroy uinput devices

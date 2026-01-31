@@ -8,7 +8,7 @@
 
 #include "aelkey_state.h"
 #include "device_declarations.h"
-#include "device_manager.h"
+#include "device_in_manager.h"
 #include "dispatcher_registry.h"
 
 DispatcherUdev::~DispatcherUdev() {
@@ -161,7 +161,7 @@ void DispatcherUdev::handle_udev_add(struct udev_device *dev) {
   for (auto &entry : state.watch_map) {
     for (auto &decl : entry.second) {
       std::string matched;
-      if (!DeviceManager::instance().match(decl, matched)) {
+      if (!DeviceInManager::instance().match(decl, matched)) {
         continue;
       }
 
@@ -190,7 +190,7 @@ void DispatcherUdev::handle_udev_add(struct udev_device *dev) {
   // Normal devices
   for (auto &decl : state.input_decls) {
     std::string matched;
-    if (!DeviceManager::instance().match(decl, matched)) {
+    if (!DeviceInManager::instance().match(decl, matched)) {
       continue;
     }
 
@@ -201,7 +201,7 @@ void DispatcherUdev::handle_udev_add(struct udev_device *dev) {
           break;
         }
 
-        if (DeviceManager::instance().attach(devnode, decl)) {
+        if (DeviceInManager::instance().attach(devnode, decl)) {
           decl.devnode = devnode;
           notify_state_change(decl, "add");
         }
@@ -218,7 +218,7 @@ void DispatcherUdev::handle_udev_add(struct udev_device *dev) {
           break;
         }
 
-        if (DeviceManager::instance().attach(matched, decl)) {
+        if (DeviceInManager::instance().attach(matched, decl)) {
           decl.devnode = matched;
           notify_state_change(decl, "add");
         }
@@ -273,7 +273,7 @@ void DispatcherUdev::handle_udev_remove(struct udev_device *dev) {
       }
 
       if (decl.devnode == std::string(syspath)) {
-        auto removed = DeviceManager::instance().detach(decl.id);
+        auto removed = DeviceInManager::instance().detach(decl.id);
         if (removed && !removed->id.empty()) {
           notify_state_change(*removed, "remove");
         }
@@ -282,7 +282,7 @@ void DispatcherUdev::handle_udev_remove(struct udev_device *dev) {
     } else if ((decl.type == "evdev" && std::string(subsystem) == "input") ||
                (decl.type == "hidraw" && std::string(subsystem) == "hidraw")) {
       if (decl.devnode == devnode) {
-        auto removed = DeviceManager::instance().detach(decl.id);
+        auto removed = DeviceInManager::instance().detach(decl.id);
         if (removed && !removed->id.empty()) {
           notify_state_change(*removed, "remove");
         }

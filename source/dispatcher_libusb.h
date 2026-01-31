@@ -4,7 +4,7 @@
 #include <poll.h>
 #include <sys/epoll.h>
 
-#include "device_backend_libusb.h"
+#include "device_in_libusb.h"
 #include "dispatcher.h"
 
 class DispatcherLibUSB : public Dispatcher<DispatcherLibUSB> {
@@ -20,7 +20,7 @@ class DispatcherLibUSB : public Dispatcher<DispatcherLibUSB> {
   }
 
   bool on_init() override {
-    auto &backend = DeviceBackendLibUSB::instance();
+    auto &backend = DeviceInLibUSB::instance();
 
     if (!backend.lazy_init()) {
       return false;
@@ -73,7 +73,7 @@ class DispatcherLibUSB : public Dispatcher<DispatcherLibUSB> {
   }
 
   void handle_event(EpollPayload *, uint32_t) override {
-    auto &backend = DeviceBackendLibUSB::instance();
+    auto &backend = DeviceInLibUSB::instance();
 
     timeval tv{ 0, 0 };
     libusb_handle_events_timeout_completed(backend.context(), &tv, nullptr);

@@ -5,9 +5,9 @@
 
 #include "device_declarations.h"
 
-class DeviceBackend {
+class DeviceIn {
  protected:
-  virtual ~DeviceBackend() = default;
+  virtual ~DeviceIn() = default;
 
  public:
   virtual bool match(const InputDecl &decl, std::string &devnode_out) = 0;

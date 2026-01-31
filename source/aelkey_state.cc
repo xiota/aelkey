@@ -2,7 +2,7 @@
 
 #include <sol/sol.hpp>
 
-#include "device_manager.h"
+#include "device_in_manager.h"
 #include "device_output.h"
 #include "device_parser.h"
 #include "dispatcher_udev.h"
@@ -24,11 +24,11 @@ bool AelkeyState::on_init() {
 void AelkeyState::attach_inputs_from_decls(sol::this_state ts) {
   for (auto &decl : input_decls) {
     std::string devnode;
-    if (!DeviceManager::instance().match(decl, devnode)) {
+    if (!DeviceInManager::instance().match(decl, devnode)) {
       continue;
     }
 
-    if (DeviceManager::instance().attach(devnode, decl)) {
+    if (DeviceInManager::instance().attach(devnode, decl)) {
       decl.devnode = devnode;
       DispatcherUdev::instance().notify_state_change(decl, "add");
     }

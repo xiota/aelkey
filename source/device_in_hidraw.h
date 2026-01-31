@@ -3,17 +3,17 @@
 #include <optional>
 #include <string>
 
-#include "device_backend.h"
 #include "device_declarations.h"
 #include "device_helpers.h"
+#include "device_in.h"
 #include "singleton.h"
 
-class DeviceBackendHidraw : public DeviceBackend, public Singleton<DeviceBackendHidraw> {
-  friend class Singleton<DeviceBackendHidraw>;
+class DeviceInHidraw : public DeviceIn, public Singleton<DeviceInHidraw> {
+  friend class Singleton<DeviceInHidraw>;
 
  protected:
-  DeviceBackendHidraw() = default;
-  ~DeviceBackendHidraw() = default;
+  DeviceInHidraw() = default;
+  ~DeviceInHidraw() = default;
 
  public:
   bool match(const InputDecl &decl, std::string &devnode_out) override;

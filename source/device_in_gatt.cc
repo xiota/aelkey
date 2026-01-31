@@ -1,4 +1,4 @@
-#include "device_backend_gatt.h"
+#include "device_in_gatt.h"
 
 #include <cstring>
 #include <iostream>
@@ -10,11 +10,11 @@
 #include <sys/epoll.h>
 
 #include "aelkey_state.h"
-#include "device_backend_gatt.h"
 #include "device_helpers.h"
+#include "device_in_gatt.h"
 #include "dispatcher_gatt.h"
 
-bool DeviceBackendGATT::on_init() {
+bool DeviceInGatt::on_init() {
   if (conn_) {
     return true;
   }
@@ -35,7 +35,7 @@ bool DeviceBackendGATT::on_init() {
   return DispatcherGATT::instance().lazy_init();
 }
 
-void DeviceBackendGATT::pump_messages() {
+void DeviceInGatt::pump_messages() {
   lazy_init();
   if (!conn_) {
     return;
@@ -56,7 +56,7 @@ void DeviceBackendGATT::pump_messages() {
   }
 }
 
-void DeviceBackendGATT::process_one_message(DBusMessage *msg) {
+void DeviceInGatt::process_one_message(DBusMessage *msg) {
   sol::state_view lua(AelkeyState::instance().lua_vm);
 
   const char *path = dbus_message_get_path(msg);
@@ -146,7 +146,7 @@ void DeviceBackendGATT::process_one_message(DBusMessage *msg) {
   }
 }
 
-void DeviceBackendGATT::start_notify(const std::string &char_path) {
+void DeviceInGatt::start_notify(const std::string &char_path) {
   DBusMessage *msg = dbus_message_new_method_call(
       "org.bluez", char_path.c_str(), "org.bluez.GattCharacteristic1", "StartNotify"
   );
@@ -158,7 +158,7 @@ void DeviceBackendGATT::start_notify(const std::string &char_path) {
   }
 }
 
-void DeviceBackendGATT::stop_notify(const std::string &char_path) {
+void DeviceInGatt::stop_notify(const std::string &char_path) {
   DBusMessage *msg = dbus_message_new_method_call(
       "org.bluez", char_path.c_str(), "org.bluez.GattCharacteristic1", "StopNotify"
   );
@@ -170,7 +170,7 @@ void DeviceBackendGATT::stop_notify(const std::string &char_path) {
   }
 }
 
-GattPathType DeviceBackendGATT::classify_gatt_path(const std::string &path) {
+GattPathType DeviceInGatt::classify_gatt_path(const std::string &path) {
   if (path.find("/char") != std::string::npos) {
     return GattPathType::Characteristic;
   }
@@ -180,7 +180,7 @@ GattPathType DeviceBackendGATT::classify_gatt_path(const std::string &path) {
   return GattPathType::Device;
 }
 
-std::string DeviceBackendGATT::derive_device_path_from_char_path(const std::string &char_path) {
+std::string DeviceInGatt::derive_device_path_from_char_path(const std::string &char_path) {
   std::string prefix = "/service";
   size_t pos = char_path.find(prefix);
   if (pos == std::string::npos) {
@@ -189,7 +189,7 @@ std::string DeviceBackendGATT::derive_device_path_from_char_path(const std::stri
   return char_path.substr(0, pos);
 }
 
-DBusMessage *DeviceBackendGATT::get_managed_objects() {
+DBusMessage *DeviceInGatt::get_managed_objects() {
   DBusMessage *msg = dbus_message_new_method_call(
       "org.bluez", "/", "org.freedesktop.DBus.ObjectManager", "GetManagedObjects"
   );
@@ -199,7 +199,7 @@ DBusMessage *DeviceBackendGATT::get_managed_objects() {
   return resp;
 }
 
-std::string DeviceBackendGATT::get_characteristic_uuid(const std::string &path) {
+std::string DeviceInGatt::get_characteristic_uuid(const std::string &path) {
   DBusMessage *msg = get_managed_objects();
   if (!msg) {
     return "";
@@ -297,7 +297,7 @@ std::string DeviceBackendGATT::get_characteristic_uuid(const std::string &path) 
   return "";
 }
 
-std::vector<std::string> DeviceBackendGATT::get_characteristic_flags(const std::string &path) {
+std::vector<std::string> DeviceInGatt::get_characteristic_flags(const std::string &path) {
   std::vector<std::string> out;
 
   DBusMessage *msg = get_managed_objects();
@@ -372,7 +372,7 @@ std::vector<std::string> DeviceBackendGATT::get_characteristic_flags(const std::
   return out;
 }
 
-void DeviceBackendGATT::print_characteristic_inspect_line(const std::string &ch) {
+void DeviceInGatt::print_characteristic_inspect_line(const std::string &ch) {
   // Extract service and characteristic handles from DBus path
   std::string service_hex = "0000";
   std::string char_hex = "0000";
@@ -412,7 +412,7 @@ void DeviceBackendGATT::print_characteristic_inspect_line(const std::string &ch)
             << ", flags=" << fl.str() << std::endl;
 }
 
-bool DeviceBackendGATT::characteristic_supports_notify(const std::string &char_path) {
+bool DeviceInGatt::characteristic_supports_notify(const std::string &char_path) {
   DBusMessage *msg;
   DBusMessage *reply;
   DBusMessageIter args;
@@ -460,7 +460,7 @@ bool DeviceBackendGATT::characteristic_supports_notify(const std::string &char_p
   return supports;
 }
 
-std::string DeviceBackendGATT::resolve_gatt_paths(
+std::string DeviceInGatt::resolve_gatt_paths(
     const InputDecl &decl,
     std::vector<std::string> *found_characteristics
 ) {
@@ -527,7 +527,7 @@ std::string DeviceBackendGATT::resolve_gatt_paths(
 }
 
 std::vector<std::string>
-DeviceBackendGATT::get_matching_devices(const InputDecl &decl, DBusMessageIter &array) {
+DeviceInGatt::get_matching_devices(const InputDecl &decl, DBusMessageIter &array) {
   std::vector<std::string> result;
 
   DBusMessageIter it = array;
@@ -613,7 +613,7 @@ DeviceBackendGATT::get_matching_devices(const InputDecl &decl, DBusMessageIter &
   return result;
 }
 
-std::vector<std::string> DeviceBackendGATT::get_matching_services(
+std::vector<std::string> DeviceInGatt::get_matching_services(
     const InputDecl &decl,
     const std::vector<std::string> &candidate_devices,
     DBusMessageIter &array
@@ -667,7 +667,7 @@ std::vector<std::string> DeviceBackendGATT::get_matching_services(
   return result;
 }
 
-std::vector<std::string> DeviceBackendGATT::get_matching_characteristics(
+std::vector<std::string> DeviceInGatt::get_matching_characteristics(
     const InputDecl &decl,
     const std::vector<std::string> &candidate_services,
     DBusMessageIter &array
@@ -720,7 +720,7 @@ std::vector<std::string> DeviceBackendGATT::get_matching_characteristics(
   return result;
 }
 
-bool DeviceBackendGATT::read_characteristic(
+bool DeviceInGatt::read_characteristic(
     const std::string &char_path,
     std::vector<uint8_t> &out_data
 ) {
@@ -769,7 +769,7 @@ bool DeviceBackendGATT::read_characteristic(
   return true;
 }
 
-bool DeviceBackendGATT::write_characteristic(
+bool DeviceInGatt::write_characteristic(
     const std::string &char_path,
     const uint8_t *data,
     size_t len,

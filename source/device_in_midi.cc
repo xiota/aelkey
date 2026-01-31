@@ -1,4 +1,4 @@
-#include "device_backend_midi.h"
+#include "device_in_midi.h"
 
 #include <cstdio>
 #include <cstring>
@@ -11,7 +11,7 @@
 
 static constexpr size_t MIDI_RINGBUFFER_BYTES = 64 * 1024;
 
-DeviceBackendMidi::~DeviceBackendMidi() {
+DeviceInMidi::~DeviceInMidi() {
   if (tick_fd_ >= 0) {
     TickScheduler::instance().unregister_fd(tick_fd_);
     tick_fd_ = -1;
@@ -27,7 +27,7 @@ DeviceBackendMidi::~DeviceBackendMidi() {
   }
 }
 
-bool DeviceBackendMidi::on_init() {
+bool DeviceInMidi::on_init() {
   if (client_) {
     return true;
   }
@@ -52,7 +52,7 @@ bool DeviceBackendMidi::on_init() {
     return false;
   }
 
-  jack_set_process_callback(client_, &DeviceBackendMidi::process_cb, this);
+  jack_set_process_callback(client_, &DeviceInMidi::process_cb, this);
 
   if (jack_activate(client_) != 0) {
     std::fprintf(stderr, "MIDI: failed to activate JACK client\n");
@@ -64,7 +64,7 @@ bool DeviceBackendMidi::on_init() {
   return true;
 }
 
-std::string DeviceBackendMidi::ensure_client_name(const InputDecl &decl) {
+std::string DeviceInMidi::ensure_client_name(const InputDecl &decl) {
   // If user specified a client and we haven't overridden yet, rename once.
   if (!decl.client.empty() && client_name_ != decl.client) {
     // Only allow this before any ports are registered.
@@ -92,7 +92,7 @@ std::string DeviceBackendMidi::ensure_client_name(const InputDecl &decl) {
       return client_name_;
     }
 
-    jack_set_process_callback(client_, &DeviceBackendMidi::process_cb, this);
+    jack_set_process_callback(client_, &DeviceInMidi::process_cb, this);
 
     if (jack_activate(client_) != 0) {
       std::fprintf(stderr, "MIDI: failed to activate JACK client '%s'\n", client_name_.c_str());
@@ -105,7 +105,7 @@ std::string DeviceBackendMidi::ensure_client_name(const InputDecl &decl) {
   return client_name_;
 }
 
-std::string DeviceBackendMidi::sanitize_port_name(const std::string &name) const {
+std::string DeviceInMidi::sanitize_port_name(const std::string &name) const {
   std::string out = name;
   for (char &c : out) {
     if (!(std::isalnum(static_cast<unsigned char>(c)) || c == '_' || c == '-')) {
@@ -115,11 +115,11 @@ std::string DeviceBackendMidi::sanitize_port_name(const std::string &name) const
   return out;
 }
 
-std::string DeviceBackendMidi::make_default_port_name(const InputDecl &decl) const {
+std::string DeviceInMidi::make_default_port_name(const InputDecl &decl) const {
   return sanitize_port_name("midi_" + decl.id);
 }
 
-bool DeviceBackendMidi::match(const InputDecl &decl, std::string &devnode_out) {
+bool DeviceInMidi::match(const InputDecl &decl, std::string &devnode_out) {
   lazy_init();
   if (!client_) {
     return false;
@@ -159,7 +159,7 @@ bool DeviceBackendMidi::match(const InputDecl &decl, std::string &devnode_out) {
   return true;
 }
 
-bool DeviceBackendMidi::attach(const std::string &devnode, InputDecl &decl) {
+bool DeviceInMidi::attach(const std::string &devnode, InputDecl &decl) {
   lazy_init();
   if (!client_) {
     return false;
@@ -219,7 +219,7 @@ bool DeviceBackendMidi::attach(const std::string &devnode, InputDecl &decl) {
   return true;
 }
 
-bool DeviceBackendMidi::detach(const std::string &id) {
+bool DeviceInMidi::detach(const std::string &id) {
   lazy_init();
   if (!client_) {
     return false;
@@ -244,13 +244,13 @@ bool DeviceBackendMidi::detach(const std::string &id) {
   return true;
 }
 
-int DeviceBackendMidi::process_cb(jack_nframes_t nframes, void *arg) {
-  auto *self = static_cast<DeviceBackendMidi *>(arg);
+int DeviceInMidi::process_cb(jack_nframes_t nframes, void *arg) {
+  auto *self = static_cast<DeviceInMidi *>(arg);
   self->process(nframes);
   return 0;
 }
 
-void DeviceBackendMidi::process(jack_nframes_t nframes) {
+void DeviceInMidi::process(jack_nframes_t nframes) {
   if (!ring_) {
     return;
   }
@@ -275,7 +275,7 @@ void DeviceBackendMidi::process(jack_nframes_t nframes) {
   }
 }
 
-void DeviceBackendMidi::push_event(const MidiEvent &ev) {
+void DeviceInMidi::push_event(const MidiEvent &ev) {
   if (!ring_) {
     return;
   }
@@ -300,7 +300,7 @@ void DeviceBackendMidi::push_event(const MidiEvent &ev) {
   }
 }
 
-bool DeviceBackendMidi::pop_event(MidiEvent &out) {
+bool DeviceInMidi::pop_event(MidiEvent &out) {
   if (!ring_) {
     return false;
   }
@@ -333,7 +333,7 @@ bool DeviceBackendMidi::pop_event(MidiEvent &out) {
   return true;
 }
 
-void DeviceBackendMidi::dispatch_batch_to_lua(
+void DeviceInMidi::dispatch_batch_to_lua(
     const std::string &id,
     const std::vector<MidiEvent> &events
 ) {
@@ -382,7 +382,7 @@ void DeviceBackendMidi::dispatch_batch_to_lua(
   }
 }
 
-void DeviceBackendMidi::pump_messages() {
+void DeviceInMidi::pump_messages() {
   MidiEvent ev;
 
   // Drain ringbuffer into per-device batches

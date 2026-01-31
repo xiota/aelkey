@@ -6,7 +6,7 @@
 
 #include "aelkey_state.h"
 #include "device_declarations.h"
-#include "device_manager.h"
+#include "device_in_manager.h"
 #include "dispatcher_udev.h"
 
 // Lua: open_device([dev_id])
@@ -51,11 +51,11 @@ sol::object device_open(sol::this_state ts, sol::optional<std::string> dev_id_op
     }
 
     std::string devnode;
-    if (!DeviceManager::instance().match(decl, devnode)) {
+    if (!DeviceInManager::instance().match(decl, devnode)) {
       continue;
     }
 
-    if (DeviceManager::instance().attach(devnode, decl)) {
+    if (DeviceInManager::instance().attach(devnode, decl)) {
       decl.devnode = devnode;
       DispatcherUdev::instance().notify_state_change(decl, "add");
       ok = true;
@@ -71,7 +71,7 @@ sol::object device_open(sol::this_state ts, sol::optional<std::string> dev_id_op
 sol::object device_close(sol::this_state ts, const std::string &dev_id) {
   sol::state_view lua(ts);
 
-  auto removed = DeviceManager::instance().detach(dev_id);
+  auto removed = DeviceInManager::instance().detach(dev_id);
   bool ok = removed && !removed->id.empty();
 
   return sol::make_object(lua, ok);

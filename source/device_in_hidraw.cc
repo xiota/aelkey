@@ -1,4 +1,4 @@
-#include "device_backend_hidraw.h"
+#include "device_in_hidraw.h"
 
 #include <fcntl.h>
 #include <libudev.h>
@@ -9,7 +9,7 @@
 #include "dispatcher_hidraw.h"
 #include "dispatcher_udev.h"
 
-bool DeviceBackendHidraw::match(const InputDecl &decl, std::string &devnode_out) {
+bool DeviceInHidraw::match(const InputDecl &decl, std::string &devnode_out) {
   if (decl.type != "hidraw") {
     return false;
   }
@@ -97,7 +97,7 @@ bool DeviceBackendHidraw::match(const InputDecl &decl, std::string &devnode_out)
   return false;
 }
 
-bool DeviceBackendHidraw::attach(const std::string &devnode, InputDecl &decl) {
+bool DeviceInHidraw::attach(const std::string &devnode, InputDecl &decl) {
   int fd = DispatcherHidraw::instance().open_device(devnode, decl);
   if (fd < 0) {
     return false;
@@ -108,12 +108,12 @@ bool DeviceBackendHidraw::attach(const std::string &devnode, InputDecl &decl) {
   return true;
 }
 
-bool DeviceBackendHidraw::detach(const std::string &id) {
+bool DeviceInHidraw::detach(const std::string &id) {
   DispatcherHidraw::instance().remove_device(id);
   return true;
 }
 
-int DeviceBackendHidraw::get_interface_num(const std::string &devnode) {
+int DeviceInHidraw::get_interface_num(const std::string &devnode) {
   struct udev *udev = DispatcherUdev::instance().get_udev();
 
   struct udev_device *dev = udev_device_new_from_subsystem_sysname(

@@ -9,8 +9,8 @@
 #include <jack/ringbuffer.h>
 
 #include "aelkey_state.h"
-#include "device_backend.h"
 #include "device_declarations.h"
+#include "device_in.h"
 #include "singleton.h"
 
 struct MidiEvent {
@@ -23,12 +23,12 @@ struct MidiBatch {
   std::vector<MidiEvent> events;
 };
 
-class DeviceBackendMidi : public DeviceBackend, public Singleton<DeviceBackendMidi> {
-  friend class Singleton<DeviceBackendMidi>;
+class DeviceInMidi : public DeviceIn, public Singleton<DeviceInMidi> {
+  friend class Singleton<DeviceInMidi>;
 
  protected:
-  DeviceBackendMidi() = default;
-  ~DeviceBackendMidi();
+  DeviceInMidi() = default;
+  ~DeviceInMidi();
 
   bool on_init() override;
 

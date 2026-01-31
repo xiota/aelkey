@@ -10,7 +10,7 @@
 
 #include "aelkey_state.h"
 #include "device_declarations.h"
-#include "device_manager.h"
+#include "device_in_manager.h"
 #include "dispatcher.h"
 #include "dispatcher_haptics.h"
 #include "dispatcher_udev.h"
@@ -119,7 +119,7 @@ class DispatcherEvdev : public Dispatcher<DispatcherEvdev> {
 
     // HUP/ERR → detach device
     if (events & (EPOLLHUP | EPOLLERR)) {
-      auto removed = DeviceManager::instance().detach(decl.id);
+      auto removed = DeviceInManager::instance().detach(decl.id);
       if (removed && !removed->id.empty()) {
         DispatcherUdev::instance().notify_state_change(*removed, "remove");
       }

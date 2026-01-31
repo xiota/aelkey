@@ -7,15 +7,15 @@
 
 #include <libusb-1.0/libusb.h>
 
-#include "device_backend.h"
+#include "device_in.h"
 #include "singleton.h"
 
-class DeviceBackendLibUSB : public DeviceBackend, public Singleton<DeviceBackendLibUSB> {
-  friend class Singleton<DeviceBackendLibUSB>;
+class DeviceInLibUSB : public DeviceIn, public Singleton<DeviceInLibUSB> {
+  friend class Singleton<DeviceInLibUSB>;
 
  protected:
-  DeviceBackendLibUSB() = default;
-  ~DeviceBackendLibUSB() {
+  DeviceInLibUSB() = default;
+  ~DeviceInLibUSB() {
     if (libusb_) {
       libusb_exit(libusb_);
       libusb_ = nullptr;

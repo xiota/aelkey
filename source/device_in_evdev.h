@@ -4,17 +4,17 @@
 #include <string>
 
 #include "aelkey_state.h"
-#include "device_backend.h"
 #include "device_declarations.h"
 #include "device_helpers.h"
+#include "device_in.h"
 #include "singleton.h"
 
-class DeviceBackendEvdev : public DeviceBackend, public Singleton<DeviceBackendEvdev> {
-  friend class Singleton<DeviceBackendEvdev>;
+class DeviceInEvdev : public DeviceIn, public Singleton<DeviceInEvdev> {
+  friend class Singleton<DeviceInEvdev>;
 
  protected:
-  DeviceBackendEvdev() = default;
-  ~DeviceBackendEvdev() = default;
+  DeviceInEvdev() = default;
+  ~DeviceInEvdev() = default;
 
  public:
   bool match(const InputDecl &decl, std::string &devnode_out) override;

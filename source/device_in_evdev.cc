@@ -1,4 +1,4 @@
-#include "device_backend_evdev.h"
+#include "device_in_evdev.h"
 
 #include <fcntl.h>
 #include <libevdev/libevdev.h>
@@ -7,7 +7,7 @@
 #include "dispatcher_evdev.h"
 #include "dispatcher_udev.h"
 
-bool DeviceBackendEvdev::match(const InputDecl &decl, std::string &devnode_out) {
+bool DeviceInEvdev::match(const InputDecl &decl, std::string &devnode_out) {
   if (decl.type != "evdev") {
     return false;
   }
@@ -75,7 +75,7 @@ bool DeviceBackendEvdev::match(const InputDecl &decl, std::string &devnode_out) 
   return false;
 }
 
-bool DeviceBackendEvdev::attach(const std::string &devnode, InputDecl &decl) {
+bool DeviceInEvdev::attach(const std::string &devnode, InputDecl &decl) {
   if (DispatcherEvdev::instance().open_device(devnode, decl)) {
     return true;
   }
@@ -83,7 +83,7 @@ bool DeviceBackendEvdev::attach(const std::string &devnode, InputDecl &decl) {
   return false;
 }
 
-bool DeviceBackendEvdev::detach(const std::string &id) {
+bool DeviceInEvdev::detach(const std::string &id) {
   auto &state = AelkeyState::instance();
   auto it = state.input_map.find(id);
   if (it == state.input_map.end()) {

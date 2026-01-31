@@ -8,18 +8,18 @@
 #include <dbus/dbus.h>
 
 #include "aelkey_state.h"
-#include "device_backend.h"
 #include "device_declarations.h"
+#include "device_in.h"
 #include "singleton.h"
 
 enum class GattPathType { Device, Service, Characteristic };
 
-class DeviceBackendGATT : public DeviceBackend, public Singleton<DeviceBackendGATT> {
-  friend class Singleton<DeviceBackendGATT>;
+class DeviceInGatt : public DeviceIn, public Singleton<DeviceInGatt> {
+  friend class Singleton<DeviceInGatt>;
 
  protected:
-  DeviceBackendGATT() = default;
-  ~DeviceBackendGATT() {
+  DeviceInGatt() = default;
+  ~DeviceInGatt() {
     if (conn_) {
       dbus_connection_unref(conn_);
       conn_ = nullptr;
@@ -31,7 +31,6 @@ class DeviceBackendGATT : public DeviceBackend, public Singleton<DeviceBackendGA
   bool auto_init_ = true;
 
  public:
-  // device_backend_gatt.h (inside public:)
   bool match(const InputDecl &decl, std::string &devnode_out) override {
     lazy_init();
     if (!conn_) {

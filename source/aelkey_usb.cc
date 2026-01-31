@@ -10,8 +10,8 @@
 
 #include "aelkey_hid.h"
 #include "aelkey_state.h"
-#include "device_backend_libusb.h"
-#include "device_manager.h"
+#include "device_in_libusb.h"
+#include "device_in_manager.h"
 #include "dispatcher_udev.h"
 
 // Map libusb_transfer_type enum → string
@@ -125,7 +125,7 @@ static void LIBUSB_CALL dispatch_libusb(libusb_transfer *transfer) {
     }
 
     case LIBUSB_TRANSFER_NO_DEVICE: {
-      auto result = DeviceManager::instance().detach(decl->id);
+      auto result = DeviceInManager::instance().detach(decl->id);
       DispatcherUdev::instance().notify_state_change(*result, "remove");
       break;
     }
@@ -135,7 +135,7 @@ static void LIBUSB_CALL dispatch_libusb(libusb_transfer *transfer) {
     default: {
       libusb_device_descriptor desc;
 
-      auto &backend = DeviceBackendLibUSB::instance();
+      auto &backend = DeviceInLibUSB::instance();
       libusb_device_handle *handle = backend.get_handle(decl->id);
 
       int rc = -1;
@@ -144,7 +144,7 @@ static void LIBUSB_CALL dispatch_libusb(libusb_transfer *transfer) {
       }
       if (rc != 0) {
         // device is gone
-        auto result = DeviceManager::instance().detach(decl->id);
+        auto result = DeviceInManager::instance().detach(decl->id);
         DispatcherUdev::instance().notify_state_change(*result, "remove");
       } else {
         // fatal or cancelled
@@ -164,7 +164,7 @@ sol::object usb_bulk_transfer(sol::this_state ts, sol::table opts) {
   // device id
   std::string dev_id = opts.get<std::string>("device");
 
-  auto &backend = DeviceBackendLibUSB::instance();
+  auto &backend = DeviceInLibUSB::instance();
   libusb_device_handle *handle = backend.get_handle(dev_id);
   if (!handle) {
     sol::table result = lua.create_table();
@@ -236,7 +236,7 @@ sol::object usb_control_transfer(sol::this_state ts, sol::table opts) {
   // device id
   std::string dev_id = opts.get<std::string>("device");
 
-  auto &backend = DeviceBackendLibUSB::instance();
+  auto &backend = DeviceInLibUSB::instance();
   libusb_device_handle *handle = backend.get_handle(dev_id);
   if (!handle) {
     sol::table result = lua.create_table();
@@ -333,7 +333,7 @@ sol::object usb_interrupt_transfer(sol::this_state ts, sol::table opts) {
   // device id
   std::string dev_id = opts.get<std::string>("device");
 
-  auto &backend = DeviceBackendLibUSB::instance();
+  auto &backend = DeviceInLibUSB::instance();
   libusb_device_handle *handle = backend.get_handle(dev_id);
   if (!handle) {
     sol::table result = lua.create_table();
@@ -406,7 +406,7 @@ sol::object usb_submit_transfer(sol::this_state ts, sol::table opts) {
   // device id
   std::string dev_id = opts.get<std::string>("device");
 
-  auto &backend = DeviceBackendLibUSB::instance();
+  auto &backend = DeviceInLibUSB::instance();
   libusb_device_handle *handle = backend.get_handle(dev_id);
   if (!handle) {
     sol::table result = lua.create_table();

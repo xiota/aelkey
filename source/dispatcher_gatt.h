@@ -1,6 +1,6 @@
 #pragma once
 
-#include "device_backend_gatt.h"
+#include "device_in_gatt.h"
 #include "dispatcher.h"
 
 class DispatcherGATT : public Dispatcher<DispatcherGATT> {
@@ -14,13 +14,13 @@ class DispatcherGATT : public Dispatcher<DispatcherGATT> {
 
   void handle_event(EpollPayload *, uint32_t events) override {
     if (events & EPOLLIN) {
-      DeviceBackendGATT::instance().pump_messages();
+      DeviceInGatt::instance().pump_messages();
     }
   }
 
  protected:
   bool on_init() override {
-    int fd = DeviceBackendGATT::instance().fd();
+    int fd = DeviceInGatt::instance().fd();
     if (fd < 0) {
       return false;
     }
