@@ -66,6 +66,7 @@ sudo meson install -C build
 
 * [Device Tables](docs/ref-device-tables.md)
 * [General API](docs/ref-general-api.md)
+* [Force Feedback and Haptics](docs/ref-haptics.md)
 * [Input and Other Helpers](docs/ref-helpers.md)
 
 **Other**
