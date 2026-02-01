@@ -49,14 +49,14 @@ outputs = {
   {
     ----- Common -----
     id         = "<string>", -- Unique identifier used in events and callbacks
-    type       = "<string>", -- predefined uinput type
+    type       = "<string>", -- Virtual device type: uinput
 
     -- callbacks --
     on_haptics = "<string>", -- function name to receive haptic events
 
     ----- uinput -----
-    -- type = "digitizer" | "imu" | "keyboard" | "mouse" |
-              "touchpad" | "touchpad_mt" | "touchscreen",
+    profile    = "digitizer" | "imu" | "keyboard" | "mouse" |
+                 "touchpad" | "touchpad_mt" | "touchscreen",
     name       = "<string>", -- device name for matching
     bus        = "<string>", -- bus type ("usb", "bluetooth")
     vendor     = <int>,

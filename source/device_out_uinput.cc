@@ -155,7 +155,7 @@ static libevdev_uinput *create_output_device(const OutputDecl &out) {
   libevdev_set_id_product(dev, out.product);
   libevdev_set_id_version(dev, out.version);
 
-  if (out.type == "keyboard") {
+  if (out.profile == "keyboard") {
     enable_codes(dev, EV_KEY, aelkey::capabilities::keyboard_keys);
 
     // scan codes
@@ -166,9 +166,9 @@ static libevdev_uinput *create_output_device(const OutputDecl &out) {
     libevdev_enable_event_type(dev, EV_REP);
     libevdev_enable_event_code(dev, EV_REP, REP_DELAY, nullptr);
     libevdev_enable_event_code(dev, EV_REP, REP_PERIOD, nullptr);
-  } else if (out.type == "consumer") {
+  } else if (out.profile == "consumer") {
     enable_codes(dev, EV_KEY, aelkey::capabilities::consumer_keys);
-  } else if (out.type == "gamepad") {
+  } else if (out.profile == "gamepad") {
     enable_codes(dev, EV_KEY, aelkey::capabilities::gamepad_buttons);
     enable_codes(dev, EV_ABS, aelkey::capabilities::gamepad_abs);
     enable_codes(dev, EV_FF, aelkey::capabilities::gamepad_ff);
@@ -176,7 +176,7 @@ static libevdev_uinput *create_output_device(const OutputDecl &out) {
     // Override ABS_X/ABS_Y to stick range
     libevdev_enable_event_code(dev, EV_ABS, ABS_X, &stick_default);
     libevdev_enable_event_code(dev, EV_ABS, ABS_Y, &stick_default);
-  } else if (out.type == "imu") {
+  } else if (out.profile == "imu") {
     libevdev_enable_event_type(dev, EV_ABS);
     libevdev_enable_event_code(dev, EV_ABS, ABS_X, &accel_default);
     libevdev_enable_event_code(dev, EV_ABS, ABS_Y, &accel_default);
@@ -187,23 +187,23 @@ static libevdev_uinput *create_output_device(const OutputDecl &out) {
 
     libevdev_enable_event_type(dev, EV_MSC);
     libevdev_enable_event_code(dev, EV_MSC, MSC_TIMESTAMP, nullptr);
-  } else if (out.type == "mouse") {
+  } else if (out.profile == "mouse") {
     enable_codes(dev, EV_KEY, aelkey::capabilities::mouse_buttons);
     enable_codes(dev, EV_REL, aelkey::capabilities::mouse_rel);
-  } else if (out.type == "touchpad") {
+  } else if (out.profile == "touchpad") {
     enable_codes(dev, EV_KEY, aelkey::capabilities::touchpad_buttons);
     enable_codes(dev, EV_REL, aelkey::capabilities::touchpad_rel);
     enable_codes(dev, EV_ABS, aelkey::capabilities::touchpad_abs);
     libevdev_enable_property(dev, INPUT_PROP_POINTER);
-  } else if (out.type == "touchpad_mt") {
+  } else if (out.profile == "touchpad_mt") {
     enable_codes(dev, EV_KEY, aelkey::capabilities::touchpad_buttons);
     enable_codes(dev, EV_ABS, aelkey::capabilities::touchpad_mt_abs);
     libevdev_enable_property(dev, INPUT_PROP_POINTER);
-  } else if (out.type == "touchscreen") {
+  } else if (out.profile == "touchscreen") {
     enable_codes(dev, EV_KEY, aelkey::capabilities::touchscreen_keys);
     enable_codes(dev, EV_ABS, aelkey::capabilities::touchscreen_abs);
     libevdev_enable_property(dev, INPUT_PROP_DIRECT);
-  } else if (out.type == "digitizer") {
+  } else if (out.profile == "digitizer") {
     enable_codes(dev, EV_KEY, aelkey::capabilities::digitizer_keys);
     enable_codes(dev, EV_ABS, aelkey::capabilities::digitizer_abs);
     libevdev_enable_property(dev, INPUT_PROP_DIRECT);

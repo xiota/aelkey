@@ -148,6 +148,11 @@ OutputDecl parse_output(sol::table tbl) {
     decl.type = v.as<std::string>();
   }
 
+  // profile
+  if (sol::object v = tbl["profile"]; v.valid() && v.is<std::string>()) {
+    decl.profile = v.as<std::string>();
+  }
+
   // vendor
   if (sol::object v = tbl["vendor"]; v.valid() && v.is<int>()) {
     decl.vendor = v.as<int>();
