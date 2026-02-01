@@ -3,7 +3,7 @@
 #include <sol/sol.hpp>
 
 #include "device_in_manager.h"
-#include "device_out_uinput.h"
+#include "device_out_manager.h"
 #include "device_parser.h"
 #include "dispatcher_udev.h"
 
@@ -22,13 +22,14 @@ bool AelkeyState::on_init() {
 }
 
 void AelkeyState::attach_inputs_from_decls(sol::this_state ts) {
+  auto &devmgr = DeviceInManager::instance();
   for (auto &decl : input_decls) {
     std::string devnode;
-    if (!DeviceInManager::instance().match(decl, devnode)) {
+    if (!devmgr.match(decl, devnode)) {
       continue;
     }
 
-    if (DeviceInManager::instance().attach(devnode, decl)) {
+    if (devmgr.attach(devnode, decl)) {
       decl.devnode = devnode;
       DispatcherUdev::instance().notify_state_change(decl, "add");
     }
@@ -36,9 +37,9 @@ void AelkeyState::attach_inputs_from_decls(sol::this_state ts) {
 }
 
 void AelkeyState::create_outputs_from_decls() {
-  auto &outmgr = DeviceOutUinput::instance();
+  auto &devmgr = DeviceOutManager::instance();
   for (auto &decl : output_decls) {
-    outmgr.create(decl);
+    devmgr.create(decl);
   }
 }
 
