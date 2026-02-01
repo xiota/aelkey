@@ -38,6 +38,11 @@ Asynchronous functions additionally have `{..., endpoint, transfer}`.
 - `read{device[, service, characteristic]}` - synchronous read from a characteristic.
 - `write{device, data [, response] [, service, characteristic]}` - write to a characteristic (default `response = false`).
 
+### MIDI Messages (`aelkey.midi`)
+
+- `send(dev_id, data)` – send a MIDI message to a virtual MIDI output device.
+  `data` may be a table of bytes or a raw binary string.
+
 ### Haptics, Force Feedback, and Rumble (`aelkey.haptics`)
 
 - `play(dev_id, effect_table)` - Trigger an effect. The table must contain source and id.

@@ -29,8 +29,12 @@ inputs = {
     on_state   = "<string>", -- Function name to receive connect/disconnect notifications
 
     ----- gatt -----
-    service        = <int>, -- GATT service handle
-    characteristic = <int>, -- GATT characteristic handle
+    service        = <int>,  -- GATT service handle
+    characteristic = <int>,  -- GATT characteristic handle
+
+    ----- midi -----
+    client     = "<string>", -- JACK client name override, default: "Aelkey_MidiIn_<pid>"
+    port       = "<string>", -- JACK port name override,   default: "<id>"
   },
 }
 ```
@@ -51,18 +55,24 @@ outputs = {
     id         = "<string>", -- Unique identifier used in events and callbacks
     type       = "<string>", -- Virtual device type: uinput
 
+    -- for matching --
+    name       = "<string>", -- device name
+
     -- callbacks --
     on_haptics = "<string>", -- function name to receive haptic events
 
     ----- uinput -----
     profile    = "digitizer" | "imu" | "keyboard" | "mouse" |
                  "touchpad" | "touchpad_mt" | "touchscreen",
-    name       = "<string>", -- device name for matching
     bus        = "<string>", -- bus type ("usb", "bluetooth")
     vendor     = <int>,
     product    = <int>,
     version    = <int>,      -- version identifier
     capabilities = { <string>, ... },  -- optional
+
+    ----- midi -----
+    client     = "<string>", -- JACK client name override, default: "Aelkey_MidiOut_<pid>"
+    port       = "<string>", -- JACK port name override,   default: "<id>"
   },
 }
 ```
@@ -94,10 +104,10 @@ The hidraw event callback receives a single table.
 
 ```lua
 {
-  device = "<id string>",   -- ctx.decl.id
-  data = "<binary string>", -- raw HID report payload
-  size   = <int>,           -- number of bytes read
-  status = "<string>",      -- completion status ("ok", "error")
+  device   = "<id string>",     -- decl.id
+  data     = "<binary string>", -- raw HID report payload
+  size     = <int>,             -- number of bytes read
+  status   = "<string>",        -- completion status ("ok", "error")
 }
 ```
 
@@ -107,7 +117,7 @@ The libusb event callback receives a single table, similar to hidraw, but with a
 
 ```lua
 {
-  device   = "<id string>",     -- ctx.decl.id
+  device   = "<id string>",     -- decl.id
   data     = "<binary string>", -- raw USB data payload
   size     = <int>,             -- size of data payload in bytes
   status   = "<string>",        -- completion status ("ok", "stall", "timeout", etc.)
@@ -123,12 +133,31 @@ The gatt event callback receives a single table, similar to hidraw, but with add
 
 ```lua
 {
-  device   = "<id string>",     -- ctx.decl.id
+  device   = "<id string>",     -- decl.id
   data     = "<binary string>", -- raw USB data payload
   size     = <int>,             -- size of data payload in bytes
   status   = "<string>",        -- "ok", "error"
 
   path     = "<characteristic path>",
+}
+```
+
+#### `midi` events
+
+The midi event callback receives a table of message tables.
+
+```lua
+{
+  [1] = {
+    device    = "<id string>",     -- decl.id
+    data      = "<binary string>", -- MIDI message data payload
+    size      = <int>,             -- size of data payload in bytes
+    status    = "<string>",        -- completion status
+
+    timestamp = <int>,             -- when event was received (microseconds)
+  },
+  [2] = { ... },
+  ...
 }
 ```
 
