@@ -38,7 +38,7 @@ bool DeviceInMidi::on_init() {
     return false;
   }
 
-  client_name_ = "Aelkey_" + std::to_string(getpid());
+  client_name_ = "Aelkey_MidiIn_" + std::to_string(getpid());
 
   jack_status_t status{};
   client_ = jack_client_open(client_name_.c_str(), JackNoStartServer, &status);
@@ -116,7 +116,7 @@ std::string DeviceInMidi::sanitize_port_name(const std::string &name) const {
 }
 
 std::string DeviceInMidi::make_default_port_name(const InputDecl &decl) const {
-  return sanitize_port_name("midi_" + decl.id);
+  return sanitize_port_name(decl.id);
 }
 
 bool DeviceInMidi::match(const InputDecl &decl, std::string &devnode_out) {
@@ -129,10 +129,13 @@ bool DeviceInMidi::match(const InputDecl &decl, std::string &devnode_out) {
     return false;
   }
 
+  // if decl.name unspecified, make an open-ended port (no auto-connect)
   if (decl.name.empty()) {
-    return false;
+    devnode_out = "jack:midi:" + decl.id;  // synthetic devnode
+    return true;
   }
 
+  // normal name matching
   const char **ports =
       jack_get_ports(client_, nullptr, JACK_DEFAULT_MIDI_TYPE, JackPortIsOutput);
   if (!ports) {
@@ -190,12 +193,15 @@ bool DeviceInMidi::attach(const std::string &devnode, InputDecl &decl) {
     return false;
   }
 
-  if (jack_connect(client_, src.c_str(), jack_port_name(in)) != 0) {
-    std::fprintf(
-        stderr, "MIDI: failed to connect '%s' -> '%s'\n", src.c_str(), jack_port_name(in)
-    );
-    jack_port_unregister(client_, in);
-    return false;
+  // auto-connect if decl.name was provided for matching
+  if (!decl.name.empty()) {
+    if (jack_connect(client_, src.c_str(), jack_port_name(in)) != 0) {
+      std::fprintf(
+          stderr, "MIDI: failed to connect '%s' -> '%s'\n", src.c_str(), jack_port_name(in)
+      );
+      jack_port_unregister(client_, in);
+      return false;
+    }
   }
 
   inputs_[decl.id] = in;
