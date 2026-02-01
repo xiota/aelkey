@@ -50,26 +50,10 @@ constexpr CModule c_modules[] = {
 };
 // clang-format on
 
-sol::table load_aelkey(sol::state_view lua) {
-  sol::table mod = lua.create_table();
-
-  // Loop control
+sol::table load_modules_c(sol::state_view lua, sol::table mod) {
   mod.set_function("start", loop_start);
   mod.set_function("stop", loop_stop);
 
-  // Script modules
-  for (auto &sm : script_modules) {
-    try {
-      sol::table module = lua.script(sm.script);
-      mod[sm.name] = module;
-    } catch (const sol::error &err) {
-      throw sol::error(
-          std::string("aelkey: script module '") + sm.name + "' failed: " + err.what()
-      );
-    }
-  }
-
-  // C modules
   for (auto &cm : c_modules) {
     try {
       cm.open_func(lua.lua_state());
@@ -80,6 +64,21 @@ sol::table load_aelkey(sol::state_view lua) {
     } catch (...) {
       throw sol::error(
           std::string("aelkey: C module '") + cm.name + "' failed with unknown error"
+      );
+    }
+  }
+
+  return mod;
+}
+
+sol::table load_modules_scripts(sol::state_view lua, sol::table mod) {
+  for (auto &sm : script_modules) {
+    try {
+      sol::table module = lua.script(sm.script);
+      mod[sm.name] = module;
+    } catch (const sol::error &err) {
+      throw sol::error(
+          std::string("aelkey: script module '") + sm.name + "' failed: " + err.what()
       );
     }
   }
@@ -103,9 +102,13 @@ extern "C" int luaopen_aelkey(lua_State *L) {
       }
     }
 
-    // Normal module creation
-    sol::table mod = load_aelkey(lua);
-    lua["aelkey"] = mod;  // register global
+    // Register global
+    sol::table mod = lua.create_table();
+    lua["aelkey"] = mod;
+
+    load_modules_c(lua, mod);
+    load_modules_scripts(lua, mod);
+
     return sol::stack::push(lua, mod);
   } catch (const sol::error &err) {
     // Turn any sol::error into a real Lua error with a message
