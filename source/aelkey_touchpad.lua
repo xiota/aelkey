@@ -45,7 +45,7 @@
     tp.end_frame()
 
     tp.emit_events("virt_touchpad")
-    aelkey.syn_report("virt_touchpad")
+    aelkey.util.sync("virt_touchpad")
 
   Notes:
     • No events are emitted automatically; caller controls emission.
@@ -432,7 +432,7 @@ end
 local function emit_events(self, dev)
   for _, ev in ipairs(self.events) do
     ev.device = dev
-    aelkey.emit(ev)
+    aelkey.evdev.send(ev)
   end
   -- Clear after emitting
   self.events = {}

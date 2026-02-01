@@ -15,7 +15,7 @@
 
       kb.end_frame()
       kb.emit_events("virt_keyboard")
-      aelkey.syn_report("virt_keyboard")
+      aelkey.evdev.sync("virt_keyboard")
     end
 
   Functions:
@@ -213,7 +213,7 @@ local function emit_events(self, dev)
   local buf = self.buffer
   for i = 1, #buf do
     local e = buf[i]
-    aelkey.emit{
+    aelkey.evdev.send{
       device = dev,
       type = e.type,
       code = e.code,

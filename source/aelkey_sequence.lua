@@ -20,7 +20,7 @@
     • First pattern to complete wins
     • Timeout always fires (unless match ends session)
     • stream=true keeps session alive after match (Alt‑Tab style)
-    • Uses aelkey.tick() heartbeat like aelkey.click
+    • Uses aelkey.util.tick() heartbeat like aelkey.click
 ]]--
 
 -- Internal logic (free functions)
@@ -36,7 +36,7 @@ end
 
 local function reset(self)
   -- Stop heartbeat
-  aelkey.tick(0, self.handler)
+  aelkey.util.tick(0, self.handler)
 
   -- If stream=true and session active, force timeout_fn
   if self.stream and self.active and self.timeout_fn then
@@ -121,7 +121,7 @@ local function detect(self, button, match_cb, timeout_cb, start_cb)
     end
 
     -- Start heartbeat
-    aelkey.tick(self.interval_ms, self.handler)
+    aelkey.util.tick(self.interval_ms, self.handler)
 
     -- If a single-button pattern completed immediately
     if completed and self.match_fn then

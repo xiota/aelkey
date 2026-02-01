@@ -121,7 +121,7 @@ function M.emit_motion(dev_id, report)
   local dx = report.dx
   if dx and dx ~= 0 then
     emitted = true
-    aelkey.emit{
+    aelkey.evdev.send{
       device = dev_id,
       type   = events.dx.type,
       code   = events.dx.code,
@@ -133,7 +133,7 @@ function M.emit_motion(dev_id, report)
   local dy = report.dy
   if dy and dy ~= 0 then
     emitted = true
-    aelkey.emit{
+    aelkey.evdev.send{
       device = dev_id,
       type   = events.dy.type,
       code   = events.dy.code,
@@ -155,7 +155,7 @@ function M.emit_buttons(dev_id, report)
         local edge = aelkey.edge.detect("_aelkey_mouse_:" .. dev_id .. ":" .. name, pressed)
         if edge ~= nil then
           emitted = true
-          aelkey.emit{
+          aelkey.evdev.send{
             device = dev_id,
             type   = ev.type,
             code   = ev.code,
@@ -179,7 +179,7 @@ function M.emit_wheels(dev_id, report)
 
   if v_hr and v_hr ~= 0 then
     emitted = true
-    aelkey.emit{
+    aelkey.evdev.send{
       device = dev_id,
       type   = events.wheel_vert_hr.type,
       code   = events.wheel_vert_hr.code,
@@ -191,7 +191,7 @@ function M.emit_wheels(dev_id, report)
     -- synthesize HR event
     M.emit_wheels(dev_id, { wheel_vert_hr = v * 120 })
     -- emit standard wheel
-    aelkey.emit{
+    aelkey.evdev.send{
       device = dev_id,
       type   = events.wheel_vert.type,
       code   = events.wheel_vert.code,
@@ -205,7 +205,7 @@ function M.emit_wheels(dev_id, report)
 
   if h_hr and h_hr ~= 0 then
     emitted = true
-    aelkey.emit{
+    aelkey.evdev.send{
       device = dev_id,
       type   = events.wheel_horz_hr.type,
       code   = events.wheel_horz_hr.code,
@@ -217,7 +217,7 @@ function M.emit_wheels(dev_id, report)
     -- synthesize HR event (corrected variable)
     M.emit_wheels(dev_id, { wheel_horz_hr = h * 120 })
     -- emit standard wheel
-    aelkey.emit{
+    aelkey.evdev.send{
       device = dev_id,
       type   = events.wheel_horz.type,
       code   = events.wheel_horz.code,
@@ -238,7 +238,7 @@ function M.emit_events(dev_id, report)
         -- edge detection for buttons
         if aelkey.edge.detect("_mouse:"..dev_id..":"..field, value) ~= nil then
           emitted = true
-          aelkey.emit{
+          aelkey.evdev.send{
             device = dev_id,
             type   = ev.type,
             code   = ev.code,
@@ -249,7 +249,7 @@ function M.emit_events(dev_id, report)
         -- direct emit for motion/wheels
         if value ~= 0 then
           emitted = true
-          aelkey.emit{
+          aelkey.evdev.send{
             device = dev_id,
             type   = ev.type,
             code   = ev.code,

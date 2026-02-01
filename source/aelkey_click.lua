@@ -8,7 +8,7 @@
     aelkey.click.reset()
 
   Notes:
-    • Uses aelkey.tick() heartbeat for timing
+    • Uses aelkey.util.tick() heartbeat for timing
     • Flushes a pending single immediately if a different button is pressed
     • Emits clicks immediately when no higher level is defined
 ]]--
@@ -60,7 +60,7 @@ function M.reset()
   single_action = nil
   double_action = nil
   triple_action = nil
-  aelkey.tick(0, click_handler) -- stop heartbeat
+  aelkey.util.tick(0, click_handler) -- stop heartbeat
 end
 
 -- Configure both window and interval
@@ -95,7 +95,7 @@ function M.detect(button, single, double, triple)
       return
     end
 
-    aelkey.tick(click_interval, click_handler)
+    aelkey.util.tick(click_interval, click_handler)
     return
   end
 

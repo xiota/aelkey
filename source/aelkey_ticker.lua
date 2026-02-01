@@ -24,7 +24,7 @@
     aelkey.ticker.stop("scroll_up")
 
   Notes:
-    • Frontend for aelkey.tick()
+    • Frontend for aelkey.util.tick()
     • Each ticker instance has its own interval, immediate flag, and callback
     • set{} creates or updates the instance for that id
     • Anonymous callbacks are safe (stable function references)
@@ -33,7 +33,7 @@
 
 -- Internal logic (free functions)
 local function reset(self)
-  aelkey.tick(0, self.handler)
+  aelkey.util.tick(0, self.handler)
   self.active = false
 end
 
@@ -46,13 +46,13 @@ local function start(self)
     self.fn()
   end
 
-  aelkey.tick(self.interval_ms, self.handler)
+  aelkey.util.tick(self.interval_ms, self.handler)
 end
 
 local function stop(self)
   if not self.active then return end
   self.active = false
-  aelkey.tick(0, self.handler)
+  aelkey.util.tick(0, self.handler)
 end
 
 local function set(registry, opts)
