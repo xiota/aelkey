@@ -32,6 +32,11 @@ DeviceInManager::DeviceInManager() {
   backends_["midi"] = &DeviceInMidi::instance();
 }
 
+DeviceIn *DeviceInManager::backend_for_type(const std::string &type) {
+  auto it = backends_.find(type);
+  return (it != backends_.end()) ? it->second : nullptr;
+}
+
 bool DeviceInManager::match(const InputDecl &decl, std::string &devnode_out) {
   DeviceIn *backend = backend_for_type(decl.type);
   return backend && backend->match(decl, devnode_out);
@@ -84,9 +89,4 @@ std::optional<InputDecl> DeviceInManager::detach(const std::string &dev_id) {
   state.input_map.erase(it);
 
   return result;
-}
-
-DeviceIn *DeviceInManager::backend_for_type(const std::string &type) {
-  auto it = backends_.find(type);
-  return (it != backends_.end()) ? it->second : nullptr;
 }

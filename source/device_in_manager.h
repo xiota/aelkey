@@ -17,11 +17,11 @@ class DeviceInManager : public Singleton<DeviceInManager> {
   friend class Singleton<DeviceInManager>;
 
  public:
+  DeviceIn *backend_for_type(const std::string &type);
+
   bool match(const InputDecl &decl, std::string &devnode_out);
   bool attach(const std::string &devnode, InputDecl &decl);
   std::optional<InputDecl> detach(const std::string &dev_id);
-
-  DeviceIn *backend_for_type(const std::string &type);
 
  protected:
   DeviceInManager();
