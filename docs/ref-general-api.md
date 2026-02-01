@@ -2,21 +2,20 @@
 
 ## General API
 
-### Event Loop / Remapping
+### Event Loop Control
 
 - `start()` - enter blocking event loop for remapping.
 - `stop()` - terminate the running event loop gracefully, typically in response to a specific input event or condition.
-- `emit(event)` - send an event to a virtual output device.
-- `syn_report([dev_id])` - flush a frame (`SYN_REPORT`) to complete a batch of emitted events.
-- `tick(ms, callback)` - schedule periodic ticks (e.g. timers inside the loop).
 
-### Device Lifecycle and Info
+### Linux Input Events (`aelkey.evdev`)
 
-- `open_device([dev_id])` - initialize specified device, all if none specified.
-- `close_device([dev_id])` - release specified device, all if none specified.
-- `get_device_info(dev_id)` - query metadata (VID, PID, bus type, name, serial/MAC).
+- `open([dev_id])` - initialize specified device, all if none specified.
+- `close([dev_id])` - release specified device, all if none specified.
+- `info(dev_id)` - query metadata (VID, PID, bus type, name, serial/MAC).
+- `send(event)` - send an event to a virtual output device.
+- `sync(dev_id)` - flush a frame (`SYN_REPORT`) to complete a batch of emitted events.
 
-### Service Lifecycle and Info (`aelkey.daemon`)
+### Services Lifecycle and Info (`aelkey.daemon`)
 
 - `watch(ref, decls)` - add a table of input devices for state monitoring; returns the number of valid entries added.
 - `unwatch(ref)` - stop monitoring a previously watched set of devices.
@@ -125,8 +124,9 @@ Logging functions accept format strings or functions that return strings, along 
 ### Miscellaneous Utilities (`aelkey.util`)
 
 - `crc32(data, seed)` - compute CRC32 (IEEE) checksum.
-- `now([resolution])` - current monotonic time in milliseconds, or in `us`/`ns` if specified.
 - `dump_events(events)` - return a formatted string describing a list of input events.
 - `dump_hex(bytes)` - return a hex‑dump a binary blob or array of bytes.
 - `dump_raw(data)` - return a hex‑dump string of an hidraw report.
 - `dump_table(table)` - return a recursively formatted string representation of a Lua table.
+- `now([resolution])` - current monotonic time in milliseconds, or in `us`/`ns` if specified.
+- `tick(ms, callback)` - schedule periodic ticks (e.g. timers inside the loop).
