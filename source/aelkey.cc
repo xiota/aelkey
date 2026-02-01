@@ -2,7 +2,7 @@
 
 #include "aelkey_core.h"
 #include "aelkey_daemon.h"
-#include "aelkey_device.h"
+#include "aelkey_evdev.h"
 #include "aelkey_gatt.h"
 #include "aelkey_haptics.h"
 #include "aelkey_hid.h"
@@ -36,12 +36,13 @@ constexpr ScriptModule script_modules[] = {
   { "mouse", aelkey_mouse_script },
   { "sequence", aelkey_sequence_script },
   { "ticker", aelkey_ticker_script },
-  { "tracker", aelkey_tracker_script },
   { "touchpad", aelkey_touchpad_script },
+  { "tracker", aelkey_tracker_script },
 };
 
 constexpr CModule c_modules[] = {
   { "daemon", luaopen_aelkey_daemon },
+  { "evdev", luaopen_aelkey_evdev },
   { "gatt", luaopen_aelkey_gatt },
   { "haptics", luaopen_aelkey_haptics },
   { "hid", luaopen_aelkey_hid },
@@ -54,18 +55,11 @@ sol::table load_aelkey(sol::state_view lua) {
   sol::table mod = lua.create_table();
 
   // Core functions
-  mod.set_function("emit", core_emit);
-  mod.set_function("syn_report", core_syn_report);
   mod.set_function("tick", core_tick);
 
   // Loop control
   mod.set_function("start", loop_start);
   mod.set_function("stop", loop_stop);
-
-  // Device lifecycle
-  mod.set_function("open_device", device_open);
-  mod.set_function("close_device", device_close);
-  mod.set_function("get_device_info", device_get_info);
 
   // Script modules
   for (auto &sm : script_modules) {

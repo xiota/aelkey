@@ -13,7 +13,7 @@
 
 #include <sol/sol.hpp>
 
-#include "aelkey_device.h"
+#include "aelkey_evdev.h"
 #include "aelkey_state.h"
 #include "device_declarations.h"
 #include "device_in_manager.h"
@@ -43,7 +43,7 @@ sol::object loop_start(sol::this_state ts) {
   std::signal(SIGTERM, handle_signal);  // termination request (kill, systemd stop)
 
   // open inputs and outputs tables (open all devices)
-  device_open(ts, sol::optional<std::string>{});  // equivalent to old lua_open_device(L)
+  evdev_open(ts, sol::optional<std::string>{});
 
   // Blocking epoll loop
   constexpr int MAX_EVENTS = 64;
