@@ -15,17 +15,6 @@
 - `send(event)` - send an event to a virtual output device.
 - `sync(dev_id)` - flush a frame (`SYN_REPORT`) to complete a batch of emitted events.
 
-### Services Lifecycle and Info (`aelkey.daemon`)
-
-- `watch(ref, decls)` - add a table of input devices for state monitoring; returns the number of valid entries added.
-- `unwatch(ref)` - stop monitoring a previously watched set of devices.
-- `watchlist()` - list currently watched refs.
-- `set_callback(cb)` - set or clear the watchlist callback; returns true on success.
-- `inspect_file(path)` - safely load a script from a file for inspection.
-- `inspect_string(contents)` - safely load script from a string for inspection.
-
-Note: Only udev compatible types can be watched (evdev, hidraw, libusb).
-
 ### HID Feature Control (`aelkey.hid`)
 
 - `get_feature_report(dev_id, report_id)` - synchronous feature report read.
@@ -120,6 +109,17 @@ Logging functions accept format strings or functions that return strings, along 
 - `debug(...)` - log debug output
 - `trace(...)` - log debug output
 - `spam(...)` - log debug output
+
+### Watchlist and Script Info (`aelkey.monitor`)
+
+- `watch(ref, decls)` - add a table of input devices for state monitoring; returns the number of valid entries added.
+- `unwatch(ref)` - stop monitoring a previously watched set of devices.
+- `watchlist()` - list currently watched refs.
+- `set_callback(cb)` - set or clear the watchlist callback; returns true on success.
+- `inspect_file(path)` - safely load a script from a file for inspection.
+- `inspect_string(contents)` - safely load script from a string for inspection.
+
+Note: Only udev compatible types can be watched (evdev, hidraw, libusb).
 
 ### Miscellaneous Utilities (`aelkey.util`)
 

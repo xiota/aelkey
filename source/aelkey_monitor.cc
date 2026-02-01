@@ -1,4 +1,4 @@
-#include "aelkey_daemon.h"
+#include "aelkey_monitor.h"
 
 #include <sol/sol.hpp>
 
@@ -9,7 +9,7 @@
 
 // set_callback(cb)
 // Returns true on success, false on invalid input
-sol::object daemon_set_callback(sol::this_state ts, sol::object cb_obj) {
+sol::object monitor_set_callback(sol::this_state ts, sol::object cb_obj) {
   sol::state_view lua(ts);
   auto &state = AelkeyState::instance();
 
@@ -23,13 +23,13 @@ sol::object daemon_set_callback(sol::this_state ts, sol::object cb_obj) {
     return sol::make_object(lua, true);
   }
 
-  std::fprintf(stderr, "aelkey.daemon: set_callback expects string or nil\n");
+  std::fprintf(stderr, "monitor: set_callback expects string or nil\n");
   return sol::make_object(lua, false);
 }
 
 // watch(ref, decls)
 // Returns number of valid decls added (0 if none)
-sol::object daemon_watch(sol::this_state ts, const std::string &ref, sol::table decls_tbl) {
+sol::object monitor_watch(sol::this_state ts, const std::string &ref, sol::table decls_tbl) {
   sol::state_view lua(ts);
 
   std::vector<InputDecl> valid_decls;
@@ -64,7 +64,7 @@ sol::object daemon_watch(sol::this_state ts, const std::string &ref, sol::table 
 
 // unwatch(ref)
 // No return value
-sol::object daemon_unwatch(sol::this_state ts, const std::string &ref) {
+sol::object monitor_unwatch(sol::this_state ts, const std::string &ref) {
   auto &state = AelkeyState::instance();
   auto it = state.watch_map.find(ref);
   if (it != state.watch_map.end()) {
@@ -75,7 +75,7 @@ sol::object daemon_unwatch(sol::this_state ts, const std::string &ref) {
 
 // watchlist()
 // Returns array of reference strings
-sol::object daemon_watchlist(sol::this_state ts) {
+sol::object monitor_watchlist(sol::this_state ts) {
   sol::state_view lua(ts);
   auto &state = AelkeyState::instance();
 
@@ -89,30 +89,28 @@ sol::object daemon_watchlist(sol::this_state ts) {
   return sol::make_object(lua, t);
 }
 
-extern "C" int luaopen_aelkey_daemon(lua_State *L) {
+extern "C" int luaopen_aelkey_monitor(lua_State *L) {
   sol::state_view lua(L);
 
   sol::table mod = lua.create_table();
 
-  mod.set_function("set_callback", daemon_set_callback);
-  mod.set_function("watch", daemon_watch);
-  mod.set_function("unwatch", daemon_unwatch);
-  mod.set_function("watchlist", daemon_watchlist);
+  mod.set_function("set_callback", monitor_set_callback);
+  mod.set_function("watch", monitor_watch);
+  mod.set_function("unwatch", monitor_unwatch);
+  mod.set_function("watchlist", monitor_watchlist);
 
   // Load embedded Lua script
-  sol::load_result chunk = lua.load(aelkey_daemon_script);
+  sol::load_result chunk = lua.load(aelkey_monitor_script);
   if (!chunk.valid()) {
     sol::error err = chunk;
-    throw sol::error(
-        "aelkey.daemon: failed to load embedded script: " + std::string(err.what())
-    );
+    throw sol::error("monitor: failed to load embedded script: " + std::string(err.what()));
   }
 
   // Call the script with the module table as argument
   sol::protected_function_result result = chunk(mod);
   if (!result.valid()) {
     sol::error err = result;
-    throw sol::error("aelkey.daemon: script execution failed: " + std::string(err.what()));
+    throw sol::error("monitor: script execution failed: " + std::string(err.what()));
   }
 
   return sol::stack::push(L, mod);

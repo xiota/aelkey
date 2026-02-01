@@ -7,8 +7,8 @@ constexpr const char *aelkey_click_script = R"LUA(
 @AELKEY_CLICK_SCRIPT@
 )LUA";
 
-constexpr const char *aelkey_daemon_script = R"LUA(
-@AELKEY_DAEMON_SCRIPT@
+constexpr const char *aelkey_monitor_script = R"LUA(
+@AELKEY_MONITOR_SCRIPT@
 )LUA";
 
 constexpr const char *aelkey_edge_script = R"LUA(

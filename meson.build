@@ -50,30 +50,30 @@ conf_data.set('VERSION', '"' + meson.project_version() + '"')
 fs = import('fs')
 
 lua_click_content = fs.read(meson.project_source_root() / 'source/aelkey_click.lua')
-lua_daemon_content = fs.read(meson.project_source_root() / 'source/aelkey_daemon.lua')
 lua_edge_content = fs.read(meson.project_source_root() / 'source/aelkey_edge.lua')
 lua_filter_content = fs.read(meson.project_source_root() / 'source/aelkey_filter.lua')
 lua_keyboard_content = fs.read(meson.project_source_root() / 'source/aelkey_keyboard.lua')
 lua_log_content = fs.read(meson.project_source_root() / 'source/aelkey_log.lua')
+lua_monitor_content = fs.read(meson.project_source_root() / 'source/aelkey_monitor.lua')
 lua_mouse_content = fs.read(meson.project_source_root() / 'source/aelkey_mouse.lua')
 lua_sequence_content = fs.read(meson.project_source_root() / 'source/aelkey_sequence.lua')
 lua_ticker_content = fs.read(meson.project_source_root() / 'source/aelkey_ticker.lua')
-lua_tracker_content = fs.read(meson.project_source_root() / 'source/aelkey_tracker.lua')
 lua_touchpad_content = fs.read(meson.project_source_root() / 'source/aelkey_touchpad.lua')
+lua_tracker_content = fs.read(meson.project_source_root() / 'source/aelkey_tracker.lua')
 lua_util_content = fs.read(meson.project_source_root() / 'source/aelkey_util.lua')
 
 lua_scripts = configuration_data()
 lua_scripts.set('AELKEY_CLICK_SCRIPT',  lua_click_content.strip())
-lua_scripts.set('AELKEY_DAEMON_SCRIPT',  lua_daemon_content.strip())
 lua_scripts.set('AELKEY_EDGE_SCRIPT',  lua_edge_content.strip())
 lua_scripts.set('AELKEY_FILTER_SCRIPT',  lua_filter_content.strip())
 lua_scripts.set('AELKEY_KEYBOARD_SCRIPT',  lua_keyboard_content.strip())
 lua_scripts.set('AELKEY_LOG_SCRIPT',  lua_log_content.strip())
+lua_scripts.set('AELKEY_MONITOR_SCRIPT',  lua_monitor_content.strip())
 lua_scripts.set('AELKEY_MOUSE_SCRIPT',  lua_mouse_content.strip())
 lua_scripts.set('AELKEY_SEQUENCE_SCRIPT',  lua_sequence_content.strip())
 lua_scripts.set('AELKEY_TICKER_SCRIPT',  lua_ticker_content.strip())
-lua_scripts.set('AELKEY_TRACKER_SCRIPT',  lua_tracker_content.strip())
 lua_scripts.set('AELKEY_TOUCHPAD_SCRIPT',  lua_touchpad_content.strip())
+lua_scripts.set('AELKEY_TRACKER_SCRIPT',  lua_tracker_content.strip())
 lua_scripts.set('AELKEY_UTIL_SCRIPT',  lua_util_content.strip())
 
 default_css_h = configure_file(
@@ -85,12 +85,12 @@ default_css_h = configure_file(
 # source
 src_files = files(
   'source/aelkey.cc',
-  'source/aelkey_daemon.cc',
   'source/aelkey_evdev.cc',
   'source/aelkey_gatt.cc',
   'source/aelkey_haptics.cc',
   'source/aelkey_hid.cc',
   'source/aelkey_loop.cc',
+  'source/aelkey_monitor.cc',
   'source/aelkey_state.cc',
   'source/aelkey_usb.cc',
   'source/aelkey_util.cc',
