@@ -43,4 +43,8 @@ struct OutputDecl {
   std::string name;
   std::string on_haptics;
   std::vector<std::string> capabilities;
+
+  // jack midi/audio
+  std::string client;
+  std::string port;
 };

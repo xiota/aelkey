@@ -1,10 +1,12 @@
 #include "device_out_manager.h"
 
 #include "aelkey_state.h"
+#include "device_out_midi.h"
 #include "device_out_uinput.h"
 
 DeviceOutManager::DeviceOutManager() {
   // Register backends
+  backends_["midi"] = &DeviceOutMidi::instance();
   backends_["uinput"] = &DeviceOutUinput::instance();
 }
 
