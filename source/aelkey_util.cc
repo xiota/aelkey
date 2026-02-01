@@ -9,6 +9,7 @@
 #include <time.h>
 
 #include "lua_scripts.h"
+#include "tick_scheduler.h"
 
 // Compute one CRC32 entry
 constexpr uint32_t crc32_entry(int i) {
@@ -61,6 +62,47 @@ uint64_t util_now(const std::string &unit) {
   }
 }
 
+// tick(ms, callback)
+// callback = string name OR function
+sol::object util_tick(sol::this_state ts, int ms, sol::object cb_obj) {
+  sol::state_view lua(ts);
+  auto &scheduler = TickScheduler::instance();
+
+  // tick(0, nil) → cancel all timers
+  if (cb_obj.is<sol::nil_t>()) {
+    if (ms == 0) {
+      scheduler.cancel_all();
+    }
+    return sol::lua_nil;
+  }
+
+  // Parse callback key
+  TickCb key{};
+  if (cb_obj.is<std::string>()) {
+    key.name = cb_obj.as<std::string>();
+    key.is_function = false;
+  } else if (cb_obj.is<sol::function>()) {
+    key.is_function = true;
+    key.fn = cb_obj.as<sol::function>();
+  }
+
+  // Cancel existing timers for this key
+  scheduler.cancel_matching(key);
+
+  // If ms == 0, we were just canceling
+  if (ms == 0) {
+    return sol::make_object(lua, sol::lua_nil);
+  }
+
+  // Schedule new repeating timer
+  int fd = scheduler.schedule(ms, key);
+  if (fd < 0) {
+    return sol::make_object(lua, sol::lua_nil);
+  }
+
+  return sol::make_object(lua, sol::lua_nil);
+}
+
 extern "C" int luaopen_aelkey_util(lua_State *L) {
   sol::state_view lua(L);
 
@@ -68,6 +110,7 @@ extern "C" int luaopen_aelkey_util(lua_State *L) {
 
   mod.set_function("crc32", util_crc32);
   mod.set_function("now", util_now);
+  mod.set_function("tick", util_tick);
 
   // Load script
   sol::load_result chunk = lua.load(aelkey_util_script);

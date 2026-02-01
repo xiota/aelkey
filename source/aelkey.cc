@@ -1,6 +1,5 @@
 #include <sol/sol.hpp>
 
-#include "aelkey_core.h"
 #include "aelkey_daemon.h"
 #include "aelkey_evdev.h"
 #include "aelkey_gatt.h"
@@ -53,9 +52,6 @@ constexpr CModule c_modules[] = {
 
 sol::table load_aelkey(sol::state_view lua) {
   sol::table mod = lua.create_table();
-
-  // Core functions
-  mod.set_function("tick", core_tick);
 
   // Loop control
   mod.set_function("start", loop_start);
