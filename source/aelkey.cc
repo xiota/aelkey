@@ -4,6 +4,7 @@
 #include "aelkey_gatt.h"
 #include "aelkey_haptics.h"
 #include "aelkey_hid.h"
+#include "aelkey_jack.h"
 #include "aelkey_loop.h"
 #include "aelkey_midi.h"
 #include "aelkey_monitor.h"
@@ -45,6 +46,7 @@ constexpr CModule c_modules[] = {
   { "gatt", luaopen_aelkey_gatt },
   { "haptics", luaopen_aelkey_haptics },
   { "hid", luaopen_aelkey_hid },
+  { "jack", luaopen_aelkey_jack },
   { "midi", luaopen_aelkey_midi },
   { "monitor", luaopen_aelkey_monitor },
   { "usb", luaopen_aelkey_usb },

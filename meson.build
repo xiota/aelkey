@@ -89,6 +89,7 @@ src_files = files(
   'source/aelkey_gatt.cc',
   'source/aelkey_haptics.cc',
   'source/aelkey_hid.cc',
+  'source/aelkey_jack.cc',
   'source/aelkey_loop.cc',
   'source/aelkey_midi.cc',
   'source/aelkey_monitor.cc',
