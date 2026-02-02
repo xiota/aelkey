@@ -4,11 +4,10 @@
 #include <string>
 #include <vector>
 
-#include <jack/jack.h>
-#include <jack/midiport.h>
 #include <jack/ringbuffer.h>
 
 #include "aelkey_state.h"
+#include "device_backend_jack.h"
 #include "device_declarations.h"
 #include "device_in.h"
 #include "singleton.h"
@@ -40,7 +39,6 @@ class DeviceInMidi : public DeviceIn, public Singleton<DeviceInMidi> {
   void pump_messages();
 
  private:
-  static int process_cb(jack_nframes_t nframes, void *arg);
   void process(jack_nframes_t nframes);
 
   void push_event(const MidiEvent &ev);
@@ -48,12 +46,7 @@ class DeviceInMidi : public DeviceIn, public Singleton<DeviceInMidi> {
 
   void dispatch_batch_to_lua(const std::string &id, const std::vector<MidiEvent> &events);
 
-  std::string ensure_client_name(const InputDecl &decl);
-  std::string make_default_port_name(const InputDecl &decl) const;
-  std::string sanitize_port_name(const std::string &name) const;
-
  private:
-  jack_client_t *client_ = nullptr;
   jack_ringbuffer_t *ring_ = nullptr;
 
   // id -> JACK port
@@ -62,9 +55,8 @@ class DeviceInMidi : public DeviceIn, public Singleton<DeviceInMidi> {
   // JACK port -> source "Client:Port" string
   std::map<jack_port_t *, std::string> source_ports_;
 
-  // client name actually used
-  std::string client_name_;
-
   int tick_fd_ = -1;
   std::map<std::string, MidiBatch> batches_;
+
+  bool rt_registered_ = false;
 };

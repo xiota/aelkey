@@ -2,10 +2,14 @@
 
 #include <cstdio>
 #include <cstring>
+#include <string>
+#include <string_view>
+#include <vector>
 
-#include <unistd.h>
+#include <jack/ringbuffer.h>
 
 #include "aelkey_util.h"
+#include "device_backend_jack.h"
 #include "device_helpers.h"
 #include "tick_scheduler.h"
 
@@ -17,10 +21,14 @@ DeviceInMidi::~DeviceInMidi() {
     tick_fd_ = -1;
   }
 
-  if (client_) {
-    jack_client_close(client_);
-    client_ = nullptr;
+  auto &jack = DeviceBackendJack::instance();
+  for (auto &kv : inputs_) {
+    jack.destroy_port(kv.second);
   }
+
+  inputs_.clear();
+  source_ports_.clear();
+
   if (ring_) {
     jack_ringbuffer_free(ring_);
     ring_ = nullptr;
@@ -28,7 +36,7 @@ DeviceInMidi::~DeviceInMidi() {
 }
 
 bool DeviceInMidi::on_init() {
-  if (client_) {
+  if (ring_) {
     return true;
   }
 
@@ -38,90 +46,17 @@ bool DeviceInMidi::on_init() {
     return false;
   }
 
-  client_name_ = "Aelkey_MidiIn_" + std::to_string(getpid());
-
-  jack_status_t status{};
-  client_ = jack_client_open(client_name_.c_str(), JackNoStartServer, &status);
-  if (!client_) {
-    std::fprintf(
-        stderr,
-        "MIDI: failed to open JACK client '%s' (status=0x%x)\n",
-        client_name_.c_str(),
-        status
-    );
-    return false;
-  }
-
-  jack_set_process_callback(client_, &DeviceInMidi::process_cb, this);
-
-  if (jack_activate(client_) != 0) {
-    std::fprintf(stderr, "MIDI: failed to activate JACK client\n");
-    jack_client_close(client_);
-    client_ = nullptr;
-    return false;
+  auto &jack = DeviceBackendJack::instance();
+  if (!rt_registered_) {
+    jack.add_rt_callback([this](jack_nframes_t nframes) { this->process(nframes); });
+    rt_registered_ = true;
   }
 
   return true;
 }
 
-std::string DeviceInMidi::ensure_client_name(const InputDecl &decl) {
-  // If user specified a client and we haven't overridden yet, rename once.
-  if (!decl.client.empty() && client_name_ != decl.client) {
-    // Only allow this before any ports are registered.
-    if (!inputs_.empty()) {
-      // Too late to change; ignore.
-      return client_name_;
-    }
-
-    // Close old client and reopen with new name.
-    if (client_) {
-      jack_client_close(client_);
-      client_ = nullptr;
-    }
-
-    jack_status_t status{};
-    client_name_ = decl.client;
-    client_ = jack_client_open(client_name_.c_str(), JackNoStartServer, &status);
-    if (!client_) {
-      std::fprintf(
-          stderr,
-          "MIDI: failed to reopen JACK client '%s' (status=0x%x)\n",
-          client_name_.c_str(),
-          status
-      );
-      return client_name_;
-    }
-
-    jack_set_process_callback(client_, &DeviceInMidi::process_cb, this);
-
-    if (jack_activate(client_) != 0) {
-      std::fprintf(stderr, "MIDI: failed to activate JACK client '%s'\n", client_name_.c_str());
-      jack_client_close(client_);
-      client_ = nullptr;
-      return client_name_;
-    }
-  }
-
-  return client_name_;
-}
-
-std::string DeviceInMidi::sanitize_port_name(const std::string &name) const {
-  std::string out = name;
-  for (char &c : out) {
-    if (!(std::isalnum(static_cast<unsigned char>(c)) || c == '_' || c == '-')) {
-      c = '_';
-    }
-  }
-  return out;
-}
-
-std::string DeviceInMidi::make_default_port_name(const InputDecl &decl) const {
-  return sanitize_port_name(decl.id);
-}
-
 bool DeviceInMidi::match(const InputDecl &decl, std::string &devnode_out) {
-  lazy_init();
-  if (!client_) {
+  if (!lazy_init()) {
     return false;
   }
 
@@ -129,30 +64,22 @@ bool DeviceInMidi::match(const InputDecl &decl, std::string &devnode_out) {
     return false;
   }
 
-  // if decl.name unspecified, make an open-ended port (no auto-connect)
   if (decl.name.empty()) {
-    devnode_out = "jack:midi:" + decl.id;  // synthetic devnode
+    devnode_out = "jack:midi:" + decl.id;
     return true;
   }
 
-  // normal name matching
-  const char **ports =
-      jack_get_ports(client_, nullptr, JACK_DEFAULT_MIDI_TYPE, JackPortIsOutput);
-  if (!ports) {
-    return false;
-  }
+  auto &jack = DeviceBackendJack::instance();
+  auto ports = jack.list_ports(JACK_DEFAULT_MIDI_TYPE, JackPortIsOutput);
 
   std::string result;
 
-  for (int i = 0; ports[i]; i++) {
-    std::string full = ports[i];  // "Client:Port"
+  for (auto &full : ports) {
     if (match_string(decl.name, full)) {
       result = full;
       break;
     }
   }
-
-  jack_free(ports);
 
   if (result.empty()) {
     return false;
@@ -163,8 +90,7 @@ bool DeviceInMidi::match(const InputDecl &decl, std::string &devnode_out) {
 }
 
 bool DeviceInMidi::attach(const std::string &devnode, InputDecl &decl) {
-  lazy_init();
-  if (!client_) {
+  if (!lazy_init()) {
     return false;
   }
 
@@ -173,33 +99,23 @@ bool DeviceInMidi::attach(const std::string &devnode, InputDecl &decl) {
     return false;
   }
 
-  // Ensure client name (may reopen client if user specified one)
-  ensure_client_name(decl);
-  if (!client_) {
-    return false;
-  }
-
   std::string src = devnode.substr(std::strlen("jack:midi:"));  // "Client:Port"
 
-  // Determine port name
-  std::string port_name =
-      decl.port.empty() ? make_default_port_name(decl) : sanitize_port_name(decl.port);
+  // No sanitization — use exactly what user provided
+  std::string port_name = decl.port.empty() ? decl.id : decl.port;
 
-  jack_port_t *in = jack_port_register(
-      client_, port_name.c_str(), JACK_DEFAULT_MIDI_TYPE, JackPortIsInput, 0
-  );
+  auto &jack = DeviceBackendJack::instance();
+  jack_port_t *in = jack.create_port(port_name, JACK_DEFAULT_MIDI_TYPE, JackPortIsInput);
   if (!in) {
     std::fprintf(stderr, "MIDI: failed to register input port '%s'\n", port_name.c_str());
     return false;
   }
 
-  // auto-connect if decl.name was provided for matching
   if (!decl.name.empty()) {
-    if (jack_connect(client_, src.c_str(), jack_port_name(in)) != 0) {
-      std::fprintf(
-          stderr, "MIDI: failed to connect '%s' -> '%s'\n", src.c_str(), jack_port_name(in)
-      );
-      jack_port_unregister(client_, in);
+    std::string dst = jack.port_name(in);
+    if (!jack.connect(src, dst)) {
+      std::fprintf(stderr, "MIDI: failed to connect '%s' -> '%s'\n", src.c_str(), dst.c_str());
+      jack.destroy_port(in);
       return false;
     }
   }
@@ -210,13 +126,12 @@ bool DeviceInMidi::attach(const std::string &devnode, InputDecl &decl) {
   decl.devnode = devnode;
   decl.fd = -1;
 
-  // Start periodic pump if not already running
   if (tick_fd_ < 0) {
     TickCb cb;
     cb.native = [this]() { this->pump_messages(); };
     cb.oneshot = false;
 
-    tick_fd_ = TickScheduler::instance().schedule(8, cb);  // 8 ms
+    tick_fd_ = TickScheduler::instance().schedule(8, cb);
     if (tick_fd_ < 0) {
       std::fprintf(stderr, "MIDI: failed to schedule tick\n");
     }
@@ -226,8 +141,7 @@ bool DeviceInMidi::attach(const std::string &devnode, InputDecl &decl) {
 }
 
 bool DeviceInMidi::detach(const std::string &id) {
-  lazy_init();
-  if (!client_) {
+  if (!lazy_init()) {
     return false;
   }
 
@@ -238,10 +152,11 @@ bool DeviceInMidi::detach(const std::string &id) {
 
   jack_port_t *in = it->second;
   source_ports_.erase(in);
-  jack_port_unregister(client_, in);
+
+  auto &jack = DeviceBackendJack::instance();
+  jack.destroy_port(in);
   inputs_.erase(it);
 
-  // If no more MIDI devices, stop the tick
   if (inputs_.empty() && tick_fd_ >= 0) {
     TickScheduler::instance().unregister_fd(tick_fd_);
     tick_fd_ = -1;
@@ -250,24 +165,20 @@ bool DeviceInMidi::detach(const std::string &id) {
   return true;
 }
 
-int DeviceInMidi::process_cb(jack_nframes_t nframes, void *arg) {
-  auto *self = static_cast<DeviceInMidi *>(arg);
-  self->process(nframes);
-  return 0;
-}
-
 void DeviceInMidi::process(jack_nframes_t nframes) {
   if (!ring_) {
     return;
   }
 
+  auto &jack = DeviceBackendJack::instance();
+
   for (auto &[id, port] : inputs_) {
-    void *buf = jack_port_get_buffer(port, nframes);
-    uint32_t count = jack_midi_get_event_count(buf);
+    void *buf = jack.port_buffer(port, nframes);
+    uint32_t count = jack.midi_event_count(buf);
 
     for (uint32_t i = 0; i < count; i++) {
       jack_midi_event_t ev;
-      if (jack_midi_event_get(&ev, buf, i) != 0) {
+      if (!jack.midi_event_get(ev, buf, i)) {
         continue;
       }
 
@@ -286,13 +197,11 @@ void DeviceInMidi::push_event(const MidiEvent &ev) {
     return;
   }
 
-  // Serialize: [uint32_t size][uint32_t id_len][id bytes][data bytes]
   uint32_t size = static_cast<uint32_t>(ev.data.size());
   uint32_t id_len = static_cast<uint32_t>(ev.id.size());
 
   size_t total = sizeof(size) + sizeof(id_len) + id_len + size;
   if (jack_ringbuffer_write_space(ring_) < total) {
-    // Drop event on overflow
     return;
   }
 
@@ -322,7 +231,6 @@ bool DeviceInMidi::pop_event(MidiEvent &out) {
   jack_ringbuffer_read(ring_, reinterpret_cast<char *>(&id_len), sizeof(id_len));
 
   if (jack_ringbuffer_read_space(ring_) < id_len + size) {
-    // Corrupt / partial; drop
     return false;
   }
 
@@ -391,12 +299,10 @@ void DeviceInMidi::dispatch_batch_to_lua(
 void DeviceInMidi::pump_messages() {
   MidiEvent ev;
 
-  // Drain ringbuffer into per-device batches
   while (pop_event(ev)) {
     batches_[ev.id].events.push_back(ev);
   }
 
-  // Flush all device batches
   for (auto &[id, batch] : batches_) {
     if (!batch.events.empty()) {
       dispatch_batch_to_lua(id, batch.events);

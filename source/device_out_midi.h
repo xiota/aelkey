@@ -5,12 +5,11 @@
 #include <string>
 #include <vector>
 
-#include <jack/jack.h>
-#include <jack/midiport.h>
 #include <jack/ringbuffer.h>
 
-#include "device_declarations.h"  // OutputDecl
-#include "device_helpers.h"       // match_string
+#include "device_backend_jack.h"
+#include "device_declarations.h"
+#include "device_helpers.h"
 #include "device_out.h"
 #include "singleton.h"
 
@@ -35,17 +34,14 @@ class DeviceOutMidi : public DeviceOut, public Singleton<DeviceOutMidi> {
   bool destroy(const std::string &id);
 
  private:
-  bool ensure_client_name(const OutputDecl &decl);
-  static int process_cb(jack_nframes_t nframes, void *arg);
   void process(jack_nframes_t nframes);
 
-  jack_client_t *client_ = nullptr;
-  std::string client_name_;
-
+ private:
   // id -> JACK port
   std::map<std::string, jack_port_t *> outputs_;
 
-  // Single ringbuffer for outgoing events.
   jack_ringbuffer_t *ring_ = nullptr;
-  static constexpr size_t kRingSize = 4096;  // symmetric with input
+  static constexpr size_t kRingSize = 4096;
+
+  bool rt_registered_ = false;
 };
