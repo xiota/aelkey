@@ -14,11 +14,11 @@ inputs = {
   {
     ----- Common -----
     id         = "<string>", -- Unique identifier used in events and callbacks
-    type       = "<string>", -- Device type: evdev, gatt, hidraw, libusb
+    type       = "<string>", -- Device type: evdev, gatt, hidraw, libusb, midi
     grab       = <bool>,     -- Attempt exclusive access
 
     -- for matching --
-    name       = "<string>", -- Device name for matching
+    name       = "<string>", -- Device name
     bus        = "<string>", -- Bus type ("usb", "bluetooth")
     vendor     = <int>,
     product    = <int>,
@@ -31,10 +31,6 @@ inputs = {
     ----- gatt -----
     service        = <int>,  -- GATT service handle
     characteristic = <int>,  -- GATT characteristic handle
-
-    ----- midi -----
-    client     = "<string>", -- JACK client name override, default: "Aelkey_MidiIn_<pid>"
-    port       = "<string>", -- JACK port name override,   default: "<id>"
   },
 }
 ```
@@ -53,13 +49,13 @@ outputs = {
   {
     ----- Common -----
     id         = "<string>", -- Unique identifier used in events and callbacks
-    type       = "<string>", -- Virtual device type: uinput
+    type       = "<string>", -- Virtual device type: midi, uinput
 
     -- for matching --
-    name       = "<string>", -- device name
+    name       = "<string>", -- Device name
 
     -- callbacks --
-    on_haptics = "<string>", -- function name to receive haptic events
+    on_haptics = "<string>", -- Function name to receive haptic events
 
     ----- uinput -----
     profile    = "digitizer" | "imu" | "keyboard" | "mouse" |
@@ -69,10 +65,6 @@ outputs = {
     product    = <int>,
     version    = <int>,      -- version identifier
     capabilities = { <string>, ... },  -- optional
-
-    ----- midi -----
-    client     = "<string>", -- JACK client name override, default: "Aelkey_MidiOut_<pid>"
-    port       = "<string>", -- JACK port name override,   default: "<id>"
   },
 }
 ```
@@ -139,25 +131,6 @@ The gatt event callback receives a single table, similar to hidraw, but with add
   status   = "<string>",        -- "ok", "error"
 
   path     = "<characteristic path>",
-}
-```
-
-#### `midi` events
-
-The midi event callback receives a table of message tables.
-
-```lua
-{
-  [1] = {
-    device    = "<id string>",     -- decl.id
-    data      = "<binary string>", -- MIDI message data payload
-    size      = <int>,             -- size of data payload in bytes
-    status    = "<string>",        -- completion status
-
-    timestamp = <int>,             -- when event was received (microseconds)
-  },
-  [2] = { ... },
-  ...
 }
 ```
 

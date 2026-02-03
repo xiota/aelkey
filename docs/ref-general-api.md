@@ -38,11 +38,6 @@ Asynchronous functions additionally have `{..., endpoint, transfer}`.
 - `read{device[, service, characteristic]}` - synchronous read from a characteristic.
 - `write{device, data [, response] [, service, characteristic]}` - write to a characteristic (default `response = false`).
 
-### MIDI Messages (`aelkey.midi`)
-
-- `send(dev_id, data)` – send a MIDI message to a virtual MIDI output device.
-  `data` may be a table of bytes or a raw binary string.
-
 ### Logging (`aelkey.log`)
 
 Logging functions accept format strings or functions that return strings, along with passthrough arguments.

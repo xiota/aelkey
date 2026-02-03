@@ -2,7 +2,7 @@
 
 A programmable input remapping framework for Linux to observe, transform, and synthesize input events across a wide range of devices. Designed for advanced workflows where traditional keybinding tools are too complicated or fall short.
 
-Supports `evdev`, `hidraw`, `libusb`, and `gatt` backends with optional force‑feedback routing and custom haptic effects.
+Supports `evdev`, `hidraw`, `libusb`, `midi`, and `gatt` backends with optional force‑feedback routing and custom haptic effects.
 
 ## Why use Ælkey
 
@@ -66,6 +66,7 @@ sudo meson install -C build
 
 * [Device Tables](docs/ref-device-tables.md)
 * [General API](docs/ref-general-api.md)
+* [JACK Audio and MIDI](docs/ref-jack-audio.md)
 * [Force Feedback and Haptics](docs/ref-haptics.md)
 * [Input and Other Helpers](docs/ref-helpers.md)
 
