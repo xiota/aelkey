@@ -6,6 +6,7 @@
 #include <sol/sol.hpp>
 
 #include "device_out_midi.h"
+#include "lua_scripts.h"
 
 // midi.send("id", {0x90, 60, 127})
 // midi.send("id", "\x90\x3C\x7F")
@@ -62,6 +63,22 @@ extern "C" int luaopen_aelkey_midi(lua_State *L) {
   sol::table mod = lua.create_table();
 
   mod.set_function("send", midi_send);
+
+  // Load script
+  sol::load_result chunk = lua.load(aelkey_midi_script);
+  if (!chunk.valid()) {
+    throw sol::error(
+        "aelkey.midi script load error: " + std::string(chunk.get<sol::error>().what())
+    );
+  }
+
+  // Execute script with module table
+  sol::protected_function_result result = chunk(mod);
+  if (!result.valid()) {
+    throw sol::error(
+        "aelkey.midi script runtime error: " + std::string(result.get<sol::error>().what())
+    );
+  }
 
   return sol::stack::push(L, mod);
 }

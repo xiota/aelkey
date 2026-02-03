@@ -19,6 +19,12 @@ MIDI messages are routed through JACK.  For system-wide connectivity, use PipeWi
 - `send(dev_id, data)` – send a message through the specified output device.
   `data` may be a table of bytes or a raw binary string.
 
+- `decode(data)` - return a table of message tables
+- `encode(message_table)` - return a binary string suitable for use with `send()`.
+
+- `NOTES[num]` - note number to name, `NOTES[60] = "C4"`.  Flat names are not mapped.
+- `NOTE_NAMES[str]` - note name to number, `NOTE_NAMES["C4"] = 60.  Flat names are not mapped.
+
 ### Tables
 
 ```lua
@@ -88,5 +94,20 @@ Port information from `aelkey.jack.get_port_info(port)` is returned in a table.
   },
   aliases = { "alias1", "alias2", ... },
   connections = { "OtherClient:Port", ... },
+}
+```
+
+Message types and tables created by `decode()` and used by `encode()`:
+
+```lua
+{
+  [1] = { type="note_off", channel=chan, note=d1, velocity=d2 },
+  [2] = { type="note_on", channel=chan, note=d1, velocity=d2 },
+  [3] = { type="poly_aftertouch", channel=chan, note=d1, pressure=d2 },
+  [4] = { type="cc", channel=chan, controller=d1, value=d2 },
+  [5] = { type="pitchbend", channel=chan, value=value },
+  [6] = { type="program_change", channel=chan, program=d1 },
+  [7] = { type="channel_aftertouch", channel=chan, pressure=d1 },
+  [8] = { type = "sysex", data = payload },
 }
 ```
