@@ -1,3 +1,18 @@
+--[[
+  USB HID‑POS Scale Reader + Control
+
+  This script listens to HID‑POS compatible postal scales,
+  and prints decoded weight, units, and status in real time.
+
+  Two vendor‑specific Output Report commands are implemented by these scales:
+
+    -- Zero the scale (force baseline to 0)
+    aelkey.hid.send_output_report("scale", string.char(0x02, 0x02))
+
+    -- Tare toggle (tare / un‑tare depending on current state)
+    aelkey.hid.send_output_report("scale", string.char(0x02, 0x01))
+]]
+
 aelkey = require("aelkey")
 
 inputs = {
@@ -23,6 +38,101 @@ inputs = {
   },
 }
 
+local STATUS_CODES = {
+  [0x01] = "fault",
+  [0x02] = "zero",
+  [0x03] = "weighing",
+  [0x04] = "stable",
+  [0x05] = "under zero",
+  [0x06] = "overweight",
+  [0x07] = "calibration needed",
+  [0x08] = "rezero needed",
+}
+
+local UNITS = {
+  [0x01] = "mg",
+  [0x02] = "g",
+  [0x03] = "kg",
+  [0x04] = "ct",
+  [0x05] = "tael",
+  [0x06] = "gr",
+  [0x07] = "dwt",
+  [0x08] = "tonne",
+  [0x09] = "ton",
+  [0x0a] = "ozt",
+  [0x0b] = "oz",
+  [0x0c] = "lb",
+}
+
+local UNIT_CODES = {}
+for code, name in pairs(UNITS) do
+  UNIT_CODES[name] = code
+end
+
+local function set_unit(target)
+  for _ = 1, 4 do
+    local f = aelkey.hid.get_feature_report("scale", 0x01)
+    local unit = f:byte(3)
+    if unit == target then return true end
+    aelkey.hid.send_feature_report("scale", string.char(0x01, 0x00))
+  end
+  return false
+end
+
+-- simple one‑shot command line options
+local do_zero = false
+local do_tare = false
+local do_toggle = false
+local want_unit = nil
+
+for _, arg in ipairs(arg) do
+  if arg == "--zero" then
+    do_zero = true
+  end
+  if arg == "--tare" then
+    do_tare = true
+  end
+  if arg == "--toggle" then
+    do_toggle = true
+  end
+  if arg:match("^%-%-unit=") then
+    want_unit = arg:match("^%-%-unit=(.+)$")
+  end
+end
+
+-- execute one‑time commands and exit
+if do_zero or do_tare or do_toggle or want_unit then
+  aelkey.open_device("scale")
+
+  if do_zero then
+    aelkey.hid.send_output_report("scale", string.char(0x02, 0x02))
+  end
+
+  if do_tare then
+    aelkey.hid.send_output_report("scale", string.char(0x02, 0x01))
+  end
+
+  if do_toggle then
+    aelkey.hid.send_feature_report("scale", string.char(0x01, 0x00))
+  end
+
+  if want_unit then
+    local target = UNIT_CODES[want_unit]
+    if not target then
+      print("Unknown unit: " .. want_unit)
+      os.exit(1)
+    end
+    if set_unit(target) then
+      print("Unit set to " .. want_unit)
+    else
+      print("Failed to set unit")
+    end
+  end
+
+  os.exit(0)
+end
+
+-- normal remap
 local previous = {}
 
 function remap(events)
@@ -53,25 +163,9 @@ function remap(events)
   -- Apply exponent (base‑10)
   local weight = raw_weight * (10 ^ expt)
 
-  -- HID POS unit names (index = unit code)
-  local UNITS = {
-    "units", "mg", "g", "kg", "cd", "taels", "gr",
-    "dwt", "tonnes", "tons", "ozt", "oz", "lbs"
-  }
-
-  local unit_name = UNITS[unit + 1] or "unknown"
-
-  -- HID POS status decoding
-  local state = ({
-    [0x01] = "fault",
-    [0x02] = "zero",
-    [0x03] = "weighing",
-    [0x04] = "stable",
-    [0x05] = "under zero",
-    [0x06] = "overweight",
-    [0x07] = "calibration needed",
-    [0x08] = "rezero needed"
-  })[status] or ("unknown(" .. status .. ")")
+  -- state and unit
+  local state = STATUS_CODES[status] or ("unknown(" .. status .. ")")
+  local unit_name = UNITS[unit] or "unknown"
 
   -- formatting for oz → lb/oz
   local weight_str
@@ -88,9 +182,6 @@ function remap(events)
     previous.state = state
     print(weight_str .. " / " .. state)
   end
-
-  -- tare
-  -- aelkey.hid.send_output_report("scale", string.char(0x02, 0x02))
 end
 
 aelkey.start()
