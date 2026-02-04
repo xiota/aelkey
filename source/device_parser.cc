@@ -125,14 +125,57 @@ InputDecl parse_input(sol::table tbl) {
     });
   }
 
-  // service
-  if (sol::object v = tbl["service"]; v.valid() && v.is<int>()) {
-    decl.service = v.as<int>();
+  // services: array of ints
+  if (sol::object s_obj = tbl["services"]; s_obj.valid()) {
+    if (s_obj.is<sol::table>()) {
+      sol::table s_tbl = s_obj.as<sol::table>();
+      s_tbl.for_each([&](sol::object, sol::object v) {
+        if (v.is<int>()) {
+          decl.services.push_back(v.as<int>());
+        }
+      });
+    }
   }
 
-  // characteristic
-  if (sol::object v = tbl["characteristic"]; v.valid() && v.is<int>()) {
-    decl.characteristic = v.as<int>();
+  // characteristics: array of ints
+  if (sol::object c_obj = tbl["characteristics"]; c_obj.valid()) {
+    if (c_obj.is<sol::table>()) {
+      sol::table c_tbl = c_obj.as<sol::table>();
+      c_tbl.for_each([&](sol::object, sol::object v) {
+        if (v.is<int>()) {
+          decl.characteristics.push_back(v.as<int>());
+        }
+      });
+    }
+  }
+
+  // serv_char: array of { service, characteristic }
+  // Flatten into services[] and characteristics[]
+  if (sol::object sc_obj = tbl["serv_char"]; sc_obj.valid() && sc_obj.is<sol::table>()) {
+    sol::table sc_tbl = sc_obj.as<sol::table>();
+    sc_tbl.for_each([&](sol::object, sol::object v) {
+      if (!v.is<sol::table>()) {
+        return;
+      }
+      sol::table pair_tbl = v.as<sol::table>();
+
+      int svc = 0;
+      int chr = 0;
+
+      if (sol::object a = pair_tbl[1]; a.valid() && a.is<int>()) {
+        svc = a.as<int>();
+      }
+      if (sol::object b = pair_tbl[2]; b.valid() && b.is<int>()) {
+        chr = b.as<int>();
+      }
+
+      if (svc != 0) {
+        decl.services.push_back(svc);
+      }
+      if (chr != 0) {
+        decl.characteristics.push_back(chr);
+      }
+    });
   }
 
   // on_event callback

@@ -20,8 +20,8 @@ struct InputDecl {
   bool grab = false;
   std::vector<std::pair<int, int>> capabilities;
 
-  int service = 0;
-  int characteristic = 0;
+  std::vector<int> services;
+  std::vector<int> characteristics;
 
   std::string devnode;
 

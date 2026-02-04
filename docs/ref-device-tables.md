@@ -28,8 +28,9 @@ inputs = {
     on_state   = "<string>", -- Function name to receive connect/disconnect notifications
 
     ----- gatt -----
-    service        = <int>,  -- GATT service handle
-    characteristic = <int>,  -- GATT characteristic handle
+    serv_char       = { { <int>, <int> }, ... },  -- service, characteristic pairs
+    services        = { <int>, ... },             -- service handles
+    characteristics = { <int>, ... },             -- characteristic handles
   },
 }
 ```

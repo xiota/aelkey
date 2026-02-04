@@ -480,7 +480,7 @@ std::string DeviceInGatt::resolve_gatt_paths(
     return {};
   }
 
-  if (!decl.service && !found_characteristics) {
+  if (decl.services.empty() && !found_characteristics) {
     dbus_message_unref(resp);
     return devices[0];
   }
@@ -494,7 +494,7 @@ std::string DeviceInGatt::resolve_gatt_paths(
     return {};
   }
 
-  if (!decl.characteristic && !found_characteristics) {
+  if (decl.characteristics.empty() && !found_characteristics) {
     dbus_message_unref(resp);
     return services[0];
   }
@@ -510,11 +510,11 @@ std::string DeviceInGatt::resolve_gatt_paths(
 
   dbus_message_unref(resp);
 
-  if (!decl.service) {
+  if (decl.services.empty()) {
     return devices[0];
   }
 
-  if (!decl.characteristic) {
+  if (decl.characteristics.empty()) {
     return services[0];
   }
 
@@ -645,12 +645,13 @@ std::vector<std::string> DeviceInGatt::get_matching_services(
           const char *p = strstr(object_path, "service");
           if (p) {
             int handle = strtoul(p + 7, nullptr, 16);
-            if (decl.service == 0) {
+            if (decl.services.empty()) {
               // No specific service requested → return all services under the device
               result.push_back(object_path);
             } else {
               // Match specific service handle
-              if (handle == decl.service) {
+              if (std::find(decl.services.begin(), decl.services.end(), handle) !=
+                  decl.services.end()) {
                 result.push_back(object_path);
               }
             }
@@ -699,11 +700,12 @@ std::vector<std::string> DeviceInGatt::get_matching_characteristics(
           const char *p = strstr(object_path, "char");
           if (p) {
             int handle = strtoul(p + 4, nullptr, 16);
-            if (decl.characteristic == 0) {
+            if (decl.characteristics.empty()) {
               // No specific characteristic requested → collect all
               result.push_back(object_path);
             } else {
-              if (handle == decl.characteristic) {
+              if (std::find(decl.characteristics.begin(), decl.characteristics.end(), handle) !=
+                  decl.characteristics.end()) {
                 result.push_back(object_path);
               }
             }
