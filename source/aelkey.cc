@@ -1,5 +1,6 @@
 #include <sol/sol.hpp>
 
+#include "aelkey_core.h"
 #include "aelkey_evdev.h"
 #include "aelkey_gatt.h"
 #include "aelkey_haptics.h"
@@ -57,6 +58,10 @@ constexpr CModule c_modules[] = {
 sol::table load_modules_c(sol::state_view lua, sol::table mod) {
   mod.set_function("start", loop_start);
   mod.set_function("stop", loop_stop);
+
+  mod.set_function("open_device", core_open_device);
+  mod.set_function("close_device", core_close_device);
+  mod.set_function("get_device_info", core_get_device_info);
 
   for (auto &cm : c_modules) {
     try {

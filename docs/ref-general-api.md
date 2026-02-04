@@ -7,11 +7,14 @@
 - `start()` - enter blocking event loop for remapping.
 - `stop()` - terminate the running event loop gracefully, typically in response to a specific input event or condition.
 
+### Device Management
+
+- `open_device([dev_id])` - initialize specified device, all if none specified.
+- `close_device([dev_id])` - release specified device, all if none specified.
+- `get_device_info(dev_id)` - query metadata (VID, PID, bus type, name, serial/MAC).
+
 ### Linux Input Events (`aelkey.evdev`)
 
-- `open([dev_id])` - initialize specified device, all if none specified.
-- `close([dev_id])` - release specified device, all if none specified.
-- `info(dev_id)` - query metadata (VID, PID, bus type, name, serial/MAC).
 - `send(event)` - send an event to a virtual output device.
 - `sync(dev_id)` - flush a frame (`SYN_REPORT`) to complete a batch of emitted events.
 
