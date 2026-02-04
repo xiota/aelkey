@@ -71,3 +71,21 @@ Note: Only udev compatible types can be watched (evdev, hidraw, libusb).
 - `dump_table(table)` - return a recursively formatted string representation of a Lua table.
 - `now([resolution])` - current monotonic time in milliseconds, or in `us`/`ns` if specified.
 - `tick(ms, callback)` - schedule periodic ticks (e.g. timers inside the loop).
+- `bench_scope(label)` - measure execution time and the interval between calls
+
+  Usage for Lua 5.1+:
+  ```lua
+  function remap(events)
+    local scope = aelkey.util.bench_scope("remap")
+    -- remap code
+    scope.finish()
+  end
+  ```
+
+  Usage for Lua 5.4+:
+  ```lua
+  function remap(events)
+    local scope <close> = aelkey.util.bench_scope("remap")
+    -- remap code
+  end
+  ```
