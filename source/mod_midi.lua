@@ -54,7 +54,7 @@ local function is_sysex_end(byte)
 end
 
 -- Public: decode(bytes) → {msg1, msg2, ...}
-local function decode(bytes)
+function M.decode(bytes)
   local out = {}
   local b = {string.byte(bytes, 1, #bytes)}
   local i = 1
@@ -136,7 +136,7 @@ local function decode(bytes)
 end
 
 -- Public: encode(msg) → raw binary string
-local function encode(msg)
+function M.encode(msg)
   local t = msg.type
   local ch = msg.channel or 0
   local out = {}
@@ -203,27 +203,17 @@ local function make_reverse(notes)
 end
 
 -- C3 system: 60 = C3
-local NOTES_C3 = make_notes(-2)
-local NOTE_NAMES_C3 = make_reverse(NOTES_C3)
+M.NOTES_C3 = make_notes(-2)
+M.NOTE_NAMES_C3 = make_reverse(M.NOTES_C3)
 
 -- C4 system: 60 = C4 (scientific pitch)
-local NOTES_C4 = make_notes(-1)
-local NOTE_NAMES_C4 = make_reverse(NOTES_C4)
+M.NOTES_C4 = make_notes(-1)
+M.NOTE_NAMES_C4 = make_reverse(M.NOTES_C4)
 
 -- C5 system: 60 = C5
-local NOTES_C5 = make_notes(0)
-local NOTE_NAMES_C5 = make_reverse(NOTES_C5)
+M.NOTES_C5 = make_notes(0)
+M.NOTE_NAMES_C5 = make_reverse(M.NOTES_C5)
 
--- Export
-M.decode = decode
-M.encode = encode
-M.NOTES_C3 = NOTES_C3
-M.NOTES_C4 = NOTES_C4
-M.NOTES_C5 = NOTES_C5
-M.NOTE_NAMES_C3 = NOTE_NAMES_C3
-M.NOTE_NAMES_C4 = NOTE_NAMES_C4
-M.NOTE_NAMES_C5 = NOTE_NAMES_C5
-M.NOTES = NOTES_C4
-M.NOTE_NAMES = NOTE_NAMES_C4
-
-return M
+-- default
+M.NOTES = M.NOTES_C4
+M.NOTE_NAMES = M.NOTE_NAMES_C4
