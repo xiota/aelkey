@@ -9,7 +9,7 @@
 #include "dispatcher_hidraw.h"
 #include "dispatcher_udev.h"
 
-bool DeviceInHidraw::match(const InputDecl &decl, std::string &devnode_out) {
+bool DeviceInHidraw::match(InputDecl &decl, std::string &devnode_out) {
   if (decl.type != "hidraw") {
     return false;
   }
@@ -32,21 +32,28 @@ bool DeviceInHidraw::match(const InputDecl &decl, std::string &devnode_out) {
         if (ioctl(fd, HIDIOCGRAWINFO, &info) == 0) {
           ok = true;
 
-          if (decl.bus && static_cast<int>(info.bustype) != decl.bus) {
+          int dev_vendor = static_cast<unsigned short>(info.vendor);
+          int dev_product = static_cast<unsigned short>(info.product);
+
+          // vid_pid matching
+          bool vidpid_ok = decl.vid_pid.empty();
+          for (auto &[v, p] : decl.vid_pid) {
+            bool vendor_ok = (v == 0 || v == dev_vendor);
+            bool product_ok = (p == 0 || p == dev_product);
+            if (vendor_ok && product_ok) {
+              vidpid_ok = true;
+              break;
+            }
+          }
+          if (!vidpid_ok) {
             ok = false;
           }
 
-          int vendor = static_cast<unsigned short>(info.vendor);
-          int product = static_cast<unsigned short>(info.product);
-
-          if (decl.vendor && vendor != decl.vendor) {
-            ok = false;
-          }
-          if (decl.product && product != decl.product) {
+          if (ok && decl.bus && static_cast<int>(info.bustype) != decl.bus) {
             ok = false;
           }
 
-          if (!decl.name.empty()) {
+          if (ok && !decl.name.empty()) {
             char name[256] = { 0 };
             if (ioctl(fd, HIDIOCGRAWNAME(sizeof(name) - 1), name) >= 0) {
               if (!match_string(decl.name, name)) {
@@ -57,7 +64,7 @@ bool DeviceInHidraw::match(const InputDecl &decl, std::string &devnode_out) {
             }
           }
 
-          if (!decl.phys.empty()) {
+          if (ok && !decl.phys.empty()) {
             char phys[64] = { 0 };
             if (ioctl(fd, HIDIOCGRAWPHYS(sizeof(phys) - 1), phys) >= 0) {
               if (!match_string(decl.phys, phys)) {
@@ -66,7 +73,7 @@ bool DeviceInHidraw::match(const InputDecl &decl, std::string &devnode_out) {
             }
           }
 
-          if (!decl.uniq.empty()) {
+          if (ok && !decl.uniq.empty()) {
             char uniq[64] = { 0 };
             if (ioctl(fd, HIDIOCGRAWUNIQ(sizeof(uniq) - 1), uniq) >= 0) {
               if (!match_string(decl.uniq, uniq)) {
@@ -75,11 +82,17 @@ bool DeviceInHidraw::match(const InputDecl &decl, std::string &devnode_out) {
             }
           }
 
-          if (decl.interface >= 0) {
+          if (ok && decl.interface >= 0) {
             int iface = get_interface_num(devnode);
             if (iface != decl.interface) {
               ok = false;
             }
+          }
+
+          // store vendor/product after match
+          if (ok) {
+            decl.vendor = dev_vendor;
+            decl.product = dev_product;
           }
         }
 

@@ -16,7 +16,7 @@ class DeviceInHidraw : public DeviceIn, public Singleton<DeviceInHidraw> {
   ~DeviceInHidraw() = default;
 
  public:
-  bool match(const InputDecl &decl, std::string &devnode_out) override;
+  bool match(InputDecl &decl, std::string &devnode_out) override;
   bool attach(const std::string &devnode, InputDecl &decl) override;
   bool detach(const std::string &id) override;
 

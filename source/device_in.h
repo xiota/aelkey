@@ -10,7 +10,7 @@ class DeviceIn {
   virtual ~DeviceIn() = default;
 
  public:
-  virtual bool match(const InputDecl &decl, std::string &devnode_out) = 0;
+  virtual bool match(InputDecl &decl, std::string &devnode_out) = 0;
 
   virtual bool attach(const std::string &devnode, InputDecl &decl) = 0;
 

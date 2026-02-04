@@ -7,7 +7,7 @@
 #include "dispatcher_evdev.h"
 #include "dispatcher_udev.h"
 
-bool DeviceInEvdev::match(const InputDecl &decl, std::string &devnode_out) {
+bool DeviceInEvdev::match(InputDecl &decl, std::string &devnode_out) {
   if (decl.type != "evdev") {
     return false;
   }
@@ -30,13 +30,24 @@ bool DeviceInEvdev::match(const InputDecl &decl, std::string &devnode_out) {
         if (libevdev_new_from_fd(fd, &evdev) == 0) {
           ok = true;
 
+          int dev_vendor = libevdev_get_id_vendor(evdev);
+          int dev_product = libevdev_get_id_product(evdev);
+
+          // vid_pid matching
+          bool vidpid_ok = decl.vid_pid.empty();
+          for (auto &[v, p] : decl.vid_pid) {
+            bool vendor_ok = (v == 0 || v == dev_vendor);
+            bool product_ok = (p == 0 || p == dev_product);
+            if (vendor_ok && product_ok) {
+              vidpid_ok = true;
+              break;
+            }
+          }
+          if (!vidpid_ok) {
+            ok = false;
+          }
+
           if (decl.bus && libevdev_get_id_bustype(evdev) != decl.bus) {
-            ok = false;
-          }
-          if (decl.vendor && libevdev_get_id_vendor(evdev) != decl.vendor) {
-            ok = false;
-          }
-          if (decl.product && libevdev_get_id_product(evdev) != decl.product) {
             ok = false;
           }
 
@@ -57,6 +68,12 @@ bool DeviceInEvdev::match(const InputDecl &decl, std::string &devnode_out) {
               ok = false;
               break;
             }
+          }
+
+          // store vendor/product after match
+          if (ok) {
+            decl.vendor = dev_vendor;
+            decl.product = dev_product;
           }
         }
 

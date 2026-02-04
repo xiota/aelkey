@@ -6,8 +6,11 @@
 struct InputDecl {
   std::string id;
   std::string type;
+
   int vendor = 0;
   int product = 0;
+  std::vector<std::pair<int, int>> vid_pid;
+
   int bus = 0;
   int interface = -1;
   std::string name;

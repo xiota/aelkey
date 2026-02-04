@@ -55,7 +55,7 @@ bool DeviceInMidi::on_init() {
   return true;
 }
 
-bool DeviceInMidi::match(const InputDecl &decl, std::string &devnode_out) {
+bool DeviceInMidi::match(InputDecl &decl, std::string &devnode_out) {
   if (!lazy_init()) {
     return false;
   }

@@ -23,24 +23,70 @@ class DeviceInLibUSB : public DeviceIn, public Singleton<DeviceInLibUSB> {
   }
 
  public:
-  bool match(const InputDecl &decl, std::string &devnode_out) override {
-    // libusb devices are not discovered by path
-    // Instead, match by vendor/product if provided
+  bool match(InputDecl &decl, std::string &devnode_out) override {
     if (decl.type != "libusb") {
       return false;
     }
 
-    // For now, simply pass through the ID as the "devnode"
+    if (decl.vid_pid.empty()) {
+      return false;
+    }
+
+    // pass through ID as "devnode"
     devnode_out = decl.id;
     return true;
   }
 
   bool attach(const std::string &devnode, InputDecl &decl) override {
-    uint16_t vendor = decl.vendor;
-    uint16_t product = decl.product;
+    if (!on_init()) {
+      return false;
+    }
 
-    libusb_device_handle *handle = libusb_open_device_with_vid_pid(libusb_, vendor, product);
+    uint16_t vendor = 0;
+    uint16_t product = 0;
 
+    // Find the first matching device using vid_pid
+    libusb_device **list = nullptr;
+    ssize_t count = libusb_get_device_list(libusb_, &list);
+    if (count < 0) {
+      return false;
+    }
+
+    libusb_device_handle *handle = nullptr;
+
+    for (ssize_t i = 0; i < count; ++i) {
+      libusb_device *dev = list[i];
+      libusb_device_descriptor desc;
+
+      if (libusb_get_device_descriptor(dev, &desc) != 0) {
+        continue;
+      }
+
+      uint16_t dv = desc.idVendor;
+      uint16_t dp = desc.idProduct;
+
+      bool vidpid_ok = false;
+      for (auto &[v, p] : decl.vid_pid) {
+        bool vendor_ok = (v == 0 || v == dv);
+        bool product_ok = (p == 0 || p == dp);
+        if (vendor_ok && product_ok) {
+          vidpid_ok = true;
+          break;
+        }
+      }
+      if (!vidpid_ok) {
+        continue;
+      }
+
+      // try to open match
+      if (libusb_open(dev, &handle) == 0 && handle) {
+        vendor = dv;
+        product = dp;
+        break;
+      }
+    }
+
+    libusb_free_device_list(list, 1);
     if (!handle) {
       return false;
     }
@@ -50,9 +96,11 @@ class DeviceInLibUSB : public DeviceIn, public Singleton<DeviceInLibUSB> {
       return false;
     }
 
-    // Track handle internally for detach()
-    devices_[decl.id] = handle;
+    // Store metadata
+    decl.vendor = vendor;
+    decl.product = product;
 
+    devices_[decl.id] = handle;
     return true;
   }
 

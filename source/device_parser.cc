@@ -40,14 +40,27 @@ InputDecl parse_input(sol::table tbl) {
     decl.grab = v.as<bool>();
   }
 
-  // vendor
-  if (sol::object v = tbl["vendor"]; v.valid() && v.is<int>()) {
-    decl.vendor = v.as<int>();
-  }
+  // vid_pid: array of { vendor, product }
+  if (sol::object vp_obj = tbl["vid_pid"]; vp_obj.valid() && vp_obj.is<sol::table>()) {
+    sol::table vp_tbl = vp_obj.as<sol::table>();
+    vp_tbl.for_each([&](sol::object /*k*/, sol::object v) {
+      if (!v.is<sol::table>()) {
+        return;
+      }
+      sol::table pair_tbl = v.as<sol::table>();
 
-  // product
-  if (sol::object v = tbl["product"]; v.valid() && v.is<int>()) {
-    decl.product = v.as<int>();
+      int vendor = 0;
+      int product = 0;
+
+      if (sol::object a = pair_tbl[1]; a.valid() && a.is<int>()) {
+        vendor = a.as<int>();
+      }
+      if (sol::object b = pair_tbl[2]; b.valid() && b.is<int>()) {
+        product = b.as<int>();
+      }
+
+      decl.vid_pid.emplace_back(vendor, product);
+    });
   }
 
   // bus

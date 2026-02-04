@@ -20,8 +20,7 @@ inputs = {
     -- for matching --
     name       = "<string>", -- Device name
     bus        = "<string>", -- Bus type ("usb", "bluetooth")
-    vendor     = <int>,
-    product    = <int>,
+    vid_pid    = { {<int>, <int>}, ... }
     interface  = <int>,      -- HID interface index (libusb)
 
     -- callbacks --

@@ -37,7 +37,7 @@ DeviceIn *DeviceInManager::backend_for_type(const std::string &type) {
   return (it != backends_.end()) ? it->second : nullptr;
 }
 
-bool DeviceInManager::match(const InputDecl &decl, std::string &devnode_out) {
+bool DeviceInManager::match(InputDecl &decl, std::string &devnode_out) {
   DeviceIn *backend = backend_for_type(decl.type);
   return backend && backend->match(decl, devnode_out);
 }

@@ -31,7 +31,7 @@ class DeviceInGatt : public DeviceIn, public Singleton<DeviceInGatt> {
   bool auto_init_ = true;
 
  public:
-  bool match(const InputDecl &decl, std::string &devnode_out) override {
+  bool match(InputDecl &decl, std::string &devnode_out) override {
     lazy_init();
     if (!conn_) {
       return false;
