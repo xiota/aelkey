@@ -551,6 +551,41 @@ sol::object usb_clear_halt(sol::this_state ts, sol::table opts) {
   return result;
 }
 
+// set_interface_alt_setting{device, interface, alt}
+// Returns {device, status}
+sol::object usb_set_interface_alt_setting(sol::this_state ts, sol::table opts) {
+  lua_State *L = ts;
+  sol::state_view lua(L);
+
+  // device id
+  std::string dev_id = opts.get<std::string>("device");
+
+  auto &backend = DeviceInLibUSB::instance();
+  libusb_device_handle *handle = backend.get_handle(dev_id);
+  if (!handle) {
+    sol::table result = lua.create_table();
+    result["device"] = dev_id;
+    result["status"] = libusb_error_name(LIBUSB_ERROR_NO_DEVICE);
+    return result;
+  }
+
+  // interface number
+  int interface_number = opts.get<int>("interface");
+
+  // altsetting
+  int alt_setting = opts.get<int>("alt");
+
+  int status = libusb_set_interface_alt_setting(
+      handle, static_cast<int>(interface_number), static_cast<int>(alt_setting)
+  );
+
+  sol::table result = lua.create_table();
+  result["device"] = dev_id;
+  result["status"] = status;
+
+  return result;
+}
+
 extern "C" int luaopen_aelkey_usb(lua_State *L) {
   sol::state_view lua(L);
 
@@ -562,6 +597,7 @@ extern "C" int luaopen_aelkey_usb(lua_State *L) {
   mod.set_function("submit_transfer", usb_submit_transfer);
 
   mod.set_function("clear_halt", usb_clear_halt);
+  mod.set_function("set_interface_alt_setting", usb_set_interface_alt_setting);
 
   return sol::stack::push(L, mod);
 }

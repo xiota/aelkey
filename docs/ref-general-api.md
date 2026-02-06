@@ -46,6 +46,7 @@ Asynchronous transfers have additional fields `{..., endpoint, transfer}`.
 Configuration functions return `{device, status}`.
 
 - `clear_halt{device, endpoint}` - Clear a stalled endpoint so transfers can resume.
+- `set_interface_alt_setting{device, interface, alt}` - Select an alternate interface setting to use a different endpoint layout.
 
 ### Logging (`aelkey.log`)
 
