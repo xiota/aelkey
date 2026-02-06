@@ -554,6 +554,58 @@ sol::object usb_clear_halt(sol::this_state ts, sol::table opts) {
   return result;
 }
 
+// reset_device{device}
+// Returns {device, status}
+sol::object usb_reset_device(sol::this_state ts, sol::table opts) {
+  lua_State *L = ts;
+  sol::state_view lua(L);
+
+  std::string dev_id = opts.get<std::string>("device");
+
+  auto &backend = DeviceInLibUSB::instance();
+  libusb_device_handle *handle = backend.get_handle(dev_id);
+  if (!handle) {
+    sol::table result = lua.create_table();
+    result["device"] = dev_id;
+    result["status"] = libusb_error_name(LIBUSB_ERROR_NO_DEVICE);
+    return result;
+  }
+
+  int status = libusb_reset_device(handle);
+
+  sol::table result = lua.create_table();
+  result["device"] = dev_id;
+  result["status"] = (status == 0) ? "ok" : libusb_error_name(status);
+  return result;
+}
+
+// set_configuration{device, config}
+// Returns {device, status}
+sol::object usb_set_configuration(sol::this_state ts, sol::table opts) {
+  lua_State *L = ts;
+  sol::state_view lua(L);
+
+  std::string dev_id = opts.get<std::string>("device");
+
+  auto &backend = DeviceInLibUSB::instance();
+  libusb_device_handle *handle = backend.get_handle(dev_id);
+  if (!handle) {
+    sol::table result = lua.create_table();
+    result["device"] = dev_id;
+    result["status"] = libusb_error_name(LIBUSB_ERROR_NO_DEVICE);
+    return result;
+  }
+
+  int config = opts.get<int>("config");
+
+  int status = libusb_set_configuration(handle, config);
+
+  sol::table result = lua.create_table();
+  result["device"] = dev_id;
+  result["status"] = (status == 0) ? "ok" : libusb_error_name(status);
+  return result;
+}
+
 // set_interface_alt_setting{device, interface, alt}
 // Returns {device, status}
 sol::object usb_set_interface_alt_setting(sol::this_state ts, sol::table opts) {
@@ -600,6 +652,8 @@ extern "C" int luaopen_aelkey_usb(lua_State *L) {
   mod.set_function("submit_transfer", usb_submit_transfer);
 
   mod.set_function("clear_halt", usb_clear_halt);
+  mod.set_function("reset_device", usb_reset_device);
+  mod.set_function("set_configuration", usb_set_configuration);
   mod.set_function("set_interface_alt_setting", usb_set_interface_alt_setting);
 
   return sol::stack::push(L, mod);
