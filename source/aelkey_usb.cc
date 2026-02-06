@@ -222,7 +222,7 @@ sol::object usb_bulk_transfer(sol::this_state ts, sol::table opts) {
   // common fields
   result["device"] = dev_id;
   result["size"] = transferred;
-  result["status"] = status;
+  result["status"] = (status == 0) ? "ok" : libusb_error_name(status);
 
   return result;
 }
@@ -319,7 +319,7 @@ sol::object usb_control_transfer(sol::this_state ts, sol::table opts) {
   // common fields
   result["device"] = dev_id;
   result["size"] = transferred;
-  result["status"] = status;
+  result["status"] = (status == 0) ? "ok" : libusb_error_name(status);
 
   return result;
 }
@@ -392,7 +392,7 @@ sol::object usb_interrupt_transfer(sol::this_state ts, sol::table opts) {
   // common fields
   result["device"] = dev_id;
   result["size"] = transferred;
-  result["status"] = status;
+  result["status"] = (status == 0) ? "ok" : libusb_error_name(status);
 
   return result;
 }
@@ -482,15 +482,15 @@ sol::object usb_submit_transfer(sol::this_state ts, sol::table opts) {
   xfer->user_data = new std::pair<InputDecl *, lua_State *>(decl, L);
   xfer->callback = dispatch_libusb;
 
-  int rc = libusb_submit_transfer(xfer);
-  if (rc != 0) {
+  int status = libusb_submit_transfer(xfer);
+  if (status != 0) {
     destroy_transfer(xfer);
 
     sol::table result = lua.create_table();
     result["device"] = dev_id;
     result["endpoint"] = endpoint;
     result["transfer"] = sol::lua_nil;
-    result["status"] = libusb_error_name(rc);
+    result["status"] = (status == 0) ? "ok" : libusb_error_name(status);
     return result;
   }
 
@@ -513,10 +513,13 @@ sol::object usb_submit_transfer(sol::this_state ts, sol::table opts) {
     if (!xfer) {
       return false;
     }
-    int rc2 = libusb_submit_transfer(xfer);
-    return rc2 == 0;
+    int rc = libusb_submit_transfer(xfer);
+    return rc == 0;
   });
 
+  t["device"] = dev_id;
+  t["endpoint"] = endpoint;
+  t["status"] = (status == 0) ? "ok" : libusb_error_name(status);
   return sol::make_object(lua, t);
 }
 
@@ -546,7 +549,7 @@ sol::object usb_clear_halt(sol::this_state ts, sol::table opts) {
 
   sol::table result = lua.create_table();
   result["device"] = dev_id;
-  result["status"] = status;
+  result["status"] = (status == 0) ? "ok" : libusb_error_name(status);
 
   return result;
 }
@@ -581,7 +584,7 @@ sol::object usb_set_interface_alt_setting(sol::this_state ts, sol::table opts) {
 
   sol::table result = lua.create_table();
   result["device"] = dev_id;
-  result["status"] = status;
+  result["status"] = (status == 0) ? "ok" : libusb_error_name(status);
 
   return result;
 }
