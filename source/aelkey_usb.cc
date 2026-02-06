@@ -520,6 +520,37 @@ sol::object usb_submit_transfer(sol::this_state ts, sol::table opts) {
   return sol::make_object(lua, t);
 }
 
+// clear_halt{device, endpoint}
+// Returns {device, status}
+sol::object usb_clear_halt(sol::this_state ts, sol::table opts) {
+  lua_State *L = ts;
+  sol::state_view lua(L);
+
+  // device id
+  std::string dev_id = opts.get<std::string>("device");
+
+  auto &backend = DeviceInLibUSB::instance();
+  libusb_device_handle *handle = backend.get_handle(dev_id);
+  if (!handle) {
+    sol::table result = lua.create_table();
+    result["device"] = dev_id;
+    result["status"] = libusb_error_name(LIBUSB_ERROR_NO_DEVICE);
+    return result;
+  }
+
+  // endpoint
+  int endpoint = opts.get<int>("endpoint");
+
+  // perform clear halt
+  int status = libusb_clear_halt(handle, static_cast<uint8_t>(endpoint));
+
+  sol::table result = lua.create_table();
+  result["device"] = dev_id;
+  result["status"] = status;
+
+  return result;
+}
+
 extern "C" int luaopen_aelkey_usb(lua_State *L) {
   sol::state_view lua(L);
 
@@ -529,6 +560,8 @@ extern "C" int luaopen_aelkey_usb(lua_State *L) {
   mod.set_function("control_transfer", usb_control_transfer);
   mod.set_function("interrupt_transfer", usb_interrupt_transfer);
   mod.set_function("submit_transfer", usb_submit_transfer);
+
+  mod.set_function("clear_halt", usb_clear_halt);
 
   return sol::stack::push(L, mod);
 }

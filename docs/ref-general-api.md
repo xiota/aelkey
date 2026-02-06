@@ -26,20 +26,26 @@
 - `send_feature_report(dev_id, data)` - synchronous feature report write.
 - `send_output_report(dev_id, data)` - send one HID output report.
 
-### USB Transfer Requests (`aelkey.usb`)
-
-All synchronous functions return `{device, data, size, status}`.
-Asynchronous functions additionally have `{..., endpoint, transfer}`.
-
-- `bulk_transfer{device, endpoint, size, [timeout]}` - perform a synchronous bulk transfer.
-- `control_transfer{device, request_type, request, value, index, length, [timeout]}` - submit a synchronous control transfer.
-- `interrupt_transfer{device, endpoint, size, [timeout]}` - synchronous interrupt transfer.
-- `submit_transfer{device, endpoint, type, size, timeout}` - asynchronous transfer.
-
 ### Bluetooth Low Energy Generic Attribute Profile (`aelkey.gatt`)
 
 - `read{device[, service, characteristic]}` - synchronous read from a characteristic.
 - `write{device, data [, response] [, service, characteristic]}` - write to a characteristic (default `response = false`).
+
+### USB Transfer Requests (`aelkey.usb`)
+
+Synchronous transfers return `{device, data, size, status}`.
+
+- `bulk_transfer{device, endpoint, size, [timeout]}` - Request high‑throughput data.
+- `control_transfer{device, request_type, request, value, index, length, [timeout]}` - Send commands and configuration requests.
+- `interrupt_transfer{device, endpoint, size, [timeout]}` - Handle periodic, latency‑sensitive messages.
+
+Asynchronous transfers have additional fields `{..., endpoint, transfer}`.
+
+- `submit_transfer{device, endpoint, type, size, timeout}` - Request an asynchronous transfer.
+
+Configuration functions return `{device, status}`.
+
+- `clear_halt{device, endpoint}` - Clear a stalled endpoint so transfers can resume.
 
 ### Logging (`aelkey.log`)
 
