@@ -82,9 +82,18 @@ bool DeviceInHidraw::match(InputDecl &decl, std::string &devnode_out) {
             }
           }
 
-          if (ok && decl.interface >= 0) {
+          if (ok && !decl.interfaces.empty()) {
             int iface = get_interface_num(devnode);
-            if (iface != decl.interface) {
+
+            bool match = false;
+            for (int want : decl.interfaces) {
+              if (want == iface) {
+                match = true;
+                break;
+              }
+            }
+
+            if (!match) {
               ok = false;
             }
           }

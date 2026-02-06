@@ -91,9 +91,20 @@ class DeviceInLibUSB : public DeviceIn, public Singleton<DeviceInLibUSB> {
       return false;
     }
 
-    if (claim_interface(handle, decl.interface) != 0) {
-      libusb_close(handle);
-      return false;
+    // If interfaces vector is empty → claim all interfaces
+    if (decl.interfaces.empty()) {
+      libusb_config_descriptor *cfg = nullptr;
+      if (libusb_get_active_config_descriptor(libusb_get_device(handle), &cfg) == 0 && cfg) {
+        for (int i = 0; i < cfg->bNumInterfaces; ++i) {
+          claim_interface(handle, i);
+        }
+        libusb_free_config_descriptor(cfg);
+      }
+    } else {
+      // Claim only the interfaces explicitly listed
+      for (int iface : decl.interfaces) {
+        claim_interface(handle, iface);
+      }
     }
 
     // Store metadata
@@ -111,7 +122,13 @@ class DeviceInLibUSB : public DeviceIn, public Singleton<DeviceInLibUSB> {
     }
 
     libusb_device_handle *handle = it->second;
-    libusb_release_interface(handle, 0);
+    libusb_config_descriptor *cfg = nullptr;
+    if (libusb_get_active_config_descriptor(libusb_get_device(handle), &cfg) == 0 && cfg) {
+      for (int i = 0; i < cfg->bNumInterfaces; ++i) {
+        libusb_release_interface(handle, i);
+      }
+      libusb_free_config_descriptor(cfg);
+    }
     libusb_close(handle);
 
     devices_.erase(it);

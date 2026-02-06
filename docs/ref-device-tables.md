@@ -18,10 +18,10 @@ inputs = {
     grab       = <bool>,     -- Attempt exclusive access
 
     -- for matching --
-    name       = "<string>", -- Device name
-    bus        = "<string>", -- Bus type ("usb", "bluetooth")
+    name       = "<string>",     -- Device name
+    bus        = "<string>",     -- Bus type ("usb", "bluetooth")
     vid_pid    = { {<int>, <int>}, ... }
-    interface  = <int>,      -- HID interface index (libusb)
+    interfaces = { <int>, ... }  -- HID interface indices (libusb)
 
     -- callbacks --
     on_event   = "<string>", -- Function name to receive event frames

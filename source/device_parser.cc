@@ -63,6 +63,16 @@ InputDecl parse_input(sol::table tbl) {
     });
   }
 
+  // interfaces: array of ints
+  if (sol::object v = tbl["interfaces"]; v.valid() && v.is<sol::table>()) {
+    sol::table if_tbl = v.as<sol::table>();
+    if_tbl.for_each([&](sol::object, sol::object val) {
+      if (val.is<int>()) {
+        decl.interfaces.push_back(val.as<int>());
+      }
+    });
+  }
+
   // bus
   if (sol::object v = tbl["bus"]; v.valid() && v.is<std::string>()) {
     std::string busstr = v.as<std::string>();
@@ -73,11 +83,6 @@ InputDecl parse_input(sol::table tbl) {
     } else if (busstr == "pci") {
       decl.bus = BUS_PCI;
     }
-  }
-
-  // interface
-  if (sol::object v = tbl["interface"]; v.valid() && v.is<int>()) {
-    decl.interface = v.as<int>();
   }
 
   // name
