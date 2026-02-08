@@ -27,7 +27,6 @@ DeviceInMidi::~DeviceInMidi() {
   }
 
   inputs_.clear();
-  source_ports_.clear();
 
   if (ring_) {
     jack_ringbuffer_free(ring_);
@@ -121,7 +120,6 @@ bool DeviceInMidi::attach(const std::string &devnode, InputDecl &decl) {
   }
 
   inputs_[decl.id] = in;
-  source_ports_[in] = src;
 
   decl.devnode = devnode;
   decl.fd = -1;
@@ -151,7 +149,6 @@ bool DeviceInMidi::detach(const std::string &id) {
   }
 
   jack_port_t *in = it->second;
-  source_ports_.erase(in);
 
   auto &jack = DeviceBackendJack::instance();
   jack.destroy_port(in);

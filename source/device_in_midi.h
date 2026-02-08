@@ -52,9 +52,6 @@ class DeviceInMidi : public DeviceIn, public Singleton<DeviceInMidi> {
   // id -> JACK port
   std::map<std::string, jack_port_t *> inputs_;
 
-  // JACK port -> source "Client:Port" string
-  std::map<jack_port_t *, std::string> source_ports_;
-
   int tick_fd_ = -1;
   std::map<std::string, MidiBatch> batches_;
 
