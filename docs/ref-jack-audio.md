@@ -32,7 +32,7 @@ inputs = {
   {
     ----- Common -----
     id         = "<string>", -- Unique identifier used in events and callbacks
-    type       = "midi",
+    type       = "audio" | "midi",
 
     -- for matching --
     name       = "<string>", -- Device name
@@ -62,7 +62,25 @@ outputs = {
 }
 ```
 
-The MIDI event callback receives a table of message tables.
+The `audio` event callback receives a table of audio-block tables.
+
+```lua
+{
+  [1] = {
+    device    = "<id string>",     -- InputDecl.id
+    data      = "<binary string>", -- raw float32 PCM samples
+    size      = <int>,             -- size in bytes
+    status    = "ok",
+
+    frames    = <int>,             -- number of float32 frames
+    timestamp = <uint64>,          -- microseconds (host monotonic clock)
+  },
+  [2] = { ... },
+  ...
+}
+```
+
+The `midi` event callback receives a table of message tables.
 
 ```lua
 {
@@ -79,7 +97,7 @@ The MIDI event callback receives a table of message tables.
 }
 ```
 
-Port information from `aelkey.jack.get_port_info(port)` is returned in a table.
+Port information from `jack.get_port_info(port)` is returned in a table.
 
 ```lua
 {
@@ -97,7 +115,7 @@ Port information from `aelkey.jack.get_port_info(port)` is returned in a table.
 }
 ```
 
-Message types and tables created by `decode()` and used by `encode()`:
+Message types and tables created by `midi.decode()` and used by `midi.encode()`:
 
 ```lua
 {

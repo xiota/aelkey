@@ -14,7 +14,7 @@ inputs = {
   {
     ----- Common -----
     id         = "<string>", -- Unique identifier used in events and callbacks
-    type       = "<string>", -- Device type: evdev, gatt, hidraw, libusb, midi
+    type       = "<string>", -- Device type: audio, evdev, gatt, hidraw, libusb, midi
     grab       = <bool>,     -- Attempt exclusive access
 
     -- for matching --

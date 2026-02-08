@@ -2,16 +2,17 @@
 
 A programmable input remapping framework for Linux to observe, transform, and synthesize input events across a wide range of devices. Designed for advanced workflows where traditional keybinding tools are too complicated or fall short.
 
-Supports `evdev`, `hidraw`, `libusb`, `midi`, and `gatt` backends with optional force‑feedback routing and custom haptic effects.
+Supports `audio`, `evdev`, `gatt`, `hidraw`, `libusb`, and `midi` backends with force‑feedback routing and custom haptic effects.
 
 ## Why use Ælkey
 
-Make non‑standard, unsupported, or poorly behaved input devices usable on Linux.
+No other remapper gives users the freedom to...
 
-* Create complex input behaviors with Lua instead of static keymaps
-* Combine events from multiple devices with a single logic layer
+* Script complex input behaviors instead of applying static keymaps
+* Combine and transform events from multiple devices
 * Interact with HID, USB, and BLE devices directly
-* Write userspace drivers for devices that are otherwise unusable
+* Write userspace drivers for otherwise unsupported devices
+* Implement unconventional or accessibility‑oriented input schemes
 * Build custom haptics and feedback loops
 
 ## Example

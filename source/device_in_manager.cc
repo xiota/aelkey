@@ -1,6 +1,7 @@
 #include "device_in_manager.h"
 
 #include "aelkey_state.h"
+#include "device_in_audio.h"
 #include "device_in_evdev.h"
 #include "device_in_gatt.h"
 #include "device_in_hidraw.h"
@@ -25,6 +26,7 @@ DeviceInManager::DeviceInManager() {
   TickScheduler::register_self();
 
   // Register backends
+  backends_["audio"] = &DeviceInAudio::instance();
   backends_["evdev"] = &DeviceInEvdev::instance();
   backends_["gatt"] = &DeviceInGatt::instance();
   backends_["hidraw"] = &DeviceInHidraw::instance();
