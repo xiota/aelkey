@@ -194,17 +194,26 @@ void DeviceInMidi::push_event(const MidiEvent &ev) {
 
   uint32_t size = static_cast<uint32_t>(ev.data.size());
   uint32_t id_len = static_cast<uint32_t>(ev.id.size());
+  uint64_t timestamp_us = ev.timestamp_us;
 
-  size_t total = sizeof(size) + sizeof(id_len) + id_len + size;
+  // size + id_len + id + timestamp + data
+  size_t total = sizeof(size) + sizeof(id_len) + id_len + sizeof(timestamp_us) + size;
+
   if (jack_ringbuffer_write_space(ring_) < total) {
     return;
   }
 
   jack_ringbuffer_write(ring_, reinterpret_cast<const char *>(&size), sizeof(size));
   jack_ringbuffer_write(ring_, reinterpret_cast<const char *>(&id_len), sizeof(id_len));
+
   if (id_len) {
     jack_ringbuffer_write(ring_, ev.id.data(), id_len);
   }
+
+  jack_ringbuffer_write(
+      ring_, reinterpret_cast<const char *>(&timestamp_us), sizeof(timestamp_us)
+  );
+
   if (size) {
     jack_ringbuffer_write(ring_, reinterpret_cast<const char *>(ev.data.data()), size);
   }
@@ -225,7 +234,7 @@ bool DeviceInMidi::pop_event(MidiEvent &out) {
   jack_ringbuffer_read(ring_, reinterpret_cast<char *>(&size), sizeof(size));
   jack_ringbuffer_read(ring_, reinterpret_cast<char *>(&id_len), sizeof(id_len));
 
-  if (jack_ringbuffer_read_space(ring_) < id_len + size) {
+  if (jack_ringbuffer_read_space(ring_) < id_len + sizeof(uint64_t) + size) {
     return false;
   }
 
@@ -233,6 +242,8 @@ bool DeviceInMidi::pop_event(MidiEvent &out) {
   if (id_len) {
     jack_ringbuffer_read(ring_, out.id.data(), id_len);
   }
+
+  jack_ringbuffer_read(ring_, reinterpret_cast<char *>(&out.timestamp_us), sizeof(uint64_t));
 
   out.data.resize(size);
   if (size) {
