@@ -18,10 +18,6 @@ struct MidiEvent {
   uint64_t timestamp_us;
 };
 
-struct MidiBatch {
-  std::vector<MidiEvent> events;
-};
-
 class DeviceInMidi : public DeviceIn, public Singleton<DeviceInMidi> {
   friend class Singleton<DeviceInMidi>;
 
@@ -44,7 +40,8 @@ class DeviceInMidi : public DeviceIn, public Singleton<DeviceInMidi> {
   void push_event(const MidiEvent &ev);
   bool pop_event(MidiEvent &out);
 
-  void dispatch_batch_to_lua(const std::string &id, const std::vector<MidiEvent> &events);
+  void
+  dispatch_batch_to_lua(const std::string &callback_name, const std::vector<MidiEvent> &events);
 
  private:
   jack_ringbuffer_t *ring_ = nullptr;
@@ -53,7 +50,11 @@ class DeviceInMidi : public DeviceIn, public Singleton<DeviceInMidi> {
   std::map<std::string, jack_port_t *> inputs_;
 
   int tick_fd_ = -1;
-  std::map<std::string, MidiBatch> batches_;
+
+  // key = callback name
+  std::map<std::string, std::vector<MidiEvent>> batches_;
 
   bool rt_registered_ = false;
+
+  static constexpr size_t MIDI_RINGBUFFER_BYTES = 8 * 1024;
 };

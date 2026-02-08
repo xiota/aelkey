@@ -13,8 +13,6 @@
 #include "device_helpers.h"
 #include "tick_scheduler.h"
 
-static constexpr size_t MIDI_RINGBUFFER_BYTES = 64 * 1024;
-
 DeviceInMidi::~DeviceInMidi() {
   if (tick_fd_ >= 0) {
     TickScheduler::instance().unregister_fd(tick_fd_);
@@ -245,23 +243,13 @@ bool DeviceInMidi::pop_event(MidiEvent &out) {
 }
 
 void DeviceInMidi::dispatch_batch_to_lua(
-    const std::string &id,
+    const std::string &callback_name,
     const std::vector<MidiEvent> &events
 ) {
   auto &state = AelkeyState::instance();
   sol::state_view lua(state.lua_vm);
 
-  auto it = state.input_map.find(id);
-  if (it == state.input_map.end()) {
-    return;
-  }
-
-  const InputDecl &decl = it->second;
-  if (decl.on_event.empty()) {
-    return;
-  }
-
-  sol::object obj = lua[decl.on_event];
+  sol::object obj = lua[callback_name];
   if (!obj.is<sol::function>()) {
     return;
   }
@@ -274,7 +262,7 @@ void DeviceInMidi::dispatch_batch_to_lua(
   for (auto &ev : events) {
     sol::table e = lua.create_table();
 
-    e["device"] = id;
+    e["device"] = ev.id;
     e["timestamp"] = ev.timestamp_us;
     e["data"] =
         std::string_view(reinterpret_cast<const char *>(ev.data.data()), ev.data.size());
@@ -294,16 +282,29 @@ void DeviceInMidi::dispatch_batch_to_lua(
 }
 
 void DeviceInMidi::pump_messages() {
-  MidiEvent ev;
+  auto &state = AelkeyState::instance();
 
+  MidiEvent ev;
   while (pop_event(ev)) {
-    batches_[ev.id].events.push_back(ev);
+    // Look up InputDecl to find callback name
+    auto it_decl = state.input_map.find(ev.id);
+    if (it_decl == state.input_map.end()) {
+      continue;
+    }
+
+    const InputDecl &decl = it_decl->second;
+    if (decl.on_event.empty()) {
+      continue;
+    }
+
+    // batch by callback name
+    batches_[decl.on_event].push_back(ev);
   }
 
-  for (auto &[id, batch] : batches_) {
-    if (!batch.events.empty()) {
-      dispatch_batch_to_lua(id, batch.events);
-      batch.events.clear();
+  for (auto &[cb, batch] : batches_) {
+    if (!batch.empty()) {
+      dispatch_batch_to_lua(cb, batch);
+      batch.clear();
     }
   }
 }
