@@ -223,21 +223,31 @@ bool DeviceInAudio::pop_event(AudioEvent &out) {
     return false;
   }
 
+  // Need at least the header
   if (jack_ringbuffer_read_space(ring_) < sizeof(uint32_t) * 2) {
     return false;
   }
 
-  uint32_t frames = 0;
-  uint32_t id_len = 0;
+  // Peek first
+  uint32_t header[2];
+  jack_ringbuffer_peek(ring_, reinterpret_cast<char *>(header), sizeof(header));
 
-  jack_ringbuffer_read(ring_, reinterpret_cast<char *>(&frames), sizeof(frames));
-  jack_ringbuffer_read(ring_, reinterpret_cast<char *>(&id_len), sizeof(id_len));
+  uint32_t frames = header[0];
+  uint32_t id_len = header[1];
 
+  // Check if full message is available
   size_t data_size = static_cast<size_t>(frames) * sizeof(float);
 
-  if (jack_ringbuffer_read_space(ring_) < id_len + sizeof(uint64_t) + data_size) {
+  size_t total_needed =
+      sizeof(uint32_t) + sizeof(uint32_t) + id_len + sizeof(uint64_t) + data_size;
+
+  if (jack_ringbuffer_read_space(ring_) < total_needed) {
     return false;
   }
+
+  // Safe to read
+  jack_ringbuffer_read(ring_, reinterpret_cast<char *>(&frames), sizeof(frames));
+  jack_ringbuffer_read(ring_, reinterpret_cast<char *>(&id_len), sizeof(id_len));
 
   out.frames = frames;
 

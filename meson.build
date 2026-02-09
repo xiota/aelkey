@@ -107,6 +107,7 @@ src_files = files(
   'source/device_in_hidraw.cc',
   'source/device_in_manager.cc',
   'source/device_in_midi.cc',
+  'source/device_out_audio.cc',
   'source/device_out_manager.cc',
   'source/device_out_midi.cc',
   'source/device_out_uinput.cc',

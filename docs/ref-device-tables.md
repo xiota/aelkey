@@ -49,7 +49,7 @@ outputs = {
   {
     ----- Common -----
     id         = "<string>", -- Unique identifier used in events and callbacks
-    type       = "<string>", -- Virtual device type: midi, uinput
+    type       = "<string>", -- Virtual device type: audio, midi, uinput
 
     -- for matching --
     name       = "<string>", -- Device name

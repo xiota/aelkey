@@ -51,7 +51,7 @@ outputs = {
   {
     ----- Common -----
     id         = "<string>", -- Unique identifier used in events and callbacks
-    type       = "midi",
+    type       = "audio" | "midi",
 
     -- for matching --
     name       = "<string>", -- Device name
