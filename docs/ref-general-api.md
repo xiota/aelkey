@@ -46,8 +46,8 @@ Asynchronous transfers have additional fields `{..., endpoint, transfer}`.
 Configuration functions return `{device, status}`.
 
 - `clear_halt{device, endpoint}` - Clear a stalled endpoint so transfers can resume.
-- `reset_device{device}` – Perform a USB‑level device reset.
-- `set_configuration{device, config}` – Select a USB configuration.
+- `reset_device{device}` - Perform a USB‑level device reset.
+- `set_configuration{device, config}` - Select a USB configuration.
 - `set_interface_alt_setting{device, interface, alt}` - Select an alternate interface setting to use a different endpoint layout.
 
 ### Logging (`aelkey.log`)
@@ -76,14 +76,15 @@ Note: Only udev compatible types can be watched (evdev, hidraw, libusb).
 
 ### Miscellaneous Utilities (`aelkey.util`)
 
-- `crc32(data, seed)` - compute CRC32 (IEEE) checksum.
-- `dump_events(events)` - return a formatted string describing a list of input events.
-- `dump_hex(bytes)` - return a hex‑dump a binary blob or array of bytes.
-- `dump_raw(data)` - return a hex‑dump string of an hidraw report.
-- `dump_table(table)` - return a recursively formatted string representation of a Lua table.
-- `now([resolution])` - current monotonic time in milliseconds, or in `us`/`ns` if specified.
-- `tick(ms, callback)` - schedule periodic ticks (e.g. timers inside the loop).
-- `bench_scope(label)` - measure execution time and the interval between calls
+- `crc32_core(data, seed)` - Compute a CRC‑32 iteration with no XORs.
+- `crc32_ieee(data [, seed])` - Compute an IEEE CRC‑32 checksum (with initial and final XOR).
+- `dump_events(events)` - Return a formatted string describing a list of input events.
+- `dump_hex(bytes)` - Return a hex‑dump a binary blob or array of bytes.
+- `dump_raw(data)` - Return a hex‑dump string of an hidraw report.
+- `dump_table(table)` - Return a recursively formatted string representation of a Lua table.
+- `now([resolution])` - Return current monotonic time in milliseconds, or in `us`/`ns` if specified.
+- `tick(ms, callback)` - Schedule periodic ticks (e.g. timers inside the loop).
+- `bench_scope(label)` - Measure execution time and the interval between calls.
 
   Usage for Lua 5.1+:
   ```lua

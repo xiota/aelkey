@@ -35,17 +35,28 @@ constexpr std::array<uint32_t, 256> make_crc32_table() {
 
 constexpr auto crc32_table = make_crc32_table();
 
-uint32_t crc32(const uint8_t *data, size_t len, uint32_t seed = 0) {
-  uint32_t crc = ~seed;
+uint32_t crc32_core(const uint8_t *data, size_t len, uint32_t seed = 0) {
+  uint32_t crc = seed;
   for (size_t i = 0; i < len; ++i) {
     crc = (crc >> 8) ^ crc32_table[(crc ^ data[i]) & 0xFF];
   }
+  return crc;
+}
+
+uint32_t crc32_ieee(const uint8_t *data, size_t len, uint32_t seed = 0) {
+  uint32_t crc = ~seed;
+  crc = crc32_core(data, len, crc);
   return ~crc;
 }
 
-// crc32(data, seed)
-uint32_t util_crc32(const std::string &data, uint32_t seed = 0) {
-  return crc32(reinterpret_cast<const uint8_t *>(data.data()), data.size(), seed);
+// crc32_core(data, seed)
+uint32_t util_crc32_core(const std::string &data, uint32_t seed) {
+  return crc32_core(reinterpret_cast<const uint8_t *>(data.data()), data.size(), seed);
+}
+
+// crc32_ieee(data, [seed])
+uint32_t util_crc32_ieee(const std::string &data, uint32_t seed = 0) {
+  return crc32_ieee(reinterpret_cast<const uint8_t *>(data.data()), data.size(), seed);
 }
 
 // now("ms"|"us"|"ns")
@@ -108,7 +119,8 @@ extern "C" int luaopen_aelkey_util(lua_State *L) {
 
   sol::table mod = lua.create_table();
 
-  mod.set_function("crc32", util_crc32);
+  mod.set_function("crc32_core", util_crc32_core);
+  mod.set_function("crc32_ieee", util_crc32_ieee);
   mod.set_function("now", util_now);
   mod.set_function("tick", util_tick);
 
