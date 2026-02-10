@@ -39,7 +39,7 @@ class DispatcherBase {
 
   std::map<int, EpollPayload> pollfds_;
   int cycle_ = 0;
-  std::vector<int> deferred_unregs_[2];
+  std::vector<int> deferred_unregs_[3];
 };
 
 // CRTP dispatcher class

@@ -61,9 +61,9 @@ sol::object loop_start(sol::this_state ts) {
       payload->dispatcher->handle_event(payload, events[i].events);
     }
 
-    // for (auto &[type, dispatcher] : dispatcher_registry()) {
-    //   dispatcher->flush_deferred();
-    // }
+    for (auto &[type, dispatcher] : dispatcher_registry()) {
+      dispatcher->flush_deferred();
+    }
   }
 
   // Cleanup all resources

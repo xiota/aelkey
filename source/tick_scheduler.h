@@ -37,6 +37,7 @@ class TickScheduler : public Dispatcher<TickScheduler> {
   }
 
   void on_unregister(int fd) override {
+    callbacks_.erase(fd);
     close(fd);
   }
 
@@ -120,7 +121,7 @@ class TickScheduler : public Dispatcher<TickScheduler> {
   }
 
   void cancel_matching(const TickCb &key) {
-    for (auto it = callbacks_.begin(); it != callbacks_.end();) {
+    for (auto it = callbacks_.begin(); it != callbacks_.end(); ++it) {
       auto &existing = it->second;
       bool match = false;
 
@@ -133,9 +134,6 @@ class TickScheduler : public Dispatcher<TickScheduler> {
       if (match) {
         int fd = it->first;
         unregister_fd(fd);
-        it = callbacks_.erase(it);
-      } else {
-        ++it;
       }
     }
   }

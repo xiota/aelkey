@@ -49,20 +49,28 @@ void DispatcherBase::cleanup_fds() {
 
   for (auto &[fd, payload] : pollfds_) {
     epoll_ctl(state.epfd, EPOLL_CTL_DEL, fd, nullptr);
+    on_unregister(fd);
   }
   pollfds_.clear();
 }
 
 void DispatcherBase::flush_deferred() {
-  int previous = (cycle_ + 1) % 2;
+  // cycle: writing in current cycle, unsafe to flush
+  // cycle - 1 (+2 % 3): wrote last cycle, safe to flush
+  int prev = (cycle_ + 2) % 3;
+  auto &list = deferred_unregs_[prev];
 
-  for (int fd : deferred_unregs_[previous]) {
-    auto it = pollfds_.find(fd);
-    if (it != pollfds_.end()) {
-      on_unregister(fd);
+  if (!list.empty()) {
+    for (int fd : list) {
+      auto it = pollfds_.find(fd);
+      if (it != pollfds_.end()) {
+        on_unregister(fd);
+        pollfds_.erase(it);
+      }
     }
+    list.clear();
   }
 
-  deferred_unregs_[previous].clear();
-  cycle_ = previous;
+  // cycle + 1: already cleared, ready for next cycle
+  cycle_ = (cycle_ + 1) % 3;
 }
