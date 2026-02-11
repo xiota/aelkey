@@ -34,6 +34,8 @@ class AelkeyState : public Singleton<AelkeyState> {
   // Parse global "outputs" table from the given Lua state
   void parse_outputs_from_lua(sol::this_state ts);
 
+  void notify_state_change(const InputDecl &decl, const char *state);
+
  public:
   lua_State *lua_vm = nullptr;
 

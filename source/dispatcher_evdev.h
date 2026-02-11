@@ -13,7 +13,6 @@
 #include "device_in_manager.h"
 #include "dispatcher.h"
 #include "dispatcher_haptics.h"
-#include "dispatcher_udev.h"
 #include "singleton.h"
 
 struct EvdevDeviceState {
@@ -121,7 +120,7 @@ class DispatcherEvdev : public Dispatcher<DispatcherEvdev> {
     if (events & (EPOLLHUP | EPOLLERR)) {
       auto removed = DeviceInManager::instance().detach(decl.id);
       if (removed && !removed->id.empty()) {
-        DispatcherUdev::instance().notify_state_change(*removed, "remove");
+        state.notify_state_change(*removed, "remove");
       }
       return;
     }

@@ -13,7 +13,6 @@
 #include "aelkey_state.h"
 #include "aelkey_usb.h"
 #include "aelkey_util.h"
-#include "dispatcher_udev.h"
 #include "lua_scripts.h"
 #include "tick_scheduler.h"
 

@@ -121,31 +121,6 @@ struct udev *DispatcherUdev::get_udev() const {
   return udev_ctx_;
 }
 
-void DispatcherUdev::notify_state_change(const InputDecl &decl, const char *state) {
-  if (decl.on_state.empty()) {
-    return;
-  }
-
-  sol::state_view lua(AelkeyState::instance().lua_vm);
-  sol::object obj = lua[decl.on_state];
-  if (!obj.is<sol::function>()) {
-    return;
-  }
-
-  sol::function cb = obj.as<sol::function>();
-
-  sol::table tbl = lua.create_table();
-  tbl["device"] = decl.id;
-  tbl["state"] = state ? state : "";
-
-  sol::protected_function pf = cb;
-  sol::protected_function_result result = pf(tbl);
-  if (!result.valid()) {
-    sol::error err = result;
-    std::fprintf(stderr, "Lua state_callback error: %s\n", err.what());
-  }
-}
-
 void DispatcherUdev::handle_udev_add(struct udev_device *dev) {
   const char *subsystem = udev_device_get_subsystem(dev);
   const char *node = udev_device_get_devnode(dev);
@@ -170,7 +145,7 @@ void DispatcherUdev::handle_udev_add(struct udev_device *dev) {
         if (matched == devnode) {
           decl.devnode = devnode;
           decl.on_state = state.on_watchlist;
-          notify_state_change(decl, "add");
+          state.notify_state_change(decl, "add");
         }
       } else if (decl.type == "libusb" && std::string(subsystem) == "usb") {
         const char *syspath = udev_device_get_syspath(dev);
@@ -181,7 +156,7 @@ void DispatcherUdev::handle_udev_add(struct udev_device *dev) {
         if (matched == std::string(syspath)) {
           decl.devnode = syspath;
           decl.on_state = state.on_watchlist;
-          notify_state_change(decl, "add");
+          state.notify_state_change(decl, "add");
         }
       }
     }
@@ -203,7 +178,7 @@ void DispatcherUdev::handle_udev_add(struct udev_device *dev) {
 
         if (DeviceInManager::instance().attach(devnode, decl)) {
           decl.devnode = devnode;
-          notify_state_change(decl, "add");
+          state.notify_state_change(decl, "add");
         }
         break;
       }
@@ -220,7 +195,7 @@ void DispatcherUdev::handle_udev_add(struct udev_device *dev) {
 
         if (DeviceInManager::instance().attach(matched, decl)) {
           decl.devnode = matched;
-          notify_state_change(decl, "add");
+          state.notify_state_change(decl, "add");
         }
         break;
       }
@@ -250,14 +225,14 @@ void DispatcherUdev::handle_udev_remove(struct udev_device *dev) {
 
         if (decl.devnode == std::string(syspath)) {
           decl.on_state = state.on_watchlist;
-          notify_state_change(decl, "remove");
+          state.notify_state_change(decl, "remove");
           decl.devnode.clear();
         }
       } else if ((decl.type == "evdev" && std::string(subsystem) == "input") ||
                  (decl.type == "hidraw" && std::string(subsystem) == "hidraw")) {
         if (decl.devnode == devnode) {
           decl.on_state = state.on_watchlist;
-          notify_state_change(decl, "remove");
+          state.notify_state_change(decl, "remove");
           decl.devnode.clear();
         }
       }
@@ -275,7 +250,7 @@ void DispatcherUdev::handle_udev_remove(struct udev_device *dev) {
       if (decl.devnode == std::string(syspath)) {
         auto removed = DeviceInManager::instance().detach(decl.id);
         if (removed && !removed->id.empty()) {
-          notify_state_change(*removed, "remove");
+          state.notify_state_change(*removed, "remove");
         }
         break;
       }
@@ -284,7 +259,7 @@ void DispatcherUdev::handle_udev_remove(struct udev_device *dev) {
       if (decl.devnode == devnode) {
         auto removed = DeviceInManager::instance().detach(decl.id);
         if (removed && !removed->id.empty()) {
-          notify_state_change(*removed, "remove");
+          state.notify_state_change(*removed, "remove");
         }
         break;
       }

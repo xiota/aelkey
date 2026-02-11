@@ -34,8 +34,6 @@ class DispatcherUdev : public Dispatcher<DispatcherUdev> {
 
   struct udev *get_udev() const;
 
-  void notify_state_change(const InputDecl &decl, const char *state);
-
  private:
   void handle_udev_add(struct udev_device *dev);
   void handle_udev_remove(struct udev_device *dev);

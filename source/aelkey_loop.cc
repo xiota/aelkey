@@ -18,7 +18,6 @@
 #include "device_declarations.h"
 #include "device_in_manager.h"
 #include "dispatcher.h"
-#include "dispatcher_udev.h"
 #include "util/scoped_timer.h"
 
 sol::object loop_stop(sol::this_state ts) {

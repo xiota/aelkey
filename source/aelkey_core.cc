@@ -8,7 +8,6 @@
 #include "device_declarations.h"
 #include "device_in_manager.h"
 #include "device_out_uinput.h"
-#include "dispatcher_udev.h"
 
 // Lua: open_device([dev_id])
 // Ret: boolean
@@ -53,7 +52,7 @@ sol::object core_open_device(sol::this_state ts, sol::optional<std::string> dev_
 
     if (DeviceInManager::instance().attach(devnode, decl)) {
       decl.devnode = devnode;
-      DispatcherUdev::instance().notify_state_change(decl, "add");
+      state.notify_state_change(decl, "add");
       ok = true;
     }
     break;
