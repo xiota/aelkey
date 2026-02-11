@@ -48,15 +48,15 @@ Available `ease_fn` functions:
 
 Keyboard report parsing and event remapping with Fn‑layer support.
 
-- `new(opts)` – Create a keyboard remapper with `normal_map`, `modifier_map`, and `fn_map`.
-- `begin_frame()` – Start a new frame and clear the pending output buffer.
-- `feed_events(evlist)` – Process a batch of EVDEV key events and generate mapped output.
-- `feed_key(event)` – Process a single EVDEV key event.
-- `end_frame()` – Finish the frame (reserved for future logic).
-- `emit_events(dev_id)` – Emit all buffered mapped events to the given virtual device.
-- `get_pending_events()` – Return a copy of buffered events without clearing them.
-- `set_fn_down(boolean)` – Force Fn‑mode on or off externally.
-- `get_fn_down()` – Return current Fn‑mode state.
+- `new(opts)` - Create a keyboard remapper with `normal_map`, `modifier_map`, and `fn_map`.
+- `begin_frame()` - Start a new frame and clear the pending output buffer.
+- `feed_events(evlist)` - Process a batch of EVDEV key events and generate mapped output.
+- `feed_key(event)` - Process a single EVDEV key event.
+- `end_frame()` - Finish the frame (reserved for future logic).
+- `emit_events(dev_id)` - Emit all buffered mapped events to the given virtual device.
+- `get_pending_events()` - Return a copy of buffered events without clearing them.
+- `set_fn_down(boolean)` - Force Fn‑mode on or off externally.
+- `get_fn_down()` - Return current Fn‑mode state.
 
 Event tables contain evdev-compatible fields: `type`, `code`, and `value`.
 

@@ -6,17 +6,17 @@ MIDI messages are routed through JACK.  For system-wide connectivity, use PipeWi
 
 **`aelkey.jack`**
 
-- `set_client_name(name)` – set client name before initialization
-- `get_client_name()` – return current client name or nil
-- `list_ports([type], [flags])` – list ports
-- `match_ports(pattern)` – list ports with names matching a pattern
-- `connect(src, dst)` – connect two ports
-- `disconnect(src, dst)` – disconnect two ports
-- `get_port_info(port)` – return metadata about a port
+- `set_client_name(name)` - set client name before initialization
+- `get_client_name()` - return current client name or nil
+- `list_ports([type], [flags])` - list ports
+- `match_ports(pattern)` - list ports with names matching a pattern
+- `connect(src, dst)` - connect two ports
+- `disconnect(src, dst)` - disconnect two ports
+- `get_port_info(port)` - return metadata about a port
 
 **`aelkey.midi`**
 
-- `send(dev_id, data)` – send a message through the specified output device.
+- `send(dev_id, data)` - send a message through the specified output device.
   `data` may be a table of bytes or a raw binary string.
 
 - `decode(data)` - return a table of message tables
