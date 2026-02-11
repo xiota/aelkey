@@ -14,6 +14,11 @@ MIDI messages are routed through JACK.  For system-wide connectivity, use PipeWi
 - `disconnect(src, dst)` - disconnect two ports
 - `get_port_info(port)` - return metadata about a port
 
+**`aelkey.audio`**
+
+- `send(dev_id, data)` - send audio through the specified output device.
+  `data` may be a table of float32 PCM samples or a raw binary string.
+
 **`aelkey.midi`**
 
 - `send(dev_id, data)` - send a message through the specified output device.

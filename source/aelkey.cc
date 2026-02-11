@@ -1,5 +1,6 @@
 #include <sol/sol.hpp>
 
+#include "aelkey_audio.h"
 #include "aelkey_core.h"
 #include "aelkey_evdev.h"
 #include "aelkey_gatt.h"
@@ -43,6 +44,7 @@ constexpr ScriptModule script_modules[] = {
 };
 
 constexpr CModule c_modules[] = {
+  { "audio", luaopen_aelkey_audio },
   { "evdev", luaopen_aelkey_evdev },
   { "gatt", luaopen_aelkey_gatt },
   { "haptics", luaopen_aelkey_haptics },
