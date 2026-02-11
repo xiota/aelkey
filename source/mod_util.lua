@@ -101,7 +101,7 @@ setmetatable(bench_noop, { __close = function() end })
 local bench_state = { last = now_us() }
 
 function M.bench_scope(label)
-  if not aelkey.log.is_enabled("trace") then
+  if not aelkey.log.is_enabled("bench") then
     return bench_noop
   end
 
@@ -122,7 +122,7 @@ function M.bench_scope(label)
     local end_us = now_us()
     local exec_ms = (end_us - start_us) / 1000
 
-    aelkey.log.trace(
+    aelkey.log.bench(
       "%s: between %.3f ms, exec %.3f ms",
       resolved_label, between_ms, exec_ms
     )

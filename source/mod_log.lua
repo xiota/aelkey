@@ -27,6 +27,7 @@ local levels = {
   info  = 3,
   debug = 4,
   trace = 5,
+  bench = 7,
   spam = 6,
   all = 0xffff,
 }
@@ -119,6 +120,7 @@ function M.warn(...)  log_dispatch("warn",  ...) end
 function M.info(...)  log_dispatch("info",  ...) end
 function M.debug(...) log_dispatch("debug", ...) end
 function M.trace(...) log_dispatch("trace", ...) end
+function M.bench(...) log_dispatch("bench", ...) end
 function M.spam(...) log_dispatch("spam", ...) end
 
 return M
