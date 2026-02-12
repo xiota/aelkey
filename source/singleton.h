@@ -1,9 +1,14 @@
 #pragma once
 
+#include "signal_handler.h"
+
 template <typename T>
 class Singleton {
  public:
   static T &instance() {
+    // reinstall signal handlers because lua resets them
+    SignalHandler::install();
+
     static T inst;
 
     if (inst.auto_init_) {

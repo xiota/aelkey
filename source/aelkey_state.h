@@ -42,8 +42,8 @@ class AelkeyState : public Singleton<AelkeyState> {
   int epfd = -1;
   std::map<std::string, InputDecl> input_map;
 
+  bool loop_running = false;
   bool loop_should_stop = false;
-  int sigint = 0;
 
   std::vector<InputDecl> input_decls;
   std::vector<OutputDecl> output_decls;

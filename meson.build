@@ -117,6 +117,7 @@ src_files = files(
   'source/dispatcher_haptics.cc',
   'source/dispatcher_registry.cc',
   'source/dispatcher_udev.cc',
+  'source/signal_handler.cc',
 )
 
 shared_library(

@@ -4,3 +4,5 @@
 
 sol::object loop_start(sol::this_state ts);
 sol::object loop_stop(sol::this_state ts);
+
+void loop_cleanup();

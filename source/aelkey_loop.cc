@@ -1,6 +1,5 @@
 #include "aelkey_loop.h"
 
-#include <csignal>
 #include <cstring>
 #include <string>
 #include <string_view>
@@ -9,7 +8,6 @@
 #include <libusb-1.0/libusb.h>
 #include <sys/epoll.h>
 #include <sys/timerfd.h>
-#include <unistd.h>
 
 #include <sol/sol.hpp>
 
@@ -18,6 +16,7 @@
 #include "device_declarations.h"
 #include "device_in_manager.h"
 #include "dispatcher.h"
+#include "signal_handler.h"
 #include "util/scoped_timer.h"
 
 sol::object loop_stop(sol::this_state ts) {
@@ -27,19 +26,11 @@ sol::object loop_stop(sol::this_state ts) {
   return sol::make_object(lua, sol::nil);
 }
 
-void handle_signal(int sig) {
-  auto &state = AelkeyState::instance();
-  state.loop_should_stop = true;
-  state.sigint = sig;
-}
-
 sol::object loop_start(sol::this_state ts) {
-  sol::state_view lua(ts);
+  auto &state = AelkeyState::instance();
+  state.loop_running = true;
 
-  // signal handlers
-  std::signal(SIGHUP, handle_signal);   // terminal hangup
-  std::signal(SIGINT, handle_signal);   // interactive interrupt (Ctrl+C)
-  std::signal(SIGTERM, handle_signal);  // termination request (kill, systemd stop)
+  sol::state_view lua(ts);
 
   // open inputs and outputs tables (open all devices)
   core_open_device(ts, sol::optional<std::string>{});
@@ -48,7 +39,6 @@ sol::object loop_start(sol::this_state ts) {
   constexpr int MAX_EVENTS = 64;
   struct epoll_event events[MAX_EVENTS];
 
-  auto &state = AelkeyState::instance();
   while (!state.loop_should_stop) {
     int n = epoll_wait(state.epfd, events, MAX_EVENTS, -1);  // block until event
 
@@ -65,7 +55,15 @@ sol::object loop_start(sol::this_state ts) {
     }
   }
 
-  // Cleanup all resources
+  loop_cleanup();
+
+  state.loop_running = false;
+
+  return sol::make_object(lua, true);
+}
+
+void loop_cleanup() {
+  auto &state = AelkeyState::instance();
 
   // Detach all devices
   std::vector<std::string> ids;
@@ -85,14 +83,5 @@ sol::object loop_start(sol::this_state ts) {
     state.epfd = -1;
   }
 
-  if (state.sigint != 0) {
-    std::signal(SIGHUP, SIG_DFL);
-    std::signal(SIGINT, SIG_DFL);
-    std::signal(SIGTERM, SIG_DFL);
-
-    int sig = state.sigint;
-    std::raise(sig);
-  }
-
-  return sol::make_object(lua, true);
+  SignalHandler::reraise();
 }
