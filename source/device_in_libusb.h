@@ -1,10 +1,12 @@
 #pragma once
 
 #include <cstdio>
+#include <format>
 #include <map>
 #include <stdexcept>
 #include <string>
 
+#include <libudev.h>
 #include <libusb-1.0/libusb.h>
 
 #include "device_in.h"
@@ -33,6 +35,7 @@ class DeviceInLibUSB : public DeviceIn, public Singleton<DeviceInLibUSB> {
     }
 
     // pass through ID as "devnode"
+    // fix in attach
     devnode_out = decl.id;
     return true;
   }
@@ -42,15 +45,14 @@ class DeviceInLibUSB : public DeviceIn, public Singleton<DeviceInLibUSB> {
       return false;
     }
 
-    uint16_t vendor = 0;
-    uint16_t product = 0;
-
-    // Find the first matching device using vid_pid
     libusb_device **list = nullptr;
     ssize_t count = libusb_get_device_list(libusb_, &list);
     if (count < 0) {
       return false;
     }
+
+    uint16_t vendor = 0;
+    uint16_t product = 0;
 
     libusb_device_handle *handle = nullptr;
 
@@ -62,26 +64,19 @@ class DeviceInLibUSB : public DeviceIn, public Singleton<DeviceInLibUSB> {
         continue;
       }
 
-      uint16_t dv = desc.idVendor;
-      uint16_t dp = desc.idProduct;
-
-      bool vidpid_ok = false;
-      for (auto &[v, p] : decl.vid_pid) {
-        bool vendor_ok = (v == 0 || v == dv);
-        bool product_ok = (p == 0 || p == dp);
-        if (vendor_ok && product_ok) {
-          vidpid_ok = true;
-          break;
-        }
-      }
-      if (!vidpid_ok) {
+      if (!matches_vidpid(decl, desc)) {
         continue;
       }
 
-      // try to open match
+      // Try to open match
       if (libusb_open(dev, &handle) == 0 && handle) {
-        vendor = dv;
-        product = dp;
+        vendor = desc.idVendor;
+        product = desc.idProduct;
+
+        uint8_t bus = libusb_get_bus_number(dev);
+        uint8_t addr = libusb_get_device_address(dev);
+        decl.devnode = std::format("usb:{:03}-{:03}", bus, addr);
+
         break;
       }
     }
@@ -91,7 +86,7 @@ class DeviceInLibUSB : public DeviceIn, public Singleton<DeviceInLibUSB> {
       return false;
     }
 
-    // If interfaces vector is empty → claim all interfaces
+    // Claim interfaces
     if (decl.interfaces.empty()) {
       libusb_config_descriptor *cfg = nullptr;
       if (libusb_get_active_config_descriptor(libusb_get_device(handle), &cfg) == 0 && cfg) {
@@ -101,13 +96,11 @@ class DeviceInLibUSB : public DeviceIn, public Singleton<DeviceInLibUSB> {
         libusb_free_config_descriptor(cfg);
       }
     } else {
-      // Claim only the interfaces explicitly listed
       for (int iface : decl.interfaces) {
         claim_interface(handle, iface);
       }
     }
 
-    // Store metadata
     decl.vendor = vendor;
     decl.product = product;
 
@@ -122,8 +115,15 @@ class DeviceInLibUSB : public DeviceIn, public Singleton<DeviceInLibUSB> {
     }
 
     libusb_device_handle *handle = it->second;
+    if (!handle) {
+      devices_.erase(it);
+      return false;
+    }
+
     libusb_config_descriptor *cfg = nullptr;
-    if (libusb_get_active_config_descriptor(libusb_get_device(handle), &cfg) == 0 && cfg) {
+    libusb_device *dev = libusb_get_device(handle);
+
+    if (libusb_get_active_config_descriptor(dev, &cfg) == 0 && cfg) {
       for (int i = 0; i < cfg->bNumInterfaces; ++i) {
         libusb_release_interface(handle, i);
       }
@@ -150,6 +150,17 @@ class DeviceInLibUSB : public DeviceIn, public Singleton<DeviceInLibUSB> {
       return true;
     }
 
+    return false;
+  }
+
+  bool matches_vidpid(const InputDecl &decl, const libusb_device_descriptor &desc) const {
+    for (auto &[v, p] : decl.vid_pid) {
+      bool vendor_ok = (v == 0 || v == desc.idVendor);
+      bool product_ok = (p == 0 || p == desc.idProduct);
+      if (vendor_ok && product_ok) {
+        return true;
+      }
+    }
     return false;
   }
 
