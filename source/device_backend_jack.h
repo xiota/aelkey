@@ -9,6 +9,13 @@
 
 #include "singleton.h"
 
+struct JackPortEvent {
+  std::string type;       // "add" or "remove"
+  std::string full_name;  // "Client:Port"
+  std::string port_type;  // e.g. JACK_DEFAULT_MIDI_TYPE
+  unsigned long flags;    // JackPortIsInput / JackPortIsOutput
+};
+
 class DeviceBackendJack : public Singleton<DeviceBackendJack> {
   friend class Singleton<DeviceBackendJack>;
 
@@ -57,12 +64,20 @@ class DeviceBackendJack : public Singleton<DeviceBackendJack> {
   using RtCallback = std::function<void(jack_nframes_t)>;
   void add_rt_callback(RtCallback cb);
 
+  // Hotplug callback registration (port add/remove)
+  using HotplugCallback = std::function<void(const JackPortEvent &)>;
+  void add_hotplug_callback(HotplugCallback cb);
+
  private:
   static int process_cb(jack_nframes_t nframes, void *arg);
   int process(jack_nframes_t nframes);
+
+  static void port_reg_cb(jack_port_id_t port_id, int registered, void *arg);
+  void handle_port_registration(jack_port_id_t port_id, int registered);
 
  private:
   jack_client_t *client_ = nullptr;
   std::string client_name_;
   std::vector<RtCallback> callbacks_;
+  std::vector<HotplugCallback> hotplug_callbacks_;
 };

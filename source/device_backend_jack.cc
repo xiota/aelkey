@@ -41,6 +41,9 @@ bool DeviceBackendJack::ensure_client() {
     return false;
   }
 
+  // Register port registration callback for hotplug-like events
+  jack_set_port_registration_callback(client_, &DeviceBackendJack::port_reg_cb, this);
+
   if (jack_activate(client_) != 0) {
     std::fprintf(stderr, "JACK: failed to activate client '%s'\n", client_name_.c_str());
     jack_client_close(client_);
@@ -199,6 +202,10 @@ void DeviceBackendJack::add_rt_callback(RtCallback cb) {
   callbacks_.push_back(std::move(cb));
 }
 
+void DeviceBackendJack::add_hotplug_callback(HotplugCallback cb) {
+  hotplug_callbacks_.push_back(std::move(cb));
+}
+
 int DeviceBackendJack::process_cb(jack_nframes_t nframes, void *arg) {
   auto *self = static_cast<DeviceBackendJack *>(arg);
   return self->process(nframes);
@@ -209,4 +216,38 @@ int DeviceBackendJack::process(jack_nframes_t nframes) {
     cb(nframes);
   }
   return 0;
+}
+
+void DeviceBackendJack::port_reg_cb(jack_port_id_t port_id, int registered, void *arg) {
+  auto *self = static_cast<DeviceBackendJack *>(arg);
+  if (!self) {
+    return;
+  }
+  self->handle_port_registration(port_id, registered);
+}
+
+void DeviceBackendJack::handle_port_registration(jack_port_id_t port_id, int registered) {
+  if (!client_) {
+    return;
+  }
+
+  jack_port_t *port = jack_port_by_id(client_, port_id);
+  if (!port) {
+    return;
+  }
+
+  const char *name = jack_port_name(port);
+  const char *type = jack_port_type(port);
+  unsigned long flags = jack_port_flags(port);
+
+  JackPortEvent ev;
+  ev.type = registered ? "add" : "remove";
+  ev.full_name = name ? std::string{ name } : std::string{};
+  ev.port_type = type ? std::string{ type } : std::string{};
+  ev.flags = flags;
+
+  // Fan out to all subscribers
+  for (auto &cb : hotplug_callbacks_) {
+    cb(ev);
+  }
 }
