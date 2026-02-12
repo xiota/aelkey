@@ -8,6 +8,7 @@
 
 #include "device_backend_jack.h"
 #include "device_helpers.h"
+#include "tick_scheduler.h"
 
 bool DeviceOutMidi::on_init() {
   if (ring_) {
@@ -22,11 +23,15 @@ bool DeviceOutMidi::on_init() {
 
   jack_ringbuffer_mlock(ring_);
 
+  auto &jack = DeviceBackendJack::instance();
   if (!rt_registered_) {
-    DeviceBackendJack::instance().add_rt_callback([this](jack_nframes_t nframes) {
-      this->process(nframes);
-    });
+    jack.add_rt_callback([this](jack_nframes_t nframes) { this->process(nframes); });
     rt_registered_ = true;
+  }
+
+  if (!hotplug_registered_) {
+    jack.add_hotplug_callback([this](const JackPortEvent &ev) { this->on_hotplug_event(ev); });
+    hotplug_registered_ = true;
   }
 
   return true;
@@ -35,10 +40,11 @@ bool DeviceOutMidi::on_init() {
 DeviceOutMidi::~DeviceOutMidi() {
   auto &jack = DeviceBackendJack::instance();
 
-  for (auto &kv : outputs_) {
+  for (auto &kv : output_ports_) {
     jack.destroy_port(kv.second);
   }
-  outputs_.clear();
+  output_ports_.clear();
+  output_decls_.clear();
 
   if (ring_) {
     jack_ringbuffer_free(ring_);
@@ -55,10 +61,11 @@ bool DeviceOutMidi::create(const OutputDecl &decl) {
   std::string port_name = decl.port.empty() ? decl.id : decl.port;
 
   // Reuse existing port if name matches
-  for (const auto &kv : outputs_) {
+  for (const auto &kv : output_ports_) {
     auto existing_name = DeviceBackendJack::instance().port_name(kv.second);
     if (existing_name == port_name) {
-      outputs_[decl.id] = kv.second;
+      output_ports_[decl.id] = kv.second;
+      output_decls_[decl.id] = decl;
       return true;
     }
   }
@@ -71,31 +78,24 @@ bool DeviceOutMidi::create(const OutputDecl &decl) {
     return false;
   }
 
-  outputs_[decl.id] = out;
+  output_ports_[decl.id] = out;
+  output_decls_[decl.id] = decl;
 
   // Auto-connect if user provided a pattern
   if (!decl.name.empty()) {
     auto ports = jack.list_ports(JACK_DEFAULT_MIDI_TYPE, JackPortIsInput);
     std::string src = jack.port_name(out);
 
-    bool any = false;
-
     for (auto &full : ports) {
       if (match_string(decl.name, full)) {
-        if (jack.connect(src, full)) {
-          any = true;
-        } else {
+        if (!jack.connect(src, full)) {
           std::fprintf(
               stderr, "MIDI OUT: failed to connect '%s' -> '%s'\n", src.c_str(), full.c_str()
           );
+        } else {
+          std::fprintf(stderr, "MIDI OUT: connected '%s' -> '%s'\n", src.c_str(), full.c_str());
         }
       }
-    }
-
-    if (!any) {
-      std::fprintf(
-          stderr, "MIDI OUT: no JACK MIDI inputs matched pattern '%s'\n", decl.name.c_str()
-      );
     }
   }
 
@@ -107,8 +107,8 @@ bool DeviceOutMidi::send(const std::string &id, const uint8_t *data, size_t len)
     return false;
   }
 
-  auto it = outputs_.find(id);
-  if (it == outputs_.end()) {
+  auto it = output_ports_.find(id);
+  if (it == output_ports_.end()) {
     return false;
   }
 
@@ -135,13 +135,19 @@ bool DeviceOutMidi::send(const std::string &id, const uint8_t *data, size_t len)
 }
 
 bool DeviceOutMidi::destroy(const std::string &id) {
-  auto it = outputs_.find(id);
-  if (it == outputs_.end()) {
+  auto it = output_ports_.find(id);
+  if (it == output_ports_.end()) {
     return false;
   }
 
   DeviceBackendJack::instance().destroy_port(it->second);
-  outputs_.erase(it);
+  output_ports_.erase(it);
+
+  auto it2 = output_decls_.find(id);
+  if (it2 != output_decls_.end()) {
+    output_decls_.erase(it2);
+  }
+
   return true;
 }
 
@@ -149,7 +155,7 @@ void DeviceOutMidi::process(jack_nframes_t nframes) {
   auto &jack = DeviceBackendJack::instance();
 
   // Clear all output buffers
-  for (auto &kv : outputs_) {
+  for (auto &kv : output_ports_) {
     void *buf = jack.port_buffer(kv.second, nframes);
     jack.midi_clear_buffer(buf);
   }
@@ -186,8 +192,8 @@ void DeviceOutMidi::process(jack_nframes_t nframes) {
     uint8_t data[3] = { 0, 0, 0 };
     jack_ringbuffer_read(ring_, reinterpret_cast<char *>(data), len);
 
-    auto it = outputs_.find(id);
-    if (it == outputs_.end()) {
+    auto it = output_ports_.find(id);
+    if (it == output_ports_.end()) {
       continue;
     }
 
@@ -199,4 +205,68 @@ void DeviceOutMidi::process(jack_nframes_t nframes) {
 
     std::memcpy(dst, data, len);
   }
+}
+
+void DeviceOutMidi::on_hotplug_event(const JackPortEvent &ev) {
+  // Only care about MIDI input ports (destinations)
+  if (ev.port_type != JACK_DEFAULT_MIDI_TYPE) {
+    return;
+  }
+  if (!(ev.flags & JackPortIsInput)) {
+    return;
+  }
+
+  pending_hotplug_.push_back(ev);
+
+  // Schedule a one-shot tick to process them
+  TickCb cb;
+  cb.native = [this]() { this->process_hotplug_events(); };
+  cb.oneshot = true;
+
+  TickScheduler::instance().schedule(4, cb);
+}
+
+void DeviceOutMidi::process_hotplug_events() {
+  auto &jack = DeviceBackendJack::instance();
+
+  // For each OutputDecl
+  for (auto &[id, decl] : output_decls_) {
+    if (decl.type != "midi") {
+      continue;
+    }
+
+    // Skip virtual ports (decl.name empty)
+    if (decl.name.empty()) {
+      continue;
+    }
+
+    // Get our internal JACK port
+    auto it = output_ports_.find(id);
+    if (it == output_ports_.end()) {
+      continue;
+    }
+
+    jack_port_t *internal = it->second;
+    std::string src = jack.port_name(internal);
+
+    // For each pending event
+    for (auto &ev : pending_hotplug_) {
+      if (ev.type == "add") {
+        // Does this external port match the user pattern?
+        if (match_string(decl.name, ev.full_name)) {
+          // Connect external -> internal
+          if (jack.connect(src, ev.full_name)) {
+            std::fprintf(
+                stderr,
+                "MIDI OUT hotplug: connected '%s' -> '%s'\n",
+                src.c_str(),
+                ev.full_name.c_str()
+            );
+          }
+        }
+      }
+    }
+  }
+
+  pending_hotplug_.clear();
 }
