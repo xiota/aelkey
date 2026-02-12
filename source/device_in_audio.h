@@ -53,8 +53,9 @@ class DeviceInAudio : public DeviceIn, public Singleton<DeviceInAudio> {
  private:
   jack_ringbuffer_t *ring_ = nullptr;
 
-  // id -> JACK port
-  std::map<std::string, jack_port_t *> inputs_;
+  // key = id
+  std::map<std::string, jack_port_t *> input_ports_;
+  std::map<std::string, InputDecl> input_decls_;
 
   int tick_fd_ = -1;
 
