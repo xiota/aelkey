@@ -20,11 +20,12 @@ DeviceInMidi::~DeviceInMidi() {
   }
 
   auto &jack = DeviceBackendJack::instance();
-  for (auto &kv : inputs_) {
+  for (auto &kv : input_ports_) {
     jack.destroy_port(kv.second);
   }
 
-  inputs_.clear();
+  input_ports_.clear();
+  input_decls_.clear();
 
   if (ring_) {
     jack_ringbuffer_free(ring_);
@@ -61,28 +62,8 @@ bool DeviceInMidi::match(InputDecl &decl, std::string &devnode_out) {
     return false;
   }
 
-  if (decl.name.empty()) {
-    devnode_out = "jack:midi:" + decl.id;
-    return true;
-  }
-
-  auto &jack = DeviceBackendJack::instance();
-  auto ports = jack.list_ports(JACK_DEFAULT_MIDI_TYPE, JackPortIsOutput);
-
-  std::string result;
-
-  for (auto &full : ports) {
-    if (match_string(decl.name, full)) {
-      result = full;
-      break;
-    }
-  }
-
-  if (result.empty()) {
-    return false;
-  }
-
-  devnode_out = "jack:midi:" + result;
+  // unused, always create port
+  devnode_out = "jack:midi:" + decl.id;
   return true;
 }
 
@@ -90,13 +71,6 @@ bool DeviceInMidi::attach(const std::string &devnode, InputDecl &decl) {
   if (!lazy_init()) {
     return false;
   }
-
-  if (devnode.rfind("jack:midi:", 0) != 0) {
-    std::fprintf(stderr, "MIDI: invalid devnode '%s'\n", devnode.c_str());
-    return false;
-  }
-
-  std::string src = devnode.substr(std::strlen("jack:midi:"));  // "Client:Port"
 
   // No sanitization — use exactly what user provided
   std::string port_name = decl.port.empty() ? decl.id : decl.port;
@@ -110,16 +84,25 @@ bool DeviceInMidi::attach(const std::string &devnode, InputDecl &decl) {
 
   if (!decl.name.empty()) {
     std::string dst = jack.port_name(in);
-    if (!jack.connect(src, dst)) {
-      std::fprintf(stderr, "MIDI: failed to connect '%s' -> '%s'\n", src.c_str(), dst.c_str());
-      jack.destroy_port(in);
-      return false;
+
+    auto ports = jack.list_ports(JACK_DEFAULT_MIDI_TYPE, JackPortIsOutput);
+    for (auto &full : ports) {
+      if (match_string(decl.name, full)) {
+        if (!jack.connect(full, dst)) {
+          std::fprintf(
+              stderr, "MIDI: failed to connect '%s' -> '%s'\n", full.c_str(), dst.c_str()
+          );
+        } else {
+          std::fprintf(stderr, "MIDI: connected '%s' -> '%s'\n", full.c_str(), dst.c_str());
+        }
+      }
     }
   }
 
-  inputs_[decl.id] = in;
+  input_ports_[decl.id] = in;
+  input_decls_[decl.id] = decl;
 
-  decl.devnode = devnode;
+  decl.devnode = devnode;  // unused
   decl.fd = -1;
 
   if (tick_fd_ < 0) {
@@ -141,8 +124,8 @@ bool DeviceInMidi::detach(const std::string &id) {
     return false;
   }
 
-  auto it = inputs_.find(id);
-  if (it == inputs_.end()) {
+  auto it = input_ports_.find(id);
+  if (it == input_ports_.end()) {
     return false;
   }
 
@@ -150,11 +133,16 @@ bool DeviceInMidi::detach(const std::string &id) {
 
   auto &jack = DeviceBackendJack::instance();
   jack.destroy_port(in);
-  inputs_.erase(it);
+  input_ports_.erase(it);
 
-  if (inputs_.empty() && tick_fd_ >= 0) {
+  if (input_ports_.empty() && tick_fd_ >= 0) {
     TickScheduler::instance().unregister_fd(tick_fd_);
     tick_fd_ = -1;
+  }
+
+  auto it2 = input_decls_.find(id);
+  if (it2 != input_decls_.end()) {
+    input_decls_.erase(it2);
   }
 
   return true;
@@ -167,7 +155,7 @@ void DeviceInMidi::process(jack_nframes_t nframes) {
 
   auto &jack = DeviceBackendJack::instance();
 
-  for (auto &[id, port] : inputs_) {
+  for (auto &[id, port] : input_ports_) {
     void *buf = jack.port_buffer(port, nframes);
     uint32_t count = jack.midi_event_count(buf);
 
@@ -302,13 +290,11 @@ void DeviceInMidi::dispatch_batch_to_lua(
 }
 
 void DeviceInMidi::pump_messages() {
-  auto &state = AelkeyState::instance();
-
   MidiEvent ev;
   while (pop_event(ev)) {
     // Look up InputDecl to find callback name
-    auto it_decl = state.input_map.find(ev.id);
-    if (it_decl == state.input_map.end()) {
+    auto it_decl = input_decls_.find(ev.id);
+    if (it_decl == input_decls_.end()) {
       continue;
     }
 
