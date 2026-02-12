@@ -73,9 +73,11 @@ uint64_t util_now(const std::string &unit) {
   }
 }
 
-// tick(ms, callback)
+// tick(ms, callback, [oneshot])
 // callback = string name OR function
-sol::object util_tick(sol::this_state ts, int ms, sol::object cb_obj) {
+// oneshot = optional bool, defaults to false
+sol::object
+util_tick(sol::this_state ts, int ms, sol::object cb_obj, sol::optional<bool> oneshot_opt) {
   sol::state_view lua(ts);
   auto &scheduler = TickScheduler::instance();
 
@@ -97,6 +99,9 @@ sol::object util_tick(sol::this_state ts, int ms, sol::object cb_obj) {
     key.fn = cb_obj.as<sol::function>();
   }
 
+  // Set oneshot flag
+  key.oneshot = oneshot_opt.value_or(false);
+
   // Cancel existing timers for this key
   scheduler.cancel_matching(key);
 
@@ -105,12 +110,11 @@ sol::object util_tick(sol::this_state ts, int ms, sol::object cb_obj) {
     return sol::make_object(lua, sol::lua_nil);
   }
 
-  // Schedule new repeating timer
+  // Schedule new timer (repeating or oneshot)
   int fd = scheduler.schedule(ms, key);
   if (fd < 0) {
     return sol::make_object(lua, sol::lua_nil);
   }
-
   return sol::make_object(lua, sol::lua_nil);
 }
 

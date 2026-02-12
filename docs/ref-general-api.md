@@ -83,7 +83,7 @@ Note: Only udev compatible types can be watched (evdev, hidraw, libusb).
 - `dump_raw(data)` - Return a hex‑dump string of an hidraw report.
 - `dump_table(table)` - Return a recursively formatted string representation of a Lua table.
 - `now([resolution])` - Return current monotonic time in milliseconds, or in `us`/`ns` if specified.
-- `tick(ms, callback)` - Schedule periodic ticks (e.g. timers inside the loop).
+- `tick(ms, callback, [oneshot])` - Schedule periodic ticks (e.g. timers inside the loop).  `callback` is a function name or reference.  `oneshot` is a bool.
 - `bench_scope(label)` - Measure execution time and the interval between calls.
 
   Usage for Lua 5.1+:
