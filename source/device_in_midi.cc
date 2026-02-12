@@ -10,8 +10,8 @@
 
 #include "device_backend_jack.h"
 #include "device_helpers.h"
-#include "lua_bindings/util.h"  // util_now
 #include "tick_scheduler.h"
+#include "utils/time.h"
 
 DeviceInMidi::~DeviceInMidi() {
   if (tick_fd_ >= 0) {
@@ -180,7 +180,7 @@ void DeviceInMidi::process(jack_nframes_t nframes) {
       MidiEvent me;
       me.id = id;
       me.data.assign(ev.buffer, ev.buffer + ev.size);
-      me.timestamp_us = util_now("us");
+      me.timestamp_us = AelkeyUtil::now("us");
 
       push_event(me);
     }

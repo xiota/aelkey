@@ -6,10 +6,10 @@
 #include <string>
 
 #include <sol/sol.hpp>
-#include <time.h>
 
 #include "lua_scripts.h"
 #include "tick_scheduler.h"
+#include "utils/time.h"
 
 // Compute one CRC32 entry
 constexpr uint32_t crc32_entry(int i) {
@@ -57,20 +57,6 @@ uint32_t util_crc32_core(const std::string &data, uint32_t seed) {
 // crc32_ieee(data, [seed])
 uint32_t util_crc32_ieee(const std::string &data, uint32_t seed = 0) {
   return crc32_ieee(reinterpret_cast<const uint8_t *>(data.data()), data.size(), seed);
-}
-
-// now("ms"|"us"|"ns")
-uint64_t util_now(const std::string &unit) {
-  struct timespec ts;
-  clock_gettime(CLOCK_MONOTONIC, &ts);
-
-  if (unit == "us") {
-    return ts.tv_sec * 1000000ULL + ts.tv_nsec / 1000ULL;
-  } else if (unit == "ns") {
-    return ts.tv_sec * 1000000000ULL + ts.tv_nsec;
-  } else {  // default ms
-    return ts.tv_sec * 1000ULL + ts.tv_nsec / 1000000ULL;
-  }
 }
 
 // tick(ms, callback, [oneshot])
@@ -125,7 +111,7 @@ extern "C" int luaopen_aelkey_util(lua_State *L) {
 
   mod.set_function("crc32_core", util_crc32_core);
   mod.set_function("crc32_ieee", util_crc32_ieee);
-  mod.set_function("now", util_now);
+  mod.set_function("now", AelkeyUtil::now);
   mod.set_function("tick", util_tick);
 
   // Load script

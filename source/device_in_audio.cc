@@ -10,8 +10,8 @@
 
 #include "device_backend_jack.h"
 #include "device_helpers.h"
-#include "lua_bindings/util.h"  // util_now
 #include "tick_scheduler.h"
+#include "utils/time.h"
 
 DeviceInAudio::~DeviceInAudio() {
   if (tick_fd_ >= 0) {
@@ -175,7 +175,7 @@ void DeviceInAudio::process(jack_nframes_t nframes) {
     AudioEvent ev;
     ev.id = id;
     ev.frames = static_cast<uint32_t>(nframes);
-    ev.timestamp_us = util_now("us");
+    ev.timestamp_us = AelkeyUtil::now("us");
 
     size_t bytes = static_cast<size_t>(nframes) * sizeof(float);
     ev.data.resize(bytes);
