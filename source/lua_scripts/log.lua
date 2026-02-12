@@ -27,8 +27,8 @@ local levels = {
   info  = 3,
   debug = 4,
   trace = 5,
-  bench = 7,
-  spam = 6,
+  bench = 6,
+  spam = 7,
   all = 0xffff,
 }
 
