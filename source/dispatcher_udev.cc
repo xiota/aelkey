@@ -8,6 +8,7 @@
 
 #include "aelkey_state.h"
 #include "device_declarations.h"
+#include "device_in_libusb.h"
 #include "device_in_manager.h"
 #include "dispatcher_registry.h"
 
@@ -183,22 +184,41 @@ void DispatcherUdev::handle_udev_add(struct udev_device *dev) {
         break;
       }
     } else if (decl.type == "libusb" && std::string(subsystem) == "usb") {
-      const char *syspath = udev_device_get_syspath(dev);
-      if (!syspath) {
+      const char *devtype = udev_device_get_devtype(dev);
+      if (!devtype || strcmp(devtype, "usb_device") != 0) {
+        continue;  // ignore interface-level add events
+      }
+
+      // Get VID/PID
+      const char *vid = udev_device_get_property_value(dev, "ID_VENDOR_ID");
+      const char *pid = udev_device_get_property_value(dev, "ID_MODEL_ID");
+      if (!vid || !pid) {
         continue;
       }
 
-      if (matched == std::string(syspath)) {
-        if (state.input_map.contains(decl.id)) {
-          break;
-        }
+      uint16_t vendor = strtol(vid, nullptr, 16);
+      uint16_t product = strtol(pid, nullptr, 16);
 
-        if (DeviceInManager::instance().attach(matched, decl)) {
-          decl.devnode = matched;
-          state.notify_state_change(decl, "add");
-        }
+      // build a descriptor
+      libusb_device_descriptor desc{};
+      desc.idVendor = vendor;
+      desc.idProduct = product;
+
+      if (!DeviceInLibUSB::instance().matches_vidpid(decl, desc)) {
+        continue;
+      }
+
+      if (state.input_map.contains(decl.id)) {
         break;
       }
+
+      if (DeviceInManager::instance().attach(matched, decl)) {
+        decl.devnode = matched;
+        state.notify_state_change(decl, "add");
+      }
+
+      // look for more matches
+      continue;
     }
   }
 }
