@@ -242,12 +242,20 @@ void DispatcherUdev::handle_udev_remove(struct udev_device *dev) {
   // Normal devices
   for (auto &decl : state.input_decls) {
     if (decl.type == "libusb" && std::string(subsystem) == "usb") {
-      const char *syspath = udev_device_get_syspath(dev);
-      if (!syspath) {
+      const char *devtype = udev_device_get_devtype(dev);
+      if (!devtype || strcmp(devtype, "usb_device") != 0) {
         continue;
       }
 
-      if (decl.devnode == std::string(syspath)) {
+      const char *bus_str = udev_device_get_property_value(dev, "BUSNUM");
+      const char *dev_str = udev_device_get_property_value(dev, "DEVNUM");
+      if (!bus_str || !dev_str) {
+        continue;
+      }
+
+      std::string inst_node = std::string("usb:") + bus_str + "-" + dev_str;
+
+      if (decl.devnode == inst_node) {
         auto removed = DeviceInManager::instance().detach(decl.id);
         if (removed && !removed->id.empty()) {
           state.notify_state_change(*removed, "remove");

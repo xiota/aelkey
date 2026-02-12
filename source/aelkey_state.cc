@@ -31,7 +31,9 @@ void AelkeyState::attach_inputs_from_decls(sol::this_state ts) {
     }
 
     if (devmgr.attach(devnode, decl)) {
-      decl.devnode = devnode;
+      if (decl.type != "libusb") {
+        decl.devnode = devnode;
+      }
       notify_state_change(decl, "add");
     }
   }
