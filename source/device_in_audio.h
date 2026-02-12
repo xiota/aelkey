@@ -50,6 +50,9 @@ class DeviceInAudio : public DeviceIn, public Singleton<DeviceInAudio> {
       const std::vector<AudioEvent> &events
   );
 
+  void on_hotplug_event(const JackPortEvent &ev);
+  void process_hotplug_events();
+
  private:
   jack_ringbuffer_t *ring_ = nullptr;
 
@@ -61,8 +64,10 @@ class DeviceInAudio : public DeviceIn, public Singleton<DeviceInAudio> {
 
   // key = callback name
   std::map<std::string, std::vector<AudioEvent>> batches_;
-
   bool rt_registered_ = false;
+
+  std::vector<JackPortEvent> pending_hotplug_;
+  bool hotplug_registered_ = false;
 
   static constexpr size_t AUDIO_RINGBUFFER_BYTES = 512 * 1024;
 };
