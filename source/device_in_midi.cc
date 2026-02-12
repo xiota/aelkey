@@ -50,6 +50,11 @@ bool DeviceInMidi::on_init() {
     rt_registered_ = true;
   }
 
+  if (!hotplug_registered_) {
+    jack.add_hotplug_callback([this](const JackPortEvent &ev) { this->on_hotplug_event(ev); });
+    hotplug_registered_ = true;
+  }
+
   return true;
 }
 
@@ -313,4 +318,68 @@ void DeviceInMidi::pump_messages() {
       batch.clear();
     }
   }
+}
+
+void DeviceInMidi::on_hotplug_event(const JackPortEvent &ev) {
+  // Only care about MIDI output ports (sources)
+  if (ev.port_type != JACK_DEFAULT_MIDI_TYPE) {
+    return;
+  }
+  if (!(ev.flags & JackPortIsOutput)) {
+    return;
+  }
+
+  pending_hotplug_.push_back(ev);
+
+  // Schedule a one-shot tick to process them
+  TickCb cb;
+  cb.native = [this]() { this->process_hotplug_events(); };
+  cb.oneshot = true;
+
+  TickScheduler::instance().schedule(4, cb);
+}
+
+void DeviceInMidi::process_hotplug_events() {
+  auto &jack = DeviceBackendJack::instance();
+
+  // For each InputDecl
+  for (auto &[id, decl] : input_decls_) {
+    if (decl.type != "midi") {
+      continue;
+    }
+
+    // Skip virtual ports (decl.name empty)
+    if (decl.name.empty()) {
+      continue;
+    }
+
+    // Get our internal JACK port
+    auto it = input_ports_.find(id);
+    if (it == input_ports_.end()) {
+      continue;
+    }
+
+    jack_port_t *internal = it->second;
+    std::string dst = jack.port_name(internal);
+
+    // For each pending event
+    for (auto &ev : pending_hotplug_) {
+      if (ev.type == "add") {
+        // Does this external port match the user pattern?
+        if (match_string(decl.name, ev.full_name)) {
+          // Connect external -> internal
+          if (jack.connect(ev.full_name, dst)) {
+            std::fprintf(
+                stderr,
+                "MIDI hotplug: connected '%s' -> '%s'\n",
+                ev.full_name.c_str(),
+                dst.c_str()
+            );
+          }
+        }
+      }
+    }
+  }
+
+  pending_hotplug_.clear();
 }

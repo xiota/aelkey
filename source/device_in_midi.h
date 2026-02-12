@@ -43,6 +43,9 @@ class DeviceInMidi : public DeviceIn, public Singleton<DeviceInMidi> {
   void
   dispatch_batch_to_lua(const std::string &callback_name, const std::vector<MidiEvent> &events);
 
+  void on_hotplug_event(const JackPortEvent &ev);
+  void process_hotplug_events();
+
  private:
   jack_ringbuffer_t *ring_ = nullptr;
 
@@ -54,8 +57,10 @@ class DeviceInMidi : public DeviceIn, public Singleton<DeviceInMidi> {
 
   // key = callback name
   std::map<std::string, std::vector<MidiEvent>> batches_;
-
   bool rt_registered_ = false;
+
+  std::vector<JackPortEvent> pending_hotplug_;
+  bool hotplug_registered_ = false;
 
   static constexpr size_t MIDI_RINGBUFFER_BYTES = 8 * 1024;
 };
