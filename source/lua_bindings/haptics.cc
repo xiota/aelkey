@@ -1,4 +1,4 @@
-#include "aelkey_haptics.h"
+#include "lua_bindings/haptics.h"
 
 #include <cstdio>
 

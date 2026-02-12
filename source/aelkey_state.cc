@@ -3,10 +3,10 @@
 #include <sol/sol.hpp>
 #include <sys/epoll.h>
 
-#include "aelkey_loop.h"
 #include "device_in_manager.h"
 #include "device_out_manager.h"
 #include "device_parser.h"
+#include "lua_bindings/loop.h"
 
 bool AelkeyState::on_init() {
   // initialize epoll

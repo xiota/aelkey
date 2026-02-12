@@ -4,8 +4,8 @@
 
 #include <unistd.h>
 
-#include "aelkey_loop.h"
 #include "aelkey_state.h"
+#include "lua_bindings/loop.h"
 
 namespace SignalHandler {
 

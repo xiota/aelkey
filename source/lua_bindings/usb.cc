@@ -1,4 +1,4 @@
-#include "aelkey_usb.h"
+#include "lua_bindings/usb.h"
 
 #include <algorithm>
 #include <cstring>
@@ -8,7 +8,6 @@
 #include <libusb-1.0/libusb.h>
 #include <sol/sol.hpp>
 
-#include "aelkey_hid.h"
 #include "aelkey_state.h"
 #include "device_in_libusb.h"
 #include "device_in_manager.h"

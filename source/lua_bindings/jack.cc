@@ -1,4 +1,4 @@
-#include "aelkey_jack.h"
+#include "lua_bindings/jack.h"
 
 #include <string>
 #include <unordered_map>

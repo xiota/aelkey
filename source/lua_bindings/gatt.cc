@@ -1,4 +1,4 @@
-#include "aelkey_gatt.h"
+#include "lua_bindings/gatt.h"
 
 #include <string>
 #include <vector>

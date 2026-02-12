@@ -1,4 +1,4 @@
-#include "aelkey_hid.h"
+#include "lua_bindings/hid.h"
 
 #include <vector>
 

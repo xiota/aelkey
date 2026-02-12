@@ -1,4 +1,4 @@
-#include "aelkey_midi.h"
+#include "lua_bindings/midi.h"
 
 #include <string>
 #include <vector>

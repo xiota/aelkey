@@ -49,19 +49,19 @@ conf_data.set('VERSION', '"' + meson.project_version() + '"')
 # lua scripts
 fs = import('fs')
 
-lua_click_content = fs.read(meson.project_source_root() / 'source/mod_click.lua')
-lua_edge_content = fs.read(meson.project_source_root() / 'source/mod_edge.lua')
-lua_filter_content = fs.read(meson.project_source_root() / 'source/mod_filter.lua')
-lua_keyboard_content = fs.read(meson.project_source_root() / 'source/mod_keyboard.lua')
-lua_log_content = fs.read(meson.project_source_root() / 'source/mod_log.lua')
-lua_monitor_content = fs.read(meson.project_source_root() / 'source/mod_monitor.lua')
-lua_midi_content = fs.read(meson.project_source_root() / 'source/mod_midi.lua')
-lua_mouse_content = fs.read(meson.project_source_root() / 'source/mod_mouse.lua')
-lua_sequence_content = fs.read(meson.project_source_root() / 'source/mod_sequence.lua')
-lua_ticker_content = fs.read(meson.project_source_root() / 'source/mod_ticker.lua')
-lua_touchpad_content = fs.read(meson.project_source_root() / 'source/mod_touchpad.lua')
-lua_tracker_content = fs.read(meson.project_source_root() / 'source/mod_tracker.lua')
-lua_util_content = fs.read(meson.project_source_root() / 'source/mod_util.lua')
+lua_click_content = fs.read(meson.project_source_root() / 'source/lua_scripts/click.lua')
+lua_edge_content = fs.read(meson.project_source_root() / 'source/lua_scripts/edge.lua')
+lua_filter_content = fs.read(meson.project_source_root() / 'source/lua_scripts/filter.lua')
+lua_keyboard_content = fs.read(meson.project_source_root() / 'source/lua_scripts/keyboard.lua')
+lua_log_content = fs.read(meson.project_source_root() / 'source/lua_scripts/log.lua')
+lua_monitor_content = fs.read(meson.project_source_root() / 'source/lua_scripts/monitor.lua')
+lua_midi_content = fs.read(meson.project_source_root() / 'source/lua_scripts/midi.lua')
+lua_mouse_content = fs.read(meson.project_source_root() / 'source/lua_scripts/mouse.lua')
+lua_sequence_content = fs.read(meson.project_source_root() / 'source/lua_scripts/sequence.lua')
+lua_ticker_content = fs.read(meson.project_source_root() / 'source/lua_scripts/ticker.lua')
+lua_touchpad_content = fs.read(meson.project_source_root() / 'source/lua_scripts/touchpad.lua')
+lua_tracker_content = fs.read(meson.project_source_root() / 'source/lua_scripts/tracker.lua')
+lua_util_content = fs.read(meson.project_source_root() / 'source/lua_scripts/util.lua')
 
 lua_scripts = configuration_data()
 lua_scripts.set('AELKEY_CLICK_SCRIPT',  lua_click_content.strip())
@@ -79,27 +79,30 @@ lua_scripts.set('AELKEY_TRACKER_SCRIPT',  lua_tracker_content.strip())
 lua_scripts.set('AELKEY_UTIL_SCRIPT',  lua_util_content.strip())
 
 default_css_h = configure_file(
-  input: 'source/lua_scripts.h.in',
+  input: 'source/lua_scripts/lua_scripts.h.in',
   output: 'lua_scripts.h',
   configuration: lua_scripts
 )
 
 # source
+src_inc = include_directories('source')
+
 src_files = files(
-  'source/aelkey.cc',
-  'source/aelkey_audio.cc',
-  'source/aelkey_core.cc',
-  'source/aelkey_evdev.cc',
-  'source/aelkey_gatt.cc',
-  'source/aelkey_haptics.cc',
-  'source/aelkey_hid.cc',
-  'source/aelkey_jack.cc',
-  'source/aelkey_loop.cc',
-  'source/aelkey_midi.cc',
-  'source/aelkey_monitor.cc',
+  'source/lua_bindings/aelkey.cc',
+  'source/lua_bindings/audio.cc',
+  'source/lua_bindings/core.cc',
+  'source/lua_bindings/evdev.cc',
+  'source/lua_bindings/gatt.cc',
+  'source/lua_bindings/haptics.cc',
+  'source/lua_bindings/hid.cc',
+  'source/lua_bindings/jack.cc',
+  'source/lua_bindings/loop.cc',
+  'source/lua_bindings/midi.cc',
+  'source/lua_bindings/monitor.cc',
+  'source/lua_bindings/usb.cc',
+  'source/lua_bindings/util.cc',
+
   'source/aelkey_state.cc',
-  'source/aelkey_usb.cc',
-  'source/aelkey_util.cc',
   'source/device_backend_jack.cc',
   'source/device_helpers.cc',
   'source/device_in_audio.cc',
@@ -123,6 +126,7 @@ src_files = files(
 shared_library(
   meson.project_name(),
   src_files,
+  include_directories: src_inc,
   dependencies: [
     dbus_dep,
     jack_dep,

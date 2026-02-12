@@ -1,4 +1,4 @@
-#include "aelkey_loop.h"
+#include "lua_bindings/loop.h"
 
 #include <cstring>
 #include <string>
@@ -11,13 +11,12 @@
 
 #include <sol/sol.hpp>
 
-#include "aelkey_core.h"
 #include "aelkey_state.h"
 #include "device_declarations.h"
 #include "device_in_manager.h"
 #include "dispatcher.h"
+#include "lua_bindings/core.h"
 #include "signal_handler.h"
-#include "util/scoped_timer.h"
 
 sol::object loop_stop(sol::this_state ts) {
   sol::state_view lua(ts);

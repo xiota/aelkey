@@ -8,9 +8,9 @@
 
 #include <jack/ringbuffer.h>
 
-#include "aelkey_util.h"
 #include "device_backend_jack.h"
 #include "device_helpers.h"
+#include "lua_bindings/util.h"  // util_now
 #include "tick_scheduler.h"
 
 DeviceInMidi::~DeviceInMidi() {
