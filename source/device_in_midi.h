@@ -57,9 +57,11 @@ class DeviceInMidi : public DeviceIn, public Singleton<DeviceInMidi> {
 
   // key = callback name
   std::map<std::string, std::vector<MidiEvent>> batches_;
+  RtCallback rt_cb_;
   bool rt_registered_ = false;
 
   std::vector<JackPortEvent> pending_hotplug_;
+  HotplugCallback hp_cb_;
   bool hotplug_registered_ = false;
 
   static constexpr size_t MIDI_RINGBUFFER_BYTES = 8 * 1024;

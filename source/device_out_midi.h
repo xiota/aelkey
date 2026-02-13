@@ -47,8 +47,10 @@ class DeviceOutMidi : public DeviceOut, public Singleton<DeviceOutMidi> {
   jack_ringbuffer_t *ring_ = nullptr;
   static constexpr size_t kRingSize = 4096;
 
+  RtCallback rt_cb_;
   bool rt_registered_ = false;
 
   std::vector<JackPortEvent> pending_hotplug_;
+  HotplugCallback hp_cb_;
   bool hotplug_registered_ = false;
 };

@@ -16,6 +16,9 @@ struct JackPortEvent {
   unsigned long flags;    // JackPortIsInput / JackPortIsOutput
 };
 
+using RtCallback = std::function<void(jack_nframes_t)>;
+using HotplugCallback = std::function<void(const JackPortEvent &)>;
+
 class DeviceBackendJack : public Singleton<DeviceBackendJack> {
   friend class Singleton<DeviceBackendJack>;
 
@@ -61,12 +64,12 @@ class DeviceBackendJack : public Singleton<DeviceBackendJack> {
   jack_midi_data_t *midi_event_reserve(void *buf, jack_nframes_t time, size_t size);
 
   // RT callback registration
-  using RtCallback = std::function<void(jack_nframes_t)>;
   void add_rt_callback(RtCallback cb);
+  void remove_rt_callback(const RtCallback &cb);
 
   // Hotplug callback registration (port add/remove)
-  using HotplugCallback = std::function<void(const JackPortEvent &)>;
   void add_hotplug_callback(HotplugCallback cb);
+  void remove_hotplug_callback(const HotplugCallback &cb);
 
  private:
   static int process_cb(jack_nframes_t nframes, void *arg);

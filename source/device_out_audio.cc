@@ -24,12 +24,14 @@ bool DeviceOutAudio::on_init() {
 
   auto &jack = DeviceBackendJack::instance();
   if (!rt_registered_) {
-    jack.add_rt_callback([this](jack_nframes_t nframes) { this->process(nframes); });
+    rt_cb_ = [this](jack_nframes_t n) { this->process(n); };
+    jack.add_rt_callback(rt_cb_);
     rt_registered_ = true;
   }
 
   if (!hotplug_registered_) {
-    jack.add_hotplug_callback([this](const JackPortEvent &ev) { this->on_hotplug_event(ev); });
+    hp_cb_ = [this](const JackPortEvent &ev) { this->on_hotplug_event(ev); };
+    jack.add_hotplug_callback(hp_cb_);
     hotplug_registered_ = true;
   }
 
@@ -44,6 +46,16 @@ DeviceOutAudio::~DeviceOutAudio() {
   }
   output_ports_.clear();
   output_decls_.clear();
+
+  if (rt_registered_) {
+    jack.remove_rt_callback(rt_cb_);
+    rt_registered_ = false;
+  }
+
+  if (hotplug_registered_) {
+    jack.remove_hotplug_callback(hp_cb_);
+    hotplug_registered_ = false;
+  }
 
   if (ring_) {
     jack_ringbuffer_free(ring_);

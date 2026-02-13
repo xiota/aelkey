@@ -1,5 +1,6 @@
 #include "device_backend_jack.h"
 
+#include <algorithm>
 #include <cstdio>
 #include <string>
 #include <utility>
@@ -202,8 +203,39 @@ void DeviceBackendJack::add_rt_callback(RtCallback cb) {
   callbacks_.push_back(std::move(cb));
 }
 
+void DeviceBackendJack::remove_rt_callback(const RtCallback &cb) {
+  callbacks_.erase(
+      std::remove_if(
+          callbacks_.begin(),
+          callbacks_.end(),
+          [&](const RtCallback &existing) {
+            // std::function doesn't have operator==, but target_type + target pointer works
+            return existing.target_type() == cb.target_type() &&
+                   existing.target<void (*)(jack_nframes_t)>() ==
+                       cb.target<void (*)(jack_nframes_t)>();
+          }
+      ),
+      callbacks_.end()
+  );
+}
+
 void DeviceBackendJack::add_hotplug_callback(HotplugCallback cb) {
   hotplug_callbacks_.push_back(std::move(cb));
+}
+
+void DeviceBackendJack::remove_hotplug_callback(const HotplugCallback &cb) {
+  hotplug_callbacks_.erase(
+      std::remove_if(
+          hotplug_callbacks_.begin(),
+          hotplug_callbacks_.end(),
+          [&](const HotplugCallback &existing) {
+            return existing.target_type() == cb.target_type() &&
+                   existing.target<void (*)(const JackPortEvent &)>() ==
+                       cb.target<void (*)(const JackPortEvent &)>();
+          }
+      ),
+      hotplug_callbacks_.end()
+  );
 }
 
 int DeviceBackendJack::process_cb(jack_nframes_t nframes, void *arg) {

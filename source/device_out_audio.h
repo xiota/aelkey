@@ -44,8 +44,10 @@ class DeviceOutAudio : public DeviceOut, public Singleton<DeviceOutAudio> {
   jack_ringbuffer_t *ring_ = nullptr;
   static constexpr size_t kRingSize = 512 * 1024;
 
+  RtCallback rt_cb_;
   bool rt_registered_ = false;
 
   std::vector<JackPortEvent> pending_hotplug_;
+  HotplugCallback hp_cb_;
   bool hotplug_registered_ = false;
 };
