@@ -12,6 +12,7 @@
 #include "device_helpers.h"
 #include "device_out.h"
 #include "singleton.h"
+#include "utils/signal.h"
 
 class DeviceOutMidi : public DeviceOut, public Singleton<DeviceOutMidi> {
   friend class Singleton<DeviceOutMidi>;
@@ -47,10 +48,8 @@ class DeviceOutMidi : public DeviceOut, public Singleton<DeviceOutMidi> {
   jack_ringbuffer_t *ring_ = nullptr;
   static constexpr size_t kRingSize = 4096;
 
-  RtCallback rt_cb_;
-  bool rt_registered_ = false;
-
   std::vector<JackPortEvent> pending_hotplug_;
-  HotplugCallback hp_cb_;
-  bool hotplug_registered_ = false;
+  AelkeyUtil::Signal<void(const JackPortEvent &)>::Connection tok_jack_hotplug_;
+
+  AelkeyUtil::Signal<void(jack_nframes_t)>::Connection tok_jack_process_;
 };

@@ -11,6 +11,7 @@
 #include "device_declarations.h"
 #include "device_in.h"
 #include "singleton.h"
+#include "utils/signal.h"
 
 struct MidiEvent {
   std::string id;             // InputDecl id
@@ -57,12 +58,10 @@ class DeviceInMidi : public DeviceIn, public Singleton<DeviceInMidi> {
 
   // key = callback name
   std::map<std::string, std::vector<MidiEvent>> batches_;
-  RtCallback rt_cb_;
-  bool rt_registered_ = false;
+  AelkeyUtil::Signal<void(jack_nframes_t)>::Connection tok_jack_process_;
 
   std::vector<JackPortEvent> pending_hotplug_;
-  HotplugCallback hp_cb_;
-  bool hotplug_registered_ = false;
+  AelkeyUtil::Signal<void(const JackPortEvent &)>::Connection tok_jack_hotplug_;
 
   static constexpr size_t MIDI_RINGBUFFER_BYTES = 8 * 1024;
 };

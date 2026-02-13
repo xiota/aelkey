@@ -11,6 +11,7 @@
 #include "device_helpers.h"
 #include "device_out.h"
 #include "singleton.h"
+#include "utils/signal.h"
 
 class DeviceOutAudio : public DeviceOut, public Singleton<DeviceOutAudio> {
   friend class Singleton<DeviceOutAudio>;
@@ -44,10 +45,8 @@ class DeviceOutAudio : public DeviceOut, public Singleton<DeviceOutAudio> {
   jack_ringbuffer_t *ring_ = nullptr;
   static constexpr size_t kRingSize = 512 * 1024;
 
-  RtCallback rt_cb_;
-  bool rt_registered_ = false;
-
   std::vector<JackPortEvent> pending_hotplug_;
-  HotplugCallback hp_cb_;
-  bool hotplug_registered_ = false;
+  AelkeyUtil::Signal<void(const JackPortEvent &)>::Connection tok_jack_hotplug_;
+
+  AelkeyUtil::Signal<void(jack_nframes_t)>::Connection tok_jack_process_;
 };

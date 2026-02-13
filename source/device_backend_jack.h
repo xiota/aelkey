@@ -8,6 +8,7 @@
 #include <jack/midiport.h>
 
 #include "singleton.h"
+#include "utils/signal.h"
 
 struct JackPortEvent {
   std::string type;       // "add" or "remove"
@@ -15,9 +16,6 @@ struct JackPortEvent {
   std::string port_type;  // e.g. JACK_DEFAULT_MIDI_TYPE
   unsigned long flags;    // JackPortIsInput / JackPortIsOutput
 };
-
-using RtCallback = std::function<void(jack_nframes_t)>;
-using HotplugCallback = std::function<void(const JackPortEvent &)>;
 
 class DeviceBackendJack : public Singleton<DeviceBackendJack> {
   friend class Singleton<DeviceBackendJack>;
@@ -63,13 +61,9 @@ class DeviceBackendJack : public Singleton<DeviceBackendJack> {
   void midi_clear_buffer(void *buf);
   jack_midi_data_t *midi_event_reserve(void *buf, jack_nframes_t time, size_t size);
 
-  // RT callback registration
-  void add_rt_callback(RtCallback cb);
-  void remove_rt_callback(const RtCallback &cb);
-
-  // Hotplug callback registration (port add/remove)
-  void add_hotplug_callback(HotplugCallback cb);
-  void remove_hotplug_callback(const HotplugCallback &cb);
+ public:
+  AelkeyUtil::Signal<void(jack_nframes_t)> sig_jack_process_;
+  AelkeyUtil::Signal<void(const JackPortEvent &)> sig_jack_hotplug_;
 
  private:
   static int process_cb(jack_nframes_t nframes, void *arg);
@@ -81,6 +75,4 @@ class DeviceBackendJack : public Singleton<DeviceBackendJack> {
  private:
   jack_client_t *client_ = nullptr;
   std::string client_name_;
-  std::vector<RtCallback> callbacks_;
-  std::vector<HotplugCallback> hotplug_callbacks_;
 };

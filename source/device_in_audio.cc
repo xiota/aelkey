@@ -11,6 +11,7 @@
 #include "device_backend_jack.h"
 #include "device_helpers.h"
 #include "tick_scheduler.h"
+#include "utils/signal.h"
 #include "utils/time.h"
 
 DeviceInAudio::~DeviceInAudio() {
@@ -26,16 +27,6 @@ DeviceInAudio::~DeviceInAudio() {
 
   input_ports_.clear();
   input_decls_.clear();
-
-  if (rt_registered_) {
-    jack.remove_rt_callback(rt_cb_);
-    rt_registered_ = false;
-  }
-
-  if (hotplug_registered_) {
-    jack.remove_hotplug_callback(hp_cb_);
-    hotplug_registered_ = false;
-  }
 
   if (ring_) {
     jack_ringbuffer_free(ring_);
@@ -55,17 +46,12 @@ bool DeviceInAudio::on_init() {
   }
 
   auto &jack = DeviceBackendJack::instance();
-  if (!rt_registered_) {
-    rt_cb_ = [this](jack_nframes_t n) { this->process(n); };
-    jack.add_rt_callback(rt_cb_);
-    rt_registered_ = true;
-  }
+  tok_jack_process_ =
+      jack.sig_jack_process_.subscribe([this](jack_nframes_t nframes) { process(nframes); });
 
-  if (!hotplug_registered_) {
-    hp_cb_ = [this](const JackPortEvent &ev) { this->on_hotplug_event(ev); };
-    jack.add_hotplug_callback(hp_cb_);
-    hotplug_registered_ = true;
-  }
+  tok_jack_hotplug_ = jack.sig_jack_hotplug_.subscribe([this](const JackPortEvent &ev) {
+    on_hotplug_event(ev);
+  });
 
   return true;
 }

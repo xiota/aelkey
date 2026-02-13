@@ -10,6 +10,8 @@
 #include <jack/midiport.h>
 #include <unistd.h>
 
+#include "utils/signal.h"
+
 DeviceBackendJack::~DeviceBackendJack() {
   if (client_) {
     jack_client_close(client_);
@@ -199,54 +201,13 @@ DeviceBackendJack::midi_event_reserve(void *buf, jack_nframes_t time, size_t siz
   return jack_midi_event_reserve(buf, time, size);
 }
 
-void DeviceBackendJack::add_rt_callback(RtCallback cb) {
-  callbacks_.push_back(std::move(cb));
-}
-
-void DeviceBackendJack::remove_rt_callback(const RtCallback &cb) {
-  callbacks_.erase(
-      std::remove_if(
-          callbacks_.begin(),
-          callbacks_.end(),
-          [&](const RtCallback &existing) {
-            // std::function doesn't have operator==, but target_type + target pointer works
-            return existing.target_type() == cb.target_type() &&
-                   existing.target<void (*)(jack_nframes_t)>() ==
-                       cb.target<void (*)(jack_nframes_t)>();
-          }
-      ),
-      callbacks_.end()
-  );
-}
-
-void DeviceBackendJack::add_hotplug_callback(HotplugCallback cb) {
-  hotplug_callbacks_.push_back(std::move(cb));
-}
-
-void DeviceBackendJack::remove_hotplug_callback(const HotplugCallback &cb) {
-  hotplug_callbacks_.erase(
-      std::remove_if(
-          hotplug_callbacks_.begin(),
-          hotplug_callbacks_.end(),
-          [&](const HotplugCallback &existing) {
-            return existing.target_type() == cb.target_type() &&
-                   existing.target<void (*)(const JackPortEvent &)>() ==
-                       cb.target<void (*)(const JackPortEvent &)>();
-          }
-      ),
-      hotplug_callbacks_.end()
-  );
-}
-
 int DeviceBackendJack::process_cb(jack_nframes_t nframes, void *arg) {
   auto *self = static_cast<DeviceBackendJack *>(arg);
   return self->process(nframes);
 }
 
 int DeviceBackendJack::process(jack_nframes_t nframes) {
-  for (auto &cb : callbacks_) {
-    cb(nframes);
-  }
+  sig_jack_process_.emit(nframes);
   return 0;
 }
 
@@ -278,8 +239,6 @@ void DeviceBackendJack::handle_port_registration(jack_port_id_t port_id, int reg
   ev.port_type = type ? std::string{ type } : std::string{};
   ev.flags = flags;
 
-  // Fan out to all subscribers
-  for (auto &cb : hotplug_callbacks_) {
-    cb(ev);
-  }
+  // Signal all subscribers
+  sig_jack_hotplug_.emit(ev);
 }
