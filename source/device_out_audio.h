@@ -33,12 +33,19 @@ class DeviceOutAudio : public DeviceOut, public Singleton<DeviceOutAudio> {
  private:
   void process(jack_nframes_t nframes);
 
+  void on_hotplug_event(const JackPortEvent &ev);
+  void process_hotplug_events();
+
  private:
-  // id -> JACK port
-  std::map<std::string, jack_port_t *> outputs_;
+  // key = id
+  std::map<std::string, jack_port_t *> output_ports_;
+  std::map<std::string, OutputDecl> output_decls_;
 
   jack_ringbuffer_t *ring_ = nullptr;
   static constexpr size_t kRingSize = 512 * 1024;
 
   bool rt_registered_ = false;
+
+  std::vector<JackPortEvent> pending_hotplug_;
+  bool hotplug_registered_ = false;
 };
