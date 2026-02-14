@@ -7,6 +7,7 @@
 #include "device_declarations.h"
 #include "device_in.h"
 #include "singleton.h"
+#include "utils/signal.h"
 
 class DeviceIn;
 class DispatcherBase;
@@ -16,6 +17,10 @@ bool init_dispatcher_for_type(const std::string &type);
 class DeviceInManager : public Singleton<DeviceInManager> {
   friend class Singleton<DeviceInManager>;
 
+ protected:
+  DeviceInManager();
+  ~DeviceInManager() = default;
+
  public:
   DeviceIn *backend_for_type(const std::string &type);
 
@@ -23,8 +28,8 @@ class DeviceInManager : public Singleton<DeviceInManager> {
   bool attach(const std::string &devnode, InputDecl &decl);
   std::optional<InputDecl> detach(const std::string &dev_id);
 
- protected:
-  DeviceInManager();
+ public:
+  AelkeyUtil::Signal<void(const InputDecl &decl, const char *state)> sig_state_changed_;
 
  private:
   std::map<std::string, DeviceIn *> backends_;

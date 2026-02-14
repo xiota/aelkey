@@ -119,10 +119,7 @@ class DispatcherEvdev : public Dispatcher<DispatcherEvdev> {
 
     // HUP/ERR → detach device
     if (events & (EPOLLHUP | EPOLLERR)) {
-      auto removed = DeviceInManager::instance().detach(decl.id);
-      if (removed && !removed->id.empty()) {
-        state.notify_state_change(*removed, "remove");
-      }
+      DeviceInManager::instance().detach(decl.id);
       return;
     }
 

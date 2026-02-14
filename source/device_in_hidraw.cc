@@ -6,8 +6,59 @@
 #include <sys/ioctl.h>
 #include <unistd.h>
 
+#include "aelkey_state.h"
+#include "device_in_manager.h"
 #include "dispatcher_hidraw.h"
 #include "dispatcher_udev.h"
+#include "utils/signal.h"
+
+DeviceInHidraw::DeviceInHidraw() {
+  tok_udev_event_ =
+      DispatcherUdev::instance().sig_udev_event_.subscribe([this](const UdevEvent &ev) {
+        if (ev.subsystem != "hidraw") {
+          return;
+        }
+
+        auto &state = AelkeyState::instance();
+
+        if (ev.action == "add") {
+          for (auto &decl : state.input_decls) {
+            if (decl.type != "hidraw") {
+              continue;
+            }
+
+            std::string matched;
+            if (!match(decl, matched)) {
+              continue;
+            }
+
+            if (matched != ev.devnode) {
+              continue;
+            }
+
+            if (DeviceInManager::instance().attach(matched, decl)) {
+              break;
+            }
+          }
+        }
+
+        else if (ev.action == "remove") {
+          for (auto &decl : state.input_decls) {
+            if (decl.type != "hidraw") {
+              continue;
+            }
+
+            if (decl.devnode != ev.devnode) {
+              continue;
+            }
+
+            if (DeviceInManager::instance().detach(decl.id)) {
+              break;
+            }
+          }
+        }
+      });
+}
 
 bool DeviceInHidraw::match(InputDecl &decl, std::string &devnode_out) {
   if (decl.type != "hidraw") {
@@ -132,6 +183,13 @@ bool DeviceInHidraw::attach(const std::string &devnode, InputDecl &decl) {
 
 bool DeviceInHidraw::detach(const std::string &id) {
   DispatcherHidraw::instance().remove_device(id);
+
+  auto &state = AelkeyState::instance();
+  auto it = state.input_map.find(id);
+  if (it != state.input_map.end()) {
+    auto decl_copy = it->second;
+  }
+
   return true;
 }
 
@@ -153,5 +211,6 @@ int DeviceInHidraw::get_interface_num(const std::string &devnode) {
   }
 
   udev_device_unref(dev);
+
   return iface;
 }

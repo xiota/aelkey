@@ -51,8 +51,6 @@ sol::object core_open_device(sol::this_state ts, sol::optional<std::string> dev_
     }
 
     if (DeviceInManager::instance().attach(devnode, decl)) {
-      decl.devnode = devnode;
-      state.notify_state_change(decl, "add");
       ok = true;
     }
     break;

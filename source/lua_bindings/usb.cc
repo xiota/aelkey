@@ -110,8 +110,6 @@ static void LIBUSB_CALL dispatch_libusb(libusb_transfer *transfer) {
     }
   }
 
-  auto &state = AelkeyState::instance();
-
   // resubmit transfer based on status
   switch (transfer->status) {
     case LIBUSB_TRANSFER_COMPLETED:
@@ -125,8 +123,7 @@ static void LIBUSB_CALL dispatch_libusb(libusb_transfer *transfer) {
     }
 
     case LIBUSB_TRANSFER_NO_DEVICE: {
-      auto result = DeviceInManager::instance().detach(decl->id);
-      state.notify_state_change(*result, "remove");
+      DeviceInManager::instance().detach(decl->id);
       break;
     }
 
@@ -144,8 +141,7 @@ static void LIBUSB_CALL dispatch_libusb(libusb_transfer *transfer) {
       }
       if (rc != 0) {
         // device is gone
-        auto result = DeviceInManager::instance().detach(decl->id);
-        state.notify_state_change(*result, "remove");
+        DeviceInManager::instance().detach(decl->id);
       } else {
         // fatal or cancelled
         destroy_transfer(transfer);

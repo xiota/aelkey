@@ -7,13 +7,15 @@
 #include "device_declarations.h"
 #include "device_helpers.h"
 #include "device_in.h"
+#include "dispatcher_udev.h"
 #include "singleton.h"
+#include "utils/signal.h"
 
 class DeviceInEvdev : public DeviceIn, public Singleton<DeviceInEvdev> {
   friend class Singleton<DeviceInEvdev>;
 
  protected:
-  DeviceInEvdev() = default;
+  DeviceInEvdev();
   ~DeviceInEvdev() = default;
 
  public:
@@ -24,4 +26,7 @@ class DeviceInEvdev : public DeviceIn, public Singleton<DeviceInEvdev> {
   int fd() const override {
     return -1;
   }
+
+ private:
+  AelkeyUtil::Signal<void(const UdevEvent &)>::Connection tok_udev_event_;
 };

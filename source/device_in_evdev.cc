@@ -4,8 +4,49 @@
 #include <libevdev/libevdev.h>
 #include <unistd.h>
 
+#include "aelkey_state.h"
+#include "device_in_manager.h"
 #include "dispatcher_evdev.h"
 #include "dispatcher_udev.h"
+#include "utils/signal.h"
+
+DeviceInEvdev::DeviceInEvdev() {
+  tok_udev_event_ =
+      DispatcherUdev::instance().sig_udev_event_.subscribe([this](const UdevEvent &ev) {
+        if (ev.subsystem != "input") {
+          return;
+        }
+
+        // Handle add/remove
+        if (ev.action == "add") {
+          // Try to match and attach
+          for (auto &decl : AelkeyState::instance().input_decls) {
+            if (decl.type != "evdev") {
+              continue;
+            }
+
+            std::string matched;
+            if (match(decl, matched) && matched == ev.devnode) {
+              if (DeviceInManager::instance().attach(matched, decl)) {
+                break;
+              }
+            }
+          }
+        } else if (ev.action == "remove") {
+          // Try to detach
+          for (auto &decl : AelkeyState::instance().input_decls) {
+            if (decl.type != "evdev") {
+              continue;
+            }
+            if (decl.devnode == ev.devnode) {
+              if (DeviceInManager::instance().detach(decl.id)) {
+                break;
+              }
+            }
+          }
+        }
+      });
+}
 
 bool DeviceInEvdev::match(InputDecl &decl, std::string &devnode_out) {
   if (decl.type != "evdev") {

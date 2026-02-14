@@ -41,7 +41,14 @@ DeviceIn *DeviceInManager::backend_for_type(const std::string &type) {
 
 bool DeviceInManager::match(InputDecl &decl, std::string &devnode_out) {
   DeviceIn *backend = backend_for_type(decl.type);
-  return backend && backend->match(decl, devnode_out);
+
+  bool matched = backend && backend->match(decl, devnode_out);
+
+  if (matched) {
+    sig_state_changed_.emit(decl, "match");
+  }
+
+  return matched;
 }
 
 bool DeviceInManager::attach(const std::string &devnode, InputDecl &decl) {
@@ -65,6 +72,7 @@ bool DeviceInManager::attach(const std::string &devnode, InputDecl &decl) {
   }
 
   state.input_map[decl.id] = decl;
+  sig_state_changed_.emit(decl, "add");
   return true;
 }
 
@@ -90,5 +98,6 @@ std::optional<InputDecl> DeviceInManager::detach(const std::string &dev_id) {
 
   state.input_map.erase(it);
 
+  sig_state_changed_.emit(*result, "remove");
   return result;
 }

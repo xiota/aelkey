@@ -34,7 +34,6 @@ void AelkeyState::attach_inputs_from_decls(sol::this_state ts) {
       if (decl.type != "libusb") {
         decl.devnode = devnode;
       }
-      notify_state_change(decl, "add");
     }
   }
 }
@@ -88,29 +87,4 @@ void AelkeyState::parse_outputs_from_lua(sol::this_state ts) {
       }
     }
   });
-}
-
-void AelkeyState::notify_state_change(const InputDecl &decl, const char *state) {
-  if (decl.on_state.empty()) {
-    return;
-  }
-
-  sol::state_view lua(AelkeyState::instance().lua_vm);
-  sol::object obj = lua[decl.on_state];
-  if (!obj.is<sol::function>()) {
-    return;
-  }
-
-  sol::function cb = obj.as<sol::function>();
-
-  sol::table tbl = lua.create_table();
-  tbl["device"] = decl.id;
-  tbl["state"] = state ? state : "";
-
-  sol::protected_function pf = cb;
-  sol::protected_function_result result = pf(tbl);
-  if (!result.valid()) {
-    sol::error err = result;
-    std::fprintf(stderr, "Lua state_callback error: %s\n", err.what());
-  }
 }

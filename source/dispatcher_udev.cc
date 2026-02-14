@@ -126,172 +126,87 @@ struct udev *DispatcherUdev::get_udev() const {
 void DispatcherUdev::handle_udev_add(struct udev_device *dev) {
   const char *subsystem = udev_device_get_subsystem(dev);
   const char *node = udev_device_get_devnode(dev);
-  std::string devnode = node ? node : "";
+  const char *syspath = udev_device_get_syspath(dev);
 
-  if (!subsystem) {
+  if (!subsystem || !syspath) {
     return;
   }
 
-  auto &state = AelkeyState::instance();
+  UdevEvent ev;
+  ev.action = "add";
+  ev.subsystem = subsystem;
+  ev.devnode = node ? node : "";
+  ev.syspath = syspath;
 
-  // Watchlist
-  for (auto &entry : state.watch_map) {
-    for (auto &decl : entry.second) {
-      std::string matched;
-      if (!DeviceInManager::instance().match(decl, matched)) {
-        continue;
-      }
+  // USB-specific metadata
+  if (strcmp(subsystem, "usb") == 0) {
+    const char *devtype = udev_device_get_devtype(dev);
+    if (devtype) {
+      ev.devtype = devtype;
+    }
 
-      if ((decl.type == "evdev" && std::string(subsystem) == "input") ||
-          (decl.type == "hidraw" && std::string(subsystem) == "hidraw")) {
-        if (matched == devnode) {
-          decl.devnode = devnode;
-          decl.on_state = state.on_watchlist;
-          state.notify_state_change(decl, "add");
-        }
-      } else if (decl.type == "libusb" && std::string(subsystem) == "usb") {
-        const char *syspath = udev_device_get_syspath(dev);
-        if (!syspath) {
-          continue;
-        }
+    const char *vid = udev_device_get_property_value(dev, "ID_VENDOR_ID");
+    const char *pid = udev_device_get_property_value(dev, "ID_MODEL_ID");
+    const char *bus = udev_device_get_property_value(dev, "BUSNUM");
+    const char *devnum = udev_device_get_property_value(dev, "DEVNUM");
 
-        if (matched == std::string(syspath)) {
-          decl.devnode = syspath;
-          decl.on_state = state.on_watchlist;
-          state.notify_state_change(decl, "add");
-        }
-      }
+    if (vid) {
+      ev.vid = vid;
+    }
+    if (pid) {
+      ev.pid = pid;
+    }
+    if (bus) {
+      ev.busnum = bus;
+    }
+    if (devnum) {
+      ev.devnum = devnum;
     }
   }
 
-  // Normal devices
-  for (auto &decl : state.input_decls) {
-    std::string matched;
-    if (!DeviceInManager::instance().match(decl, matched)) {
-      continue;
-    }
-
-    if ((decl.type == "evdev" && std::string(subsystem) == "input") ||
-        (decl.type == "hidraw" && std::string(subsystem) == "hidraw")) {
-      if (matched == devnode) {
-        if (state.input_map.contains(decl.id)) {
-          break;
-        }
-
-        if (DeviceInManager::instance().attach(devnode, decl)) {
-          decl.devnode = devnode;
-          state.notify_state_change(decl, "add");
-        }
-        break;
-      }
-    } else if (decl.type == "libusb" && std::string(subsystem) == "usb") {
-      const char *devtype = udev_device_get_devtype(dev);
-      if (!devtype || strcmp(devtype, "usb_device") != 0) {
-        continue;  // ignore interface-level add events
-      }
-
-      // Get VID/PID
-      const char *vid = udev_device_get_property_value(dev, "ID_VENDOR_ID");
-      const char *pid = udev_device_get_property_value(dev, "ID_MODEL_ID");
-      if (!vid || !pid) {
-        continue;
-      }
-
-      uint16_t vendor = strtol(vid, nullptr, 16);
-      uint16_t product = strtol(pid, nullptr, 16);
-
-      // build a descriptor
-      libusb_device_descriptor desc{};
-      desc.idVendor = vendor;
-      desc.idProduct = product;
-
-      if (!DeviceInLibUSB::instance().matches_vidpid(decl, desc)) {
-        continue;
-      }
-
-      if (state.input_map.contains(decl.id)) {
-        break;
-      }
-
-      if (DeviceInManager::instance().attach(matched, decl)) {
-        decl.devnode = matched;
-        state.notify_state_change(decl, "add");
-      }
-
-      // look for more matches
-      continue;
-    }
-  }
+  sig_udev_event_.emit(ev);
 }
 
 void DispatcherUdev::handle_udev_remove(struct udev_device *dev) {
   const char *subsystem = udev_device_get_subsystem(dev);
   const char *node = udev_device_get_devnode(dev);
-  std::string devnode = node ? node : "";
+  const char *syspath = udev_device_get_syspath(dev);
 
-  if (!subsystem) {
+  if (!subsystem || !syspath) {
     return;
   }
 
-  auto &state = AelkeyState::instance();
+  UdevEvent ev;
+  ev.action = "remove";
+  ev.subsystem = subsystem;
+  ev.devnode = node ? node : "";
+  ev.syspath = syspath;
 
-  // Watchlist
-  for (auto &entry : state.watch_map) {
-    for (auto &decl : entry.second) {
-      if (decl.type == "libusb" && std::string(subsystem) == "usb") {
-        const char *syspath = udev_device_get_syspath(dev);
-        if (!syspath) {
-          continue;
-        }
+  // USB-specific metadata
+  if (strcmp(subsystem, "usb") == 0) {
+    const char *devtype = udev_device_get_devtype(dev);
+    if (devtype) {
+      ev.devtype = devtype;
+    }
 
-        if (decl.devnode == std::string(syspath)) {
-          decl.on_state = state.on_watchlist;
-          state.notify_state_change(decl, "remove");
-          decl.devnode.clear();
-        }
-      } else if ((decl.type == "evdev" && std::string(subsystem) == "input") ||
-                 (decl.type == "hidraw" && std::string(subsystem) == "hidraw")) {
-        if (decl.devnode == devnode) {
-          decl.on_state = state.on_watchlist;
-          state.notify_state_change(decl, "remove");
-          decl.devnode.clear();
-        }
-      }
+    const char *vid = udev_device_get_property_value(dev, "ID_VENDOR_ID");
+    const char *pid = udev_device_get_property_value(dev, "ID_MODEL_ID");
+    const char *bus = udev_device_get_property_value(dev, "BUSNUM");
+    const char *devnum = udev_device_get_property_value(dev, "DEVNUM");
+
+    if (vid) {
+      ev.vid = vid;
+    }
+    if (pid) {
+      ev.pid = pid;
+    }
+    if (bus) {
+      ev.busnum = bus;
+    }
+    if (devnum) {
+      ev.devnum = devnum;
     }
   }
 
-  // Normal devices
-  for (auto &decl : state.input_decls) {
-    if (decl.type == "libusb" && std::string(subsystem) == "usb") {
-      const char *devtype = udev_device_get_devtype(dev);
-      if (!devtype || strcmp(devtype, "usb_device") != 0) {
-        continue;
-      }
-
-      const char *bus_str = udev_device_get_property_value(dev, "BUSNUM");
-      const char *dev_str = udev_device_get_property_value(dev, "DEVNUM");
-      if (!bus_str || !dev_str) {
-        continue;
-      }
-
-      std::string inst_node = std::string("usb:") + bus_str + "-" + dev_str;
-
-      if (decl.devnode == inst_node) {
-        auto removed = DeviceInManager::instance().detach(decl.id);
-        if (removed && !removed->id.empty()) {
-          state.notify_state_change(*removed, "remove");
-        }
-        break;
-      }
-    } else if ((decl.type == "evdev" && std::string(subsystem) == "input") ||
-               (decl.type == "hidraw" && std::string(subsystem) == "hidraw")) {
-      if (decl.devnode == devnode) {
-        auto removed = DeviceInManager::instance().detach(decl.id);
-        if (removed && !removed->id.empty()) {
-          state.notify_state_change(*removed, "remove");
-        }
-        break;
-      }
-    }
-  }
+  sig_udev_event_.emit(ev);
 }

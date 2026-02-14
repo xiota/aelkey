@@ -109,6 +109,7 @@ src_files = files(
   'source/device_in_evdev.cc',
   'source/device_in_gatt.cc',
   'source/device_in_hidraw.cc',
+  'source/device_in_libusb.cc',
   'source/device_in_manager.cc',
   'source/device_in_midi.cc',
   'source/device_out_audio.cc',
@@ -120,6 +121,7 @@ src_files = files(
   'source/dispatcher_haptics.cc',
   'source/dispatcher_registry.cc',
   'source/dispatcher_udev.cc',
+  'source/router_device_state.cc',
   'source/signal_handler.cc',
 )
 

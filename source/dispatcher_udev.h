@@ -7,8 +7,23 @@
 
 #include "dispatcher.h"
 #include "singleton.h"
+#include "utils/signal.h"
 
 struct InputDecl;
+
+struct UdevEvent {
+  std::string action;
+  std::string subsystem;
+  std::string devnode;
+  std::string syspath;
+
+  // Optional USB metadata
+  std::string devtype;
+  std::string vid;
+  std::string pid;
+  std::string busnum;
+  std::string devnum;
+};
 
 class DispatcherUdev : public Dispatcher<DispatcherUdev> {
   friend class Singleton<DispatcherUdev>;
@@ -33,6 +48,9 @@ class DispatcherUdev : public Dispatcher<DispatcherUdev> {
   );
 
   struct udev *get_udev() const;
+
+ public:
+  AelkeyUtil::Signal<void(const UdevEvent &)> sig_udev_event_;
 
  private:
   void handle_udev_add(struct udev_device *dev);
