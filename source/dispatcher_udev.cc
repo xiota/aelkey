@@ -5,6 +5,7 @@
 #include <stdexcept>
 
 #include <sol/sol.hpp>
+#include <sys/epoll.h>
 
 #include "aelkey_state.h"
 #include "device_declarations.h"

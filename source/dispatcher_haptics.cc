@@ -3,6 +3,7 @@
 #include <cerrno>
 #include <cstdio>
 
+#include <sys/epoll.h>
 #include <sys/ioctl.h>
 #include <unistd.h>
 

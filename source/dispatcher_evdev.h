@@ -6,6 +6,7 @@
 #include <fcntl.h>
 #include <libevdev/libevdev.h>
 #include <linux/input.h>
+#include <sys/epoll.h>
 #include <unistd.h>
 
 #include "aelkey_state.h"

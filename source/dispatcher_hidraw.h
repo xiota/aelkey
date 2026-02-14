@@ -6,6 +6,7 @@
 
 #include <fcntl.h>
 #include <sol/sol.hpp>
+#include <sys/epoll.h>
 #include <unistd.h>
 
 #include "aelkey_state.h"

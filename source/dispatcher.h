@@ -2,7 +2,6 @@
 
 #include <cstdint>
 #include <map>
-#include <sys/epoll.h>
 #include <vector>
 
 #include "dispatcher_registry.h"
