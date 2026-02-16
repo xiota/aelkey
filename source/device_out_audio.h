@@ -6,7 +6,7 @@
 
 #include <jack/ringbuffer.h>
 
-#include "device_backend_jack.h"
+#include "backend_jack.h"
 #include "device_declarations.h"
 #include "device_helpers.h"
 #include "device_out.h"

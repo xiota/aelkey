@@ -17,12 +17,12 @@ struct JackPortEvent {
   unsigned long flags;    // JackPortIsInput / JackPortIsOutput
 };
 
-class DeviceBackendJack : public Singleton<DeviceBackendJack> {
-  friend class Singleton<DeviceBackendJack>;
+class BackendJack : public Singleton<BackendJack> {
+  friend class Singleton<BackendJack>;
 
  private:
-  DeviceBackendJack() = default;
-  ~DeviceBackendJack();
+  BackendJack() = default;
+  ~BackendJack();
 
  public:
   // Ensure JACK client exists and is active

@@ -7,7 +7,7 @@
 #include <jack/ringbuffer.h>
 
 #include "aelkey_state.h"
-#include "device_backend_jack.h"
+#include "backend_jack.h"
 #include "device_declarations.h"
 #include "device_in.h"
 #include "singleton.h"

@@ -103,7 +103,7 @@ src_files = files(
   'source/lua_bindings/util.cc',
 
   'source/aelkey_state.cc',
-  'source/device_backend_jack.cc',
+  'source/backend_jack.cc',
   'source/device_helpers.cc',
   'source/device_in_audio.cc',
   'source/device_in_evdev.cc',

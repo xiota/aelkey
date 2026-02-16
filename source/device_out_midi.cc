@@ -6,7 +6,7 @@
 
 #include <jack/ringbuffer.h>
 
-#include "device_backend_jack.h"
+#include "backend_jack.h"
 #include "device_helpers.h"
 #include "tick_scheduler.h"
 #include "utils/signal.h"
@@ -24,7 +24,7 @@ bool DeviceOutMidi::on_init() {
 
   jack_ringbuffer_mlock(ring_);
 
-  auto &jack = DeviceBackendJack::instance();
+  auto &jack = BackendJack::instance();
   tok_jack_process_ =
       jack.sig_jack_process_.subscribe([this](jack_nframes_t nframes) { process(nframes); });
 
@@ -36,7 +36,7 @@ bool DeviceOutMidi::on_init() {
 }
 
 DeviceOutMidi::~DeviceOutMidi() {
-  auto &jack = DeviceBackendJack::instance();
+  auto &jack = BackendJack::instance();
 
   for (auto &kv : output_ports_) {
     jack.destroy_port(kv.second);
@@ -60,7 +60,7 @@ bool DeviceOutMidi::create(const OutputDecl &decl) {
 
   // Reuse existing port if name matches
   for (const auto &kv : output_ports_) {
-    auto existing_name = DeviceBackendJack::instance().port_name(kv.second);
+    auto existing_name = BackendJack::instance().port_name(kv.second);
     if (existing_name == port_name) {
       output_ports_[decl.id] = kv.second;
       output_decls_[decl.id] = decl;
@@ -68,7 +68,7 @@ bool DeviceOutMidi::create(const OutputDecl &decl) {
     }
   }
 
-  auto &jack = DeviceBackendJack::instance();
+  auto &jack = BackendJack::instance();
   jack_port_t *out = jack.create_port(port_name, JACK_DEFAULT_MIDI_TYPE, JackPortIsOutput);
 
   if (!out) {
@@ -138,7 +138,7 @@ bool DeviceOutMidi::destroy(const std::string &id) {
     return false;
   }
 
-  DeviceBackendJack::instance().destroy_port(it->second);
+  BackendJack::instance().destroy_port(it->second);
   output_ports_.erase(it);
 
   auto it2 = output_decls_.find(id);
@@ -150,7 +150,7 @@ bool DeviceOutMidi::destroy(const std::string &id) {
 }
 
 void DeviceOutMidi::process(jack_nframes_t nframes) {
-  auto &jack = DeviceBackendJack::instance();
+  auto &jack = BackendJack::instance();
 
   // Clear all output buffers
   for (auto &kv : output_ports_) {
@@ -225,7 +225,7 @@ void DeviceOutMidi::on_hotplug_event(const JackPortEvent &ev) {
 }
 
 void DeviceOutMidi::process_hotplug_events() {
-  auto &jack = DeviceBackendJack::instance();
+  auto &jack = BackendJack::instance();
 
   // For each OutputDecl
   for (auto &[id, decl] : output_decls_) {

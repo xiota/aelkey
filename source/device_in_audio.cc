@@ -8,7 +8,7 @@
 
 #include <jack/ringbuffer.h>
 
-#include "device_backend_jack.h"
+#include "backend_jack.h"
 #include "device_helpers.h"
 #include "tick_scheduler.h"
 #include "utils/signal.h"
@@ -20,7 +20,7 @@ DeviceInAudio::~DeviceInAudio() {
     tick_fd_ = -1;
   }
 
-  auto &jack = DeviceBackendJack::instance();
+  auto &jack = BackendJack::instance();
   for (auto &kv : input_ports_) {
     jack.destroy_port(kv.second);
   }
@@ -45,7 +45,7 @@ bool DeviceInAudio::on_init() {
     return false;
   }
 
-  auto &jack = DeviceBackendJack::instance();
+  auto &jack = BackendJack::instance();
   tok_jack_process_ =
       jack.sig_jack_process_.subscribe([this](jack_nframes_t nframes) { process(nframes); });
 
@@ -78,7 +78,7 @@ bool DeviceInAudio::attach(const std::string &devnode, InputDecl &decl) {
   // No sanitization — use exactly what user provided
   std::string port_name = decl.port.empty() ? decl.id : decl.port;
 
-  auto &jack = DeviceBackendJack::instance();
+  auto &jack = BackendJack::instance();
   jack_port_t *in = jack.create_port(port_name, JACK_DEFAULT_AUDIO_TYPE, JackPortIsInput);
   if (!in) {
     std::fprintf(stderr, "AUDIO: failed to register input port '%s'\n", port_name.c_str());
@@ -132,7 +132,7 @@ bool DeviceInAudio::detach(const std::string &id) {
     return false;
   }
 
-  auto &jack = DeviceBackendJack::instance();
+  auto &jack = BackendJack::instance();
   jack.destroy_port(it->second);
   input_ports_.erase(it);
 
@@ -154,7 +154,7 @@ void DeviceInAudio::process(jack_nframes_t nframes) {
     return;
   }
 
-  auto &jack = DeviceBackendJack::instance();
+  auto &jack = BackendJack::instance();
 
   for (auto &[id, port] : input_ports_) {
     void *buf = jack.port_buffer(port, nframes);
@@ -342,7 +342,7 @@ void DeviceInAudio::on_hotplug_event(const JackPortEvent &ev) {
 }
 
 void DeviceInAudio::process_hotplug_events() {
-  auto &jack = DeviceBackendJack::instance();
+  auto &jack = BackendJack::instance();
 
   // For each InputDecl
   for (auto &[id, decl] : input_decls_) {

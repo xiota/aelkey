@@ -7,7 +7,7 @@
 #include <jack/jack.h>
 #include <sol/sol.hpp>
 
-#include "device_backend_jack.h"
+#include "backend_jack.h"
 #include "device_helpers.h"
 
 // Short → full JACK type aliases
@@ -33,7 +33,7 @@ static std::string normalize_type(const sol::optional<std::string> &type_opt) {
 
 // jack.set_client_name(name) -> bool
 static bool ak_jack_set_client_name(const std::string &name) {
-  auto &jack = DeviceBackendJack::instance();
+  auto &jack = BackendJack::instance();
 
   // If client already exists, refuse to change name.
   if (jack.client() != nullptr) {
@@ -41,7 +41,7 @@ static bool ak_jack_set_client_name(const std::string &name) {
   }
 
   // Backend: set desired client name to be used on first ensure_client().
-  // You should implement this in DeviceBackendJack as:
+  // You should implement this in BackendJack as:
   //   bool set_client_name(const std::string &name);
   return jack.set_client_name(name);
 }
@@ -51,7 +51,7 @@ static sol::object ak_jack_get_client_name(sol::this_state ts) {
   lua_State *L = ts;
   sol::state_view lua(L);
 
-  auto &jack = DeviceBackendJack::instance();
+  auto &jack = BackendJack::instance();
   const std::string &name = jack.client_name();
 
   if (name.empty()) {
@@ -70,7 +70,7 @@ static sol::object ak_jack_list_ports(
   lua_State *L = ts;
   sol::state_view lua(L);
 
-  auto &jack = DeviceBackendJack::instance();
+  auto &jack = BackendJack::instance();
 
   std::string type = normalize_type(type_opt);
   unsigned long flags = 0;
@@ -95,7 +95,7 @@ static sol::object ak_jack_match_ports(sol::this_state ts, const std::string &pa
   lua_State *L = ts;
   sol::state_view lua(L);
 
-  auto &jack = DeviceBackendJack::instance();
+  auto &jack = BackendJack::instance();
 
   std::vector<std::string> ports = jack.list_ports(nullptr, 0);
   sol::table results = lua.create_table();
@@ -112,13 +112,13 @@ static sol::object ak_jack_match_ports(sol::this_state ts, const std::string &pa
 
 // jack.connect(src, dst) -> bool
 static bool ak_jack_connect_ports(const std::string &src, const std::string &dst) {
-  auto &jack = DeviceBackendJack::instance();
+  auto &jack = BackendJack::instance();
   return jack.connect(src, dst);
 }
 
 // jack.disconnect(src, dst) -> bool
 static bool ak_jack_disconnect_ports(const std::string &src, const std::string &dst) {
-  auto &jack = DeviceBackendJack::instance();
+  auto &jack = BackendJack::instance();
   return jack.disconnect(src, dst);
 }
 
@@ -142,7 +142,7 @@ static sol::object ak_jack_get_port_info(sol::this_state ts, const std::string &
   lua_State *L = ts;
   sol::state_view lua(L);
 
-  auto &jack = DeviceBackendJack::instance();
+  auto &jack = BackendJack::instance();
 
   if (!jack.ensure_client()) {
     return sol::nil;
