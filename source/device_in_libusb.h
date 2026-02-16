@@ -11,8 +11,8 @@
 
 #include "aelkey_state.h"
 #include "device_in.h"
-#include "device_in_manager.h"
 #include "dispatcher_udev.h"
+#include "manager_device_in.h"
 #include "singleton.h"
 #include "utils/signal.h"
 

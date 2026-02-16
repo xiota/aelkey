@@ -13,9 +13,9 @@
 
 #include "aelkey_state.h"
 #include "device_declarations.h"
-#include "device_in_manager.h"
 #include "dispatcher.h"
 #include "lua_bindings/core.h"
+#include "manager_device_in.h"
 #include "signal_handler.h"
 
 sol::object loop_stop(sol::this_state ts) {
@@ -73,7 +73,7 @@ void loop_cleanup() {
   }
   for (const auto &id : ids) {
     // mutates aelkey_state.input_map
-    DeviceInManager::instance().detach(id);
+    ManagerDeviceIn::instance().detach(id);
   }
 
   // Tear down global monitoring state

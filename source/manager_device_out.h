@@ -9,8 +9,8 @@
 
 class DeviceOut;
 
-class DeviceOutManager : public Singleton<DeviceOutManager> {
-  friend class Singleton<DeviceOutManager>;
+class ManagerDeviceOut : public Singleton<ManagerDeviceOut> {
+  friend class Singleton<ManagerDeviceOut>;
 
  public:
   DeviceOut *backend_for_type(const std::string &type);
@@ -18,7 +18,7 @@ class DeviceOutManager : public Singleton<DeviceOutManager> {
   bool create(const OutputDecl &decl);
 
  protected:
-  DeviceOutManager();
+  ManagerDeviceOut();
 
  private:
   std::map<std::string, DeviceOut *> backends_;

@@ -3,10 +3,10 @@
 #include <sol/sol.hpp>
 #include <sys/epoll.h>
 
-#include "device_in_manager.h"
-#include "device_out_manager.h"
 #include "device_parser.h"
 #include "lua_bindings/loop.h"
+#include "manager_device_in.h"
+#include "manager_device_out.h"
 
 bool AelkeyState::on_init() {
   // initialize epoll
@@ -23,7 +23,7 @@ bool AelkeyState::on_init() {
 }
 
 void AelkeyState::attach_inputs_from_decls(sol::this_state ts) {
-  auto &devmgr = DeviceInManager::instance();
+  auto &devmgr = ManagerDeviceIn::instance();
   for (auto &decl : input_decls) {
     std::string devnode;
     if (!devmgr.match(decl, devnode)) {
@@ -39,7 +39,7 @@ void AelkeyState::attach_inputs_from_decls(sol::this_state ts) {
 }
 
 void AelkeyState::create_outputs_from_decls() {
-  auto &devmgr = DeviceOutManager::instance();
+  auto &devmgr = ManagerDeviceOut::instance();
   for (auto &decl : output_decls) {
     devmgr.create(decl);
   }

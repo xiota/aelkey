@@ -7,9 +7,9 @@
 #include <unistd.h>
 
 #include "aelkey_state.h"
-#include "device_in_manager.h"
 #include "dispatcher_hidraw.h"
 #include "dispatcher_udev.h"
+#include "manager_device_in.h"
 #include "utils/signal.h"
 
 DeviceInHidraw::DeviceInHidraw() {
@@ -36,7 +36,7 @@ DeviceInHidraw::DeviceInHidraw() {
               continue;
             }
 
-            if (DeviceInManager::instance().attach(matched, decl)) {
+            if (ManagerDeviceIn::instance().attach(matched, decl)) {
               break;
             }
           }
@@ -52,7 +52,7 @@ DeviceInHidraw::DeviceInHidraw() {
               continue;
             }
 
-            if (DeviceInManager::instance().detach(decl.id)) {
+            if (ManagerDeviceIn::instance().detach(decl.id)) {
               break;
             }
           }

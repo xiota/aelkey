@@ -6,8 +6,8 @@
 
 #include "aelkey_state.h"
 #include "device_declarations.h"
-#include "device_in_manager.h"
 #include "device_out_uinput.h"
+#include "manager_device_in.h"
 
 // Lua: open_device([dev_id])
 // Ret: boolean
@@ -46,11 +46,11 @@ sol::object core_open_device(sol::this_state ts, sol::optional<std::string> dev_
     }
 
     std::string devnode;
-    if (!DeviceInManager::instance().match(decl, devnode)) {
+    if (!ManagerDeviceIn::instance().match(decl, devnode)) {
       continue;
     }
 
-    if (DeviceInManager::instance().attach(devnode, decl)) {
+    if (ManagerDeviceIn::instance().attach(devnode, decl)) {
       ok = true;
     }
     break;
@@ -64,7 +64,7 @@ sol::object core_open_device(sol::this_state ts, sol::optional<std::string> dev_
 sol::object core_close_device(sol::this_state ts, const std::string &dev_id) {
   sol::state_view lua(ts);
 
-  auto removed = DeviceInManager::instance().detach(dev_id);
+  auto removed = ManagerDeviceIn::instance().detach(dev_id);
   bool ok = removed && !removed->id.empty();
 
   return sol::make_object(lua, ok);

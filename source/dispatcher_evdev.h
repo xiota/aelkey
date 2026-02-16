@@ -11,9 +11,9 @@
 
 #include "aelkey_state.h"
 #include "device_declarations.h"
-#include "device_in_manager.h"
 #include "dispatcher.h"
 #include "dispatcher_haptics.h"
+#include "manager_device_in.h"
 #include "singleton.h"
 
 struct EvdevDeviceState {
@@ -119,7 +119,7 @@ class DispatcherEvdev : public Dispatcher<DispatcherEvdev> {
 
     // HUP/ERR → detach device
     if (events & (EPOLLHUP | EPOLLERR)) {
-      DeviceInManager::instance().detach(decl.id);
+      ManagerDeviceIn::instance().detach(decl.id);
       return;
     }
 

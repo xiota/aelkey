@@ -1,4 +1,4 @@
-#include "device_in_manager.h"
+#include "manager_device_in.h"
 
 #include "aelkey_state.h"
 #include "device_in_audio.h"
@@ -15,7 +15,7 @@
 #include "dispatcher_udev.h"
 #include "tick_scheduler.h"
 
-DeviceInManager::DeviceInManager() {
+ManagerDeviceIn::ManagerDeviceIn() {
   // Register dispatchers
   DispatcherEvdev::register_self();
   DispatcherGATT::register_self();
@@ -34,12 +34,12 @@ DeviceInManager::DeviceInManager() {
   backends_["midi"] = &DeviceInMidi::instance();
 }
 
-DeviceIn *DeviceInManager::backend_for_type(const std::string &type) {
+DeviceIn *ManagerDeviceIn::backend_for_type(const std::string &type) {
   auto it = backends_.find(type);
   return (it != backends_.end()) ? it->second : nullptr;
 }
 
-bool DeviceInManager::match(InputDecl &decl, std::string &devnode_out) {
+bool ManagerDeviceIn::match(InputDecl &decl, std::string &devnode_out) {
   DeviceIn *backend = backend_for_type(decl.type);
 
   bool matched = backend && backend->match(decl, devnode_out);
@@ -51,7 +51,7 @@ bool DeviceInManager::match(InputDecl &decl, std::string &devnode_out) {
   return matched;
 }
 
-bool DeviceInManager::attach(const std::string &devnode, InputDecl &decl) {
+bool ManagerDeviceIn::attach(const std::string &devnode, InputDecl &decl) {
   auto &state = AelkeyState::instance();
   if (state.input_map.contains(decl.id)) {
     return false;
@@ -76,7 +76,7 @@ bool DeviceInManager::attach(const std::string &devnode, InputDecl &decl) {
   return true;
 }
 
-std::optional<InputDecl> DeviceInManager::detach(const std::string &dev_id) {
+std::optional<InputDecl> ManagerDeviceIn::detach(const std::string &dev_id) {
   auto &state = AelkeyState::instance();
   auto it = state.input_map.find(dev_id);
   if (it == state.input_map.end()) {

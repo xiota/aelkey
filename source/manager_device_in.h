@@ -14,12 +14,12 @@ class DispatcherBase;
 
 bool init_dispatcher_for_type(const std::string &type);
 
-class DeviceInManager : public Singleton<DeviceInManager> {
-  friend class Singleton<DeviceInManager>;
+class ManagerDeviceIn : public Singleton<ManagerDeviceIn> {
+  friend class Singleton<ManagerDeviceIn>;
 
  protected:
-  DeviceInManager();
-  ~DeviceInManager() = default;
+  ManagerDeviceIn();
+  ~ManagerDeviceIn() = default;
 
  public:
   DeviceIn *backend_for_type(const std::string &type);

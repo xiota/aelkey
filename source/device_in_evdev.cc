@@ -5,9 +5,9 @@
 #include <unistd.h>
 
 #include "aelkey_state.h"
-#include "device_in_manager.h"
 #include "dispatcher_evdev.h"
 #include "dispatcher_udev.h"
+#include "manager_device_in.h"
 #include "utils/signal.h"
 
 DeviceInEvdev::DeviceInEvdev() {
@@ -27,7 +27,7 @@ DeviceInEvdev::DeviceInEvdev() {
 
             std::string matched;
             if (match(decl, matched) && matched == ev.devnode) {
-              if (DeviceInManager::instance().attach(matched, decl)) {
+              if (ManagerDeviceIn::instance().attach(matched, decl)) {
                 break;
               }
             }
@@ -39,7 +39,7 @@ DeviceInEvdev::DeviceInEvdev() {
               continue;
             }
             if (decl.devnode == ev.devnode) {
-              if (DeviceInManager::instance().detach(decl.id)) {
+              if (ManagerDeviceIn::instance().detach(decl.id)) {
                 break;
               }
             }

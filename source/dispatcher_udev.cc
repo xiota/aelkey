@@ -10,8 +10,8 @@
 #include "aelkey_state.h"
 #include "device_declarations.h"
 #include "device_in_libusb.h"
-#include "device_in_manager.h"
 #include "dispatcher_registry.h"
+#include "manager_device_in.h"
 
 DispatcherUdev::~DispatcherUdev() {
   if (mon_) {

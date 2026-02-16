@@ -10,7 +10,7 @@
 
 #include "aelkey_state.h"
 #include "device_in_libusb.h"
-#include "device_in_manager.h"
+#include "manager_device_in.h"
 
 // Map libusb_transfer_type enum → string
 static const char *transfer_type_to_string(uint8_t type) {
@@ -123,7 +123,7 @@ static void LIBUSB_CALL dispatch_libusb(libusb_transfer *transfer) {
     }
 
     case LIBUSB_TRANSFER_NO_DEVICE: {
-      DeviceInManager::instance().detach(decl->id);
+      ManagerDeviceIn::instance().detach(decl->id);
       break;
     }
 
@@ -141,7 +141,7 @@ static void LIBUSB_CALL dispatch_libusb(libusb_transfer *transfer) {
       }
       if (rc != 0) {
         // device is gone
-        DeviceInManager::instance().detach(decl->id);
+        ManagerDeviceIn::instance().detach(decl->id);
       } else {
         // fatal or cancelled
         destroy_transfer(transfer);

@@ -11,8 +11,8 @@
 
 #include "aelkey_state.h"
 #include "device_in.h"
-#include "device_in_manager.h"
 #include "dispatcher_udev.h"
+#include "manager_device_in.h"
 #include "singleton.h"
 #include "utils/signal.h"
 
@@ -49,7 +49,7 @@ DeviceInLibUSB::DeviceInLibUSB() {
               continue;
             }
 
-            if (DeviceInManager::instance().attach(inst_node, decl)) {
+            if (ManagerDeviceIn::instance().attach(inst_node, decl)) {
               break;
             }
           }
@@ -62,7 +62,7 @@ DeviceInLibUSB::DeviceInLibUSB() {
             if (decl.devnode != inst_node) {
               continue;
             }
-            if (DeviceInManager::instance().detach(decl.id)) {
+            if (ManagerDeviceIn::instance().detach(decl.id)) {
               break;
             }
           }
