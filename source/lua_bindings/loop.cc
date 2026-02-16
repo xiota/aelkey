@@ -16,6 +16,7 @@
 #include "dispatcher.h"
 #include "lua_bindings/core.h"
 #include "manager_device_in.h"
+#include "router_watch_list.h"
 #include "signal_handler.h"
 
 sol::object loop_stop(sol::this_state ts) {
@@ -30,6 +31,9 @@ sol::object loop_start(sol::this_state ts) {
   state.loop_running = true;
 
   sol::state_view lua(ts);
+
+  // check watchlist
+  RouterWatchList::instance().enumerate_now();
 
   // open inputs and outputs tables (open all devices)
   core_open_device(ts, sol::optional<std::string>{});

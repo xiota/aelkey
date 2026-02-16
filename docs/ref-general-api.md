@@ -65,14 +65,25 @@ Logging functions accept format strings or functions that return strings, along 
 
 ### Watchlist and Script Info (`aelkey.monitor`)
 
-- `watch(ref, decls)` - add a table of input devices for state monitoring; returns the number of valid entries added.
-- `unwatch(ref)` - stop monitoring a previously watched set of devices.
-- `watchlist()` - list currently watched refs.
-- `set_callback(cb)` - set or clear the watchlist callback; returns true on success.
-- `inspect_file(path)` - safely load a script from a file for inspection.
-- `inspect_string(contents)` - safely load script from a string for inspection.
+- `watch(ref, decls)` - Add a table of input devices for state monitoring; returns the number of valid entries added.
+- `unwatch(ref)` - Stop monitoring a previously watched set of devices.
+- `watchlist()` - List currently watched refs.
+- `set_callback(cb)` - Set or clear the watchlist callback; returns true on success.
+- `inspect_file(path)` - Safely load a script from a file for inspection.
+- `inspect_string(contents)` - Safely load script from a string for inspection.
 
-Note: Only udev compatible types can be watched (evdev, hidraw, libusb).
+Only udev compatible types can be watched (evdev, hidraw, libusb).
+
+When the event loop is running, the watchlist callback is run when devices in the watchlist `match` or `remove`.  The callback receives a table:
+
+```lua
+{
+  ref = "<string>",
+  id = "<string>",
+  type = "<string>",
+  state = "match" | "remove",
+}
+```
 
 ### Miscellaneous Utilities (`aelkey.util`)
 

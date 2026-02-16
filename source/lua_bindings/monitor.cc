@@ -6,20 +6,21 @@
 #include "device_declarations.h"
 #include "device_parser.h"
 #include "lua_scripts.h"
+#include "router_watch_list.h"
 
 // set_callback(cb)
 // Returns true on success, false on invalid input
 sol::object monitor_set_callback(sol::this_state ts, sol::object cb_obj) {
   sol::state_view lua(ts);
-  auto &state = AelkeyState::instance();
+  auto &watch = RouterWatchList::instance();
 
   if (cb_obj.is<std::string>()) {
-    state.on_watchlist = cb_obj.as<std::string>();
+    watch.set_callback(cb_obj.as<std::string>());
     return sol::make_object(lua, true);
   }
 
   if (cb_obj.is<sol::nil_t>()) {
-    state.on_watchlist.clear();
+    watch.set_callback("");
     return sol::make_object(lua, true);
   }
 
@@ -52,24 +53,21 @@ sol::object monitor_watch(sol::this_state ts, const std::string &ref, sol::table
     }
   }
 
-  // Store only if at least one valid decl exists
   if (!valid_decls.empty()) {
-    auto &state = AelkeyState::instance();
-    state.watch_map[ref] = valid_decls;
+    auto &watch = RouterWatchList::instance();
+    for (auto &d : valid_decls) {
+      watch.add_watch(ref, d);
+    }
   }
 
-  // Return number of valid decls added
   return sol::make_object(lua, static_cast<int>(valid_decls.size()));
 }
 
 // unwatch(ref)
 // No return value
 sol::object monitor_unwatch(sol::this_state ts, const std::string &ref) {
-  auto &state = AelkeyState::instance();
-  auto it = state.watch_map.find(ref);
-  if (it != state.watch_map.end()) {
-    state.watch_map.erase(it);
-  }
+  auto &watch = RouterWatchList::instance();
+  watch.erase_watch(ref);
   return sol::nil;
 }
 
@@ -77,13 +75,13 @@ sol::object monitor_unwatch(sol::this_state ts, const std::string &ref) {
 // Returns array of reference strings
 sol::object monitor_watchlist(sol::this_state ts) {
   sol::state_view lua(ts);
-  auto &state = AelkeyState::instance();
+  auto &watch = RouterWatchList::instance();
 
   sol::table t = lua.create_table();
 
   int i = 1;
-  for (const auto &entry : state.watch_map) {
-    t[i++] = entry.first;
+  for (const auto &key : watch.keys()) {
+    t[i++] = key;
   }
 
   return sol::make_object(lua, t);

@@ -122,6 +122,7 @@ src_files = files(
   'source/manager_device_in.cc',
   'source/manager_device_out.cc',
   'source/router_device_state.cc',
+  'source/router_watch_list.cc',
   'source/signal_handler.cc',
 )
 

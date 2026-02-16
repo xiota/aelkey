@@ -45,8 +45,4 @@ class AelkeyState : public Singleton<AelkeyState> {
 
   std::vector<InputDecl> input_decls;
   std::vector<OutputDecl> output_decls;
-
-  std::map<std::string, std::vector<InputDecl>> watch_map;
-
-  std::string on_watchlist;
 };
