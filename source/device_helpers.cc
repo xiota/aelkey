@@ -33,5 +33,8 @@ bool looks_like_regex(std::string_view s) {
   if (s.find(".+") != std::string_view::npos) {
     return true;
   }
+  if (s.find("[") != std::string_view::npos && s.find("]") != std::string_view::npos) {
+    return true;
+  }
   return false;
 }
