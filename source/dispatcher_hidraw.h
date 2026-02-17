@@ -11,7 +11,6 @@
 
 #include "aelkey_state.h"
 #include "device_declarations.h"
-#include "device_helpers.h"
 #include "dispatcher.h"
 
 class DispatcherHidraw : public Dispatcher<DispatcherHidraw> {

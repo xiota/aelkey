@@ -9,8 +9,8 @@
 #include <jack/ringbuffer.h>
 
 #include "backend_jack.h"
-#include "device_helpers.h"
 #include "tick_scheduler.h"
+#include "utils/regex_match.h"
 #include "utils/signal.h"
 #include "utils/time.h"
 
@@ -90,7 +90,7 @@ bool DeviceInMidi::attach(const std::string &devnode, InputDecl &decl) {
 
     auto ports = jack.list_ports(JACK_DEFAULT_MIDI_TYPE, JackPortIsOutput);
     for (auto &full : ports) {
-      if (match_string(decl.name, full)) {
+      if (AelkeyUtil::match_string(decl.name, full)) {
         if (!jack.connect(full, dst)) {
           std::fprintf(
               stderr, "MIDI: failed to connect '%s' -> '%s'\n", full.c_str(), dst.c_str()
@@ -364,7 +364,7 @@ void DeviceInMidi::process_hotplug_events() {
     for (auto &ev : pending_hotplug_) {
       if (ev.type == "add") {
         // Does this external port match the user pattern?
-        if (match_string(decl.name, ev.full_name)) {
+        if (AelkeyUtil::match_string(decl.name, ev.full_name)) {
           // Connect external -> internal
           if (jack.connect(ev.full_name, dst)) {
             std::fprintf(

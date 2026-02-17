@@ -10,6 +10,7 @@
 #include "dispatcher_hidraw.h"
 #include "dispatcher_udev.h"
 #include "manager_device_in.h"
+#include "utils/regex_match.h"
 #include "utils/signal.h"
 
 DeviceInHidraw::DeviceInHidraw() {
@@ -107,7 +108,7 @@ bool DeviceInHidraw::match(InputDecl &decl, std::string &devnode_out) {
           if (ok && !decl.name.empty()) {
             char name[256] = { 0 };
             if (ioctl(fd, HIDIOCGRAWNAME(sizeof(name) - 1), name) >= 0) {
-              if (!match_string(decl.name, name)) {
+              if (!AelkeyUtil::match_string(decl.name, name)) {
                 ok = false;
               }
             } else {
@@ -118,7 +119,7 @@ bool DeviceInHidraw::match(InputDecl &decl, std::string &devnode_out) {
           if (ok && !decl.phys.empty()) {
             char phys[64] = { 0 };
             if (ioctl(fd, HIDIOCGRAWPHYS(sizeof(phys) - 1), phys) >= 0) {
-              if (!match_string(decl.phys, phys)) {
+              if (!AelkeyUtil::match_string(decl.phys, phys)) {
                 ok = false;
               }
             }
@@ -127,7 +128,7 @@ bool DeviceInHidraw::match(InputDecl &decl, std::string &devnode_out) {
           if (ok && !decl.uniq.empty()) {
             char uniq[64] = { 0 };
             if (ioctl(fd, HIDIOCGRAWUNIQ(sizeof(uniq) - 1), uniq) >= 0) {
-              if (!match_string(decl.uniq, uniq)) {
+              if (!AelkeyUtil::match_string(decl.uniq, uniq)) {
                 ok = false;
               }
             }

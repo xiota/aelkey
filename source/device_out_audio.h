@@ -8,7 +8,6 @@
 
 #include "backend_jack.h"
 #include "device_declarations.h"
-#include "device_helpers.h"
 #include "device_out.h"
 #include "singleton.h"
 #include "utils/signal.h"

@@ -8,6 +8,7 @@
 #include "dispatcher_evdev.h"
 #include "dispatcher_udev.h"
 #include "manager_device_in.h"
+#include "utils/regex_match.h"
 #include "utils/signal.h"
 
 DeviceInEvdev::DeviceInEvdev() {
@@ -92,15 +93,18 @@ bool DeviceInEvdev::match(InputDecl &decl, std::string &devnode_out) {
             ok = false;
           }
 
-          if (!decl.name.empty() && !match_string(decl.name, libevdev_get_name(evdev) ?: "")) {
+          if (!decl.name.empty() &&
+              !AelkeyUtil::match_string(decl.name, libevdev_get_name(evdev) ?: "")) {
             ok = false;
           }
 
-          if (!decl.phys.empty() && !match_string(decl.phys, libevdev_get_phys(evdev) ?: "")) {
+          if (!decl.phys.empty() &&
+              !AelkeyUtil::match_string(decl.phys, libevdev_get_phys(evdev) ?: "")) {
             ok = false;
           }
 
-          if (!decl.uniq.empty() && !match_string(decl.uniq, libevdev_get_uniq(evdev) ?: "")) {
+          if (!decl.uniq.empty() &&
+              !AelkeyUtil::match_string(decl.uniq, libevdev_get_uniq(evdev) ?: "")) {
             ok = false;
           }
 

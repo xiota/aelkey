@@ -10,9 +10,9 @@
 #include <sys/epoll.h>
 
 #include "aelkey_state.h"
-#include "device_helpers.h"
 #include "device_in_gatt.h"
 #include "dispatcher_gatt.h"
+#include "utils/regex_match.h"
 
 bool DeviceInGatt::on_init() {
   if (conn_) {
@@ -592,13 +592,14 @@ DeviceInGatt::get_matching_devices(const InputDecl &decl, DBusMessageIter &array
       bool match = false;
 
       // Match uniq (Bluetooth MAC address)
-      if (!decl.uniq.empty() && match_string(decl.uniq, address)) {
+      if (!decl.uniq.empty() && AelkeyUtil::match_string(decl.uniq, address)) {
         match = true;
       }
 
       // Match name or alias
       if (!match && !decl.name.empty() &&
-          (match_string(decl.name, name) || match_string(decl.name, alias))) {
+          (AelkeyUtil::match_string(decl.name, name) ||
+           AelkeyUtil::match_string(decl.name, alias))) {
         match = true;
       }
 

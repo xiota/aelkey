@@ -8,8 +8,8 @@
 #include <jack/ringbuffer.h>
 
 #include "backend_jack.h"
-#include "device_helpers.h"
 #include "tick_scheduler.h"
+#include "utils/regex_match.h"
 #include "utils/signal.h"
 
 bool DeviceOutAudio::on_init() {
@@ -83,7 +83,7 @@ bool DeviceOutAudio::create(const OutputDecl &decl) {
     std::string src = jack.port_name(out);
 
     for (auto &full : ports) {
-      if (match_string(decl.name, full)) {
+      if (AelkeyUtil::match_string(decl.name, full)) {
         if (!jack.connect(src, full)) {
           std::fprintf(
               stderr, "AUDIO OUT: failed to connect '%s' -> '%s'\n", src.c_str(), full.c_str()
@@ -276,7 +276,7 @@ void DeviceOutAudio::process_hotplug_events() {
     for (auto &ev : pending_hotplug_) {
       if (ev.type == "add") {
         // Does this external port match the user pattern?
-        if (match_string(decl.name, ev.full_name)) {
+        if (AelkeyUtil::match_string(decl.name, ev.full_name)) {
           // Connect external -> internal
           if (jack.connect(src, ev.full_name)) {
             std::fprintf(

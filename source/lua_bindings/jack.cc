@@ -8,7 +8,7 @@
 #include <sol/sol.hpp>
 
 #include "backend_jack.h"
-#include "device_helpers.h"
+#include "utils/regex_match.h"
 
 // Short → full JACK type aliases
 static const std::unordered_map<std::string, std::string> kJackTypeAliases = {
@@ -102,7 +102,7 @@ static sol::object ak_jack_match_ports(sol::this_state ts, const std::string &pa
 
   int idx = 1;
   for (auto &full : ports) {
-    if (match_string(pattern, full)) {
+    if (AelkeyUtil::match_string(pattern, full)) {
       results[idx++] = full;
     }
   }

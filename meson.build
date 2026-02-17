@@ -104,7 +104,6 @@ src_files = files(
 
   'source/aelkey_state.cc',
   'source/backend_jack.cc',
-  'source/device_helpers.cc',
   'source/device_in_audio.cc',
   'source/device_in_evdev.cc',
   'source/device_in_gatt.cc',
@@ -124,6 +123,7 @@ src_files = files(
   'source/router_device_state.cc',
   'source/router_watch_list.cc',
   'source/signal_handler.cc',
+  'source/utils/regex_match.cc',
 )
 
 shared_library(

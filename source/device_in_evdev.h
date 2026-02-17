@@ -5,7 +5,6 @@
 
 #include "aelkey_state.h"
 #include "device_declarations.h"
-#include "device_helpers.h"
 #include "device_in.h"
 #include "dispatcher_udev.h"
 #include "singleton.h"

@@ -1,7 +1,9 @@
-#include "device_helpers.h"
+#include "regex_match.h"
 
 #include <regex>
 #include <string_view>
+
+namespace AelkeyUtil {
 
 bool match_string(std::string_view pattern, std::string_view value) {
   if (pattern.empty()) {
@@ -38,3 +40,5 @@ bool looks_like_regex(std::string_view s) {
   }
   return false;
 }
+
+}  // namespace AelkeyUtil
