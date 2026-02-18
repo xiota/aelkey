@@ -8,12 +8,16 @@
 #include "device_declarations.h"
 #include "device_out_uinput.h"
 #include "manager_device_in.h"
+#include "router_device_state.h"
 
 // Lua: open_device([dev_id])
 // Ret: boolean
 sol::object core_open_device(sol::this_state ts, sol::optional<std::string> dev_id_opt) {
   sol::state_view lua(ts);
   auto &state = AelkeyState::instance();
+
+  // ensure state notifications are enabled
+  RouterDeviceState::instance();
 
   // GLOBAL MODE: no argument → open all devices
   if (!dev_id_opt.has_value()) {
