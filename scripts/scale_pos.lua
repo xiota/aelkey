@@ -1,3 +1,4 @@
+#!/usr/bin/env lua
 --[[
   USB HID‑POS Scale Reader + Control
 
@@ -80,12 +81,16 @@ local function set_unit(target)
 end
 
 -- simple one‑shot command line options
+local do_once = false
 local do_zero = false
 local do_tare = false
 local do_toggle = false
 local want_unit = nil
 
 for _, arg in ipairs(arg) do
+  if arg == "--once" then
+    do_once = true
+  end
   if arg == "--zero" then
     do_zero = true
   end
@@ -101,8 +106,13 @@ for _, arg in ipairs(arg) do
 end
 
 -- execute one‑time commands and exit
-if do_zero or do_tare or do_toggle or want_unit then
-  aelkey.open_device("scale")
+if do_zero or do_tare or do_toggle or want_unit or do_once then
+  local is_open = aelkey.open_device("scale")
+
+  if not is_open then
+    print("Failed to open device")
+    os.exit(1)
+  end
 
   if do_zero then
     aelkey.hid.send_output_report("scale", string.char(0x02, 0x02))
@@ -129,7 +139,9 @@ if do_zero or do_tare or do_toggle or want_unit then
     end
   end
 
-  os.exit(0)
+  if not do_once then
+    os.exit(0)
+  end
 end
 
 -- normal remap
@@ -181,6 +193,10 @@ function remap(events)
     previous.weight_str = weight_str
     previous.state = state
     print(weight_str .. " / " .. state)
+  end
+
+  if do_once then
+    os.exit(0)
   end
 end
 
