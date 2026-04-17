@@ -87,16 +87,20 @@ Usage:
 
 Options:
   --once         print one reading and exit
+  --wait         wait for device connection
+
   --zero         zero the scale
   --tare         apply or remove tare
   --toggle       toggle unit (cycle through available units)
   --unit=UNIT    set unit (g, oz)
+
   --help
 ]])
 end
 
 -- simple one‑shot command line options
 local do_once = false
+local do_wait = false
 local do_zero = false
 local do_tare = false
 local do_toggle = false
@@ -109,6 +113,9 @@ for _, arg in ipairs(arg) do
   end
   if arg == "--once" then
     do_once = true
+  end
+  if arg == "--wait" then
+    do_wait = true
   end
   if arg == "--zero" then
     do_zero = true
@@ -124,15 +131,19 @@ for _, arg in ipairs(arg) do
   end
 end
 
--- execute one‑time commands and exit
-if do_zero or do_tare or do_toggle or want_unit or do_once then
-  local is_open = aelkey.open_device("scale")
+-- connect to scale
+local is_open = aelkey.open_device("scale")
 
-  if not is_open then
+if not is_open then
+  if not do_wait then
     print("Failed to open device")
     os.exit(1)
+  else
+    print("Waiting for connection...")
   end
+end
 
+function run_one_shot_commands()
   if do_zero then
     aelkey.hid.send_output_report("scale", string.char(0x02, 0x02))
   end
@@ -157,16 +168,11 @@ if do_zero or do_tare or do_toggle or want_unit or do_once then
       print("Failed to set unit")
     end
   end
-
-  if not do_once then
-    os.exit(0)
-  end
 end
 
--- normal remap
 local previous = {}
 
-function remap(events)
+function process_weight_report(events)
   local data = events.data
   local size = events.size
 
@@ -213,7 +219,19 @@ function remap(events)
     previous.state = state
     print(weight_str .. " / " .. state)
   end
+end
 
+function remap(events)
+  -- If any one-shot commands were requested
+  if do_zero or do_tare or do_toggle or want_unit then
+    run_one_shot_commands()
+    os.exit(0)
+  end
+
+  -- Normal weight processing
+  process_weight_report(events)
+
+  -- Exit after first reading in --once mode
   if do_once then
     os.exit(0)
   end
