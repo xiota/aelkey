@@ -80,6 +80,21 @@ local function set_unit(target)
   return false
 end
 
+local function show_help()
+  print([[
+Usage:
+  scale_pos.lua [options]
+
+Options:
+  --once         print one reading and exit
+  --zero         zero the scale
+  --tare         apply or remove tare
+  --toggle       toggle unit (cycle through available units)
+  --unit=UNIT    set unit (g, oz)
+  --help
+]])
+end
+
 -- simple one‑shot command line options
 local do_once = false
 local do_zero = false
@@ -88,6 +103,10 @@ local do_toggle = false
 local want_unit = nil
 
 for _, arg in ipairs(arg) do
+  if arg == "--help" then
+    show_help()
+    os.exit(0)
+  end
   if arg == "--once" then
     do_once = true
   end
