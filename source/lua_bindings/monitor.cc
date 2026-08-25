@@ -10,7 +10,7 @@
 
 // set_callback(cb)
 // Returns true on success, false on invalid input
-sol::object monitor_set_callback(sol::this_state ts, sol::object cb_obj) {
+static sol::object monitor_set_callback(sol::this_state ts, sol::object cb_obj) {
   sol::state_view lua(ts);
   auto &watch = RouterWatchList::instance();
 
@@ -30,7 +30,8 @@ sol::object monitor_set_callback(sol::this_state ts, sol::object cb_obj) {
 
 // watch(ref, decls)
 // Returns number of valid decls added (0 if none)
-sol::object monitor_watch(sol::this_state ts, const std::string &ref, sol::table decls_tbl) {
+static sol::object
+monitor_watch(sol::this_state ts, const std::string &ref, sol::table decls_tbl) {
   sol::state_view lua(ts);
 
   std::vector<InputDecl> valid_decls;
@@ -65,7 +66,7 @@ sol::object monitor_watch(sol::this_state ts, const std::string &ref, sol::table
 
 // unwatch(ref)
 // No return value
-sol::object monitor_unwatch(sol::this_state ts, const std::string &ref) {
+static sol::object monitor_unwatch(sol::this_state ts, const std::string &ref) {
   auto &watch = RouterWatchList::instance();
   watch.erase_watch(ref);
   return sol::nil;
@@ -73,7 +74,7 @@ sol::object monitor_unwatch(sol::this_state ts, const std::string &ref) {
 
 // watchlist()
 // Returns array of reference strings
-sol::object monitor_watchlist(sol::this_state ts) {
+static sol::object monitor_watchlist(sol::this_state ts) {
   sol::state_view lua(ts);
   auto &watch = RouterWatchList::instance();
 

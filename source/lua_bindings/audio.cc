@@ -9,7 +9,8 @@
 
 // audio.send("id", {0.1, 0.2, 0.3})
 // audio.send("id", raw_float32_string)
-sol::object audio_send(sol::this_state ts, const std::string &id, sol::object samples_obj) {
+static sol::object
+audio_send(sol::this_state ts, const std::string &id, sol::object samples_obj) {
   lua_State *L = ts;
   sol::state_view lua(L);
 

@@ -153,7 +153,7 @@ static void LIBUSB_CALL dispatch_libusb(libusb_transfer *transfer) {
 
 // bulk_transfer{device, endpoint, size, [timeout]}
 // Returns {device, data, size, status}
-sol::object usb_bulk_transfer(sol::this_state ts, sol::table opts) {
+static sol::object usb_bulk_transfer(sol::this_state ts, sol::table opts) {
   lua_State *L = ts;
   sol::state_view lua(L);
 
@@ -225,7 +225,7 @@ sol::object usb_bulk_transfer(sol::this_state ts, sol::table opts) {
 
 // control_transfer{device, request_type, request, value, index, length, [timeout]}
 // Returns {device, data, size, status}
-sol::object usb_control_transfer(sol::this_state ts, sol::table opts) {
+static sol::object usb_control_transfer(sol::this_state ts, sol::table opts) {
   lua_State *L = ts;
   sol::state_view lua(L);
 
@@ -322,7 +322,7 @@ sol::object usb_control_transfer(sol::this_state ts, sol::table opts) {
 
 // interrupt_transfer{device, endpoint, size, [timeout]}
 // Returns {device, data, size, status}
-sol::object usb_interrupt_transfer(sol::this_state ts, sol::table opts) {
+static sol::object usb_interrupt_transfer(sol::this_state ts, sol::table opts) {
   lua_State *L = ts;
   sol::state_view lua(L);
 
@@ -395,7 +395,7 @@ sol::object usb_interrupt_transfer(sol::this_state ts, sol::table opts) {
 
 // submit_transfer{device, endpoint, type, size, [timeout]}
 // Returns {device, endpoint, transfer, status}
-sol::object usb_submit_transfer(sol::this_state ts, sol::table opts) {
+static sol::object usb_submit_transfer(sol::this_state ts, sol::table opts) {
   lua_State *L = ts;
   sol::state_view lua(L);
 
@@ -521,7 +521,7 @@ sol::object usb_submit_transfer(sol::this_state ts, sol::table opts) {
 
 // clear_halt{device, endpoint}
 // Returns {device, status}
-sol::object usb_clear_halt(sol::this_state ts, sol::table opts) {
+static sol::object usb_clear_halt(sol::this_state ts, sol::table opts) {
   lua_State *L = ts;
   sol::state_view lua(L);
 
@@ -552,7 +552,7 @@ sol::object usb_clear_halt(sol::this_state ts, sol::table opts) {
 
 // reset_device{device}
 // Returns {device, status}
-sol::object usb_reset_device(sol::this_state ts, sol::table opts) {
+static sol::object usb_reset_device(sol::this_state ts, sol::table opts) {
   lua_State *L = ts;
   sol::state_view lua(L);
 
@@ -577,7 +577,7 @@ sol::object usb_reset_device(sol::this_state ts, sol::table opts) {
 
 // set_configuration{device, config}
 // Returns {device, status}
-sol::object usb_set_configuration(sol::this_state ts, sol::table opts) {
+static sol::object usb_set_configuration(sol::this_state ts, sol::table opts) {
   lua_State *L = ts;
   sol::state_view lua(L);
 
@@ -604,7 +604,7 @@ sol::object usb_set_configuration(sol::this_state ts, sol::table opts) {
 
 // set_interface_alt_setting{device, interface, alt}
 // Returns {device, status}
-sol::object usb_set_interface_alt_setting(sol::this_state ts, sol::table opts) {
+static sol::object usb_set_interface_alt_setting(sol::this_state ts, sol::table opts) {
   lua_State *L = ts;
   sol::state_view lua(L);
 

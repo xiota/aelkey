@@ -11,7 +11,8 @@
 
 // get_feature_report(dev_id, report_id)
 // Returns string (empty on failure)
-sol::object hid_get_feature_report(sol::this_state ts, const std::string &id, int report_id) {
+static sol::object
+hid_get_feature_report(sol::this_state ts, const std::string &id, int report_id) {
   lua_State *L = ts;
   sol::state_view lua(L);
 
@@ -38,7 +39,7 @@ sol::object hid_get_feature_report(sol::this_state ts, const std::string &id, in
 
 // get_report_descriptor(dev_id)
 // Returns string (empty on failure)
-sol::object hid_get_report_descriptor(sol::this_state ts, const std::string &id) {
+static sol::object hid_get_report_descriptor(sol::this_state ts, const std::string &id) {
   lua_State *L = ts;
   sol::state_view lua(L);
 
@@ -69,7 +70,7 @@ sol::object hid_get_report_descriptor(sol::this_state ts, const std::string &id)
 
 // read_input_report(dev_id)
 // Returns string (empty on failure)
-sol::object hid_read_input_report(sol::this_state ts, const std::string &id) {
+static sol::object hid_read_input_report(sol::this_state ts, const std::string &id) {
   lua_State *L = ts;
   sol::state_view lua(L);
 
@@ -94,7 +95,7 @@ sol::object hid_read_input_report(sol::this_state ts, const std::string &id) {
 
 // send_feature_report(dev_id, data)
 // Returns boolean
-sol::object
+static sol::object
 hid_send_feature_report(sol::this_state ts, const std::string &id, const std::string &data) {
   lua_State *L = ts;
   sol::state_view lua(L);
@@ -116,7 +117,7 @@ hid_send_feature_report(sol::this_state ts, const std::string &id, const std::st
 
 // send_output_report(dev_id, data)
 // Returns boolean
-sol::object
+static sol::object
 hid_send_output_report(sol::this_state ts, const std::string &id, const std::string &data) {
   lua_State *L = ts;
   sol::state_view lua(L);

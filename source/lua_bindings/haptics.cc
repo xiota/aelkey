@@ -9,7 +9,7 @@
 #include "aelkey_state.h"
 #include "dispatcher_haptics.h"
 
-sol::table haptics_create(sol::table tbl) {
+static sol::table haptics_create(sol::table tbl) {
   auto &disp = DispatcherHaptics::instance();
 
   ff_effect eff = DispatcherHaptics::lua_to_ff_effect(tbl);
@@ -21,7 +21,7 @@ sol::table haptics_create(sol::table tbl) {
   return tbl;
 }
 
-void haptics_erase(sol::table tbl) {
+static void haptics_erase(sol::table tbl) {
   std::string source = tbl.get_or("source", std::string{});
   int id = tbl.get_or("id", -1);
 
@@ -33,7 +33,7 @@ void haptics_erase(sol::table tbl) {
   tbl["id"] = -1;
 }
 
-void haptics_play(std::string sink_id, sol::table ev) {
+static void haptics_play(std::string sink_id, sol::table ev) {
   auto &disp = DispatcherHaptics::instance();
 
   std::string source = ev.get_or("source", std::string{});
@@ -53,7 +53,7 @@ void haptics_play(std::string sink_id, sol::table ev) {
   disp.play_effect(sink_id, source, id, magnitude, maybe_eff);
 }
 
-void haptics_stop(std::string sink_id, sol::table ev) {
+static void haptics_stop(std::string sink_id, sol::table ev) {
   std::string source = ev.get_or("source", std::string{});
   int id = ev.get_or("id", -1);
 

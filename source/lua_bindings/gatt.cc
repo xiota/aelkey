@@ -10,7 +10,7 @@
 
 // gatt.read{ device="id", service=0x0021, characteristic=0x0036 }
 // Returns raw data string
-sol::object gatt_read(sol::this_state ts, sol::table opts) {
+static sol::object gatt_read(sol::this_state ts, sol::table opts) {
   lua_State *L = ts;
   sol::state_view lua(L);
 
@@ -40,7 +40,7 @@ sol::object gatt_read(sol::this_state ts, sol::table opts) {
 
 // gatt.write{ device="id", data="...", response=true, service=0x0021, characteristic=0x0036 }
 // Returns boolean success
-sol::object gatt_write(sol::this_state ts, sol::table opts) {
+static sol::object gatt_write(sol::this_state ts, sol::table opts) {
   lua_State *L = ts;
   sol::state_view lua(L);
 

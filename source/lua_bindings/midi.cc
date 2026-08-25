@@ -10,7 +10,7 @@
 
 // midi.send("id", {0x90, 60, 127})
 // midi.send("id", "\x90\x3C\x7F")
-sol::object midi_send(sol::this_state ts, const std::string &id, sol::object bytes_obj) {
+static sol::object midi_send(sol::this_state ts, const std::string &id, sol::object bytes_obj) {
   lua_State *L = ts;
   sol::state_view lua(L);
 

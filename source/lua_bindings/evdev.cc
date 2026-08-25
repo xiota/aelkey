@@ -9,7 +9,7 @@
 #include "device_out_uinput.h"
 
 // send{ device=?, type=?, code=?, value=? }
-sol::object evdev_send(sol::this_state ts, sol::table opts) {
+static sol::object evdev_send(sol::this_state ts, sol::table opts) {
   sol::state_view lua(ts);
 
   // device (required)
@@ -53,7 +53,7 @@ sol::object evdev_send(sol::this_state ts, sol::table opts) {
 }
 
 // sync([device])
-sol::object evdev_sync(sol::this_state ts, sol::optional<std::string> dev_id_opt) {
+static sol::object evdev_sync(sol::this_state ts, sol::optional<std::string> dev_id_opt) {
   sol::state_view lua(ts);
   auto &outmgr = DeviceOutUinput::instance();
 

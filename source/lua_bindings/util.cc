@@ -12,7 +12,7 @@
 #include "utils/time.h"
 
 // Compute one CRC32 entry
-constexpr uint32_t crc32_entry(int i) {
+static constexpr uint32_t crc32_entry(int i) {
   uint32_t c = static_cast<uint32_t>(i);
   for (int j = 0; j < 8; ++j) {
     if (c & 1) {
@@ -25,7 +25,7 @@ constexpr uint32_t crc32_entry(int i) {
 }
 
 // Generate full table at compile time
-constexpr std::array<uint32_t, 256> make_crc32_table() {
+static constexpr std::array<uint32_t, 256> make_crc32_table() {
   std::array<uint32_t, 256> table{};
   for (int i = 0; i < 256; ++i) {
     table[i] = crc32_entry(i);
@@ -35,7 +35,7 @@ constexpr std::array<uint32_t, 256> make_crc32_table() {
 
 constexpr auto crc32_table = make_crc32_table();
 
-uint32_t crc32_core(const uint8_t *data, size_t len, uint32_t seed = 0) {
+static uint32_t crc32_core(const uint8_t *data, size_t len, uint32_t seed = 0) {
   uint32_t crc = seed;
   for (size_t i = 0; i < len; ++i) {
     crc = (crc >> 8) ^ crc32_table[(crc ^ data[i]) & 0xFF];
@@ -43,26 +43,26 @@ uint32_t crc32_core(const uint8_t *data, size_t len, uint32_t seed = 0) {
   return crc;
 }
 
-uint32_t crc32_ieee(const uint8_t *data, size_t len, uint32_t seed = 0) {
+static uint32_t crc32_ieee(const uint8_t *data, size_t len, uint32_t seed = 0) {
   uint32_t crc = ~seed;
   crc = crc32_core(data, len, crc);
   return ~crc;
 }
 
 // crc32_core(data, seed)
-uint32_t util_crc32_core(const std::string &data, uint32_t seed) {
+static uint32_t util_crc32_core(const std::string &data, uint32_t seed) {
   return crc32_core(reinterpret_cast<const uint8_t *>(data.data()), data.size(), seed);
 }
 
 // crc32_ieee(data, [seed])
-uint32_t util_crc32_ieee(const std::string &data, uint32_t seed = 0) {
+static uint32_t util_crc32_ieee(const std::string &data, uint32_t seed = 0) {
   return crc32_ieee(reinterpret_cast<const uint8_t *>(data.data()), data.size(), seed);
 }
 
 // tick(ms, callback, [oneshot])
 // callback = string name OR function
 // oneshot = optional bool, defaults to false
-sol::object
+static sol::object
 util_tick(sol::this_state ts, int ms, sol::object cb_obj, sol::optional<bool> oneshot_opt) {
   sol::state_view lua(ts);
   auto &scheduler = TickScheduler::instance();
