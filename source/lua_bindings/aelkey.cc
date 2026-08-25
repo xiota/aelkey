@@ -1,3 +1,5 @@
+#include "lua_bindings/aelkey.h"
+
 #include <sol/sol.hpp>
 
 #include "aelkey_state.h"

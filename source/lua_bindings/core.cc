@@ -1,4 +1,4 @@
-#include "lua_bindings/evdev.h"
+#include "lua_bindings/core.h"
 
 #include <string>
 

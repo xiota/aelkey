@@ -1,3 +1,5 @@
+#include "lua_bindings/audio.h"
+
 #include <string>
 #include <vector>
 
