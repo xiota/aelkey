@@ -1,6 +1,6 @@
 [wrap-git]
 directory = sol2
-url = https://github.com/ThePhD/sol2.git
+url = https://github.com/Nerixyz/sol2.git
 revision = main
 
 [provide]
