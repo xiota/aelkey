@@ -8,6 +8,7 @@
 #include <libusb-1.0/libusb.h>
 #include <sys/epoll.h>
 #include <sys/timerfd.h>
+#include <unistd.h>
 
 #include <sol/sol.hpp>
 
