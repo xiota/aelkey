@@ -13,6 +13,7 @@
 #include "lua_bindings/loop.h"
 #include "lua_bindings/midi.h"
 #include "lua_bindings/monitor.h"
+#include "lua_bindings/uhid.h"
 #include "lua_bindings/usb.h"
 #include "lua_bindings/util.h"
 #include "lua_scripts.h"
@@ -53,6 +54,7 @@ constexpr CModule c_modules[] = {
   { "jack", luaopen_aelkey_jack },
   { "midi", luaopen_aelkey_midi },
   { "monitor", luaopen_aelkey_monitor },
+  { "uhid", luaopen_aelkey_uhid },
   { "usb", luaopen_aelkey_usb },
   { "util", luaopen_aelkey_util },
 };

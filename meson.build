@@ -99,6 +99,7 @@ src_files = files(
   'source/lua_bindings/loop.cc',
   'source/lua_bindings/midi.cc',
   'source/lua_bindings/monitor.cc',
+  'source/lua_bindings/uhid.cc',
   'source/lua_bindings/usb.cc',
   'source/lua_bindings/util.cc',
 
