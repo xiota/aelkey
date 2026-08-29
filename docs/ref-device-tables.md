@@ -90,6 +90,21 @@ The evdev event callback receives an table of event tables.
 }
 ```
 
+#### `gatt` events
+
+The gatt event callback receives a single table, similar to hidraw, but with additional metadata fields.
+
+```lua
+{
+  device   = "<id string>",     -- decl.id
+  data     = "<binary string>", -- raw USB data payload
+  size     = <int>,             -- size of data payload in bytes
+  status   = "<string>",        -- "ok", "error"
+
+  path     = "<characteristic path>",
+}
+```
+
 #### `hidraw` events
 
 The hidraw event callback receives a single table.
@@ -116,21 +131,6 @@ The libusb event callback receives a single table, similar to hidraw, but with a
 
   endpoint = <int>,             -- numeric endpoint address (e.g. 0x81)
   transfer = "<string>",        -- transfer type ("control", "interrupt", "bulk", "iso")
-}
-```
-
-#### `gatt` events
-
-The gatt event callback receives a single table, similar to hidraw, but with additional metadata fields.
-
-```lua
-{
-  device   = "<id string>",     -- decl.id
-  data     = "<binary string>", -- raw USB data payload
-  size     = <int>,             -- size of data payload in bytes
-  status   = "<string>",        -- "ok", "error"
-
-  path     = "<characteristic path>",
 }
 ```
 

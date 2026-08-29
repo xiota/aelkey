@@ -18,6 +18,11 @@
 - `send(event)` - send an event to a virtual output device.
 - `sync(dev_id)` - flush a frame (`SYN_REPORT`) to complete a batch of emitted events.
 
+### Bluetooth Low Energy Generic Attribute Profile (`aelkey.gatt`)
+
+- `read{device[, service, characteristic]}` - synchronous read from a characteristic.
+- `write{device, data [, response] [, service, characteristic]}` - write to a characteristic (default `response = false`).
+
 ### HID Feature Control (`aelkey.hid`)
 
 - `get_feature_report(dev_id, report_id)` - synchronous feature report read.
@@ -25,11 +30,6 @@
 - `read_input_report(dev_id)` - single raw input read (hidraw only).
 - `send_feature_report(dev_id, data)` - synchronous feature report write.
 - `send_output_report(dev_id, data)` - send one HID output report.
-
-### Bluetooth Low Energy Generic Attribute Profile (`aelkey.gatt`)
-
-- `read{device[, service, characteristic]}` - synchronous read from a characteristic.
-- `write{device, data [, response] [, service, characteristic]}` - write to a characteristic (default `response = false`).
 
 ### USB Transfer Requests (`aelkey.usb`)
 
