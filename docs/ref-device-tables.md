@@ -49,13 +49,21 @@ outputs = {
   {
     ----- Common -----
     id         = "<string>", -- Unique identifier used in events and callbacks
-    type       = "<string>", -- Virtual device type: audio, midi, uinput
+    type       = "<string>", -- Virtual device type: audio, midi, uhid, uinput
 
     -- for matching --
     name       = "<string>", -- Device name
 
     -- callbacks --
-    on_haptics = "<string>", -- Function name to receive haptic events
+    on_haptics = "<string>", -- Function name to receive haptic events (uinput)
+    on_report = "<string>",  -- Function name to receive host-to-device reports (uhid)
+
+    ----- uhid -----
+    bus          = "<string>", -- Bus type ("usb", "bluetooth"; default: "usb")
+    vendor       = <int>,      -- Vendor ID
+    product      = <int>,      -- Product ID
+    version      = <int>,      -- Version identifier
+    report_desc  = "<binary string>", -- Raw HID report descriptor bytes
 
     ----- uinput -----
     profile    = "digitizer" | "imu" | "keyboard" | "mouse" |
@@ -131,6 +139,18 @@ The libusb event callback receives a single table, similar to hidraw, but with a
 
   endpoint = <int>,             -- numeric endpoint address (e.g. 0x81)
   transfer = "<string>",        -- transfer type ("control", "interrupt", "bulk", "iso")
+}
+```
+
+#### `uhid` report events
+
+```lua
+{
+  device = "<id string>",        -- decl.id
+  type   = "output" | "feature", -- Report type sent by the host
+  data   = "<binary string>",    -- Raw HID report payload
+  size   = <int>,                -- Payload size in bytes
+  status = "<string>",           -- "ok" or "error"
 }
 ```
 

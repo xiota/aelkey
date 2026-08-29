@@ -31,6 +31,11 @@
 - `send_feature_report(dev_id, data)` - synchronous feature report write.
 - `send_output_report(dev_id, data)` - send one HID output report.
 
+### HID Feature Control (`aelkey.uhid`)
+
+- `reply{dev_id, trans_id, status, data}` - send a reactive completion response back to the kernel.
+- `write_report{dev_id, type, data}` - transmit an input, output, or feature report.
+
 ### USB Transfer Requests (`aelkey.usb`)
 
 Synchronous transfers return `{device, data, size, status}`.

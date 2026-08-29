@@ -2,7 +2,7 @@
 
 A programmable input remapping framework for Linux to observe, transform, and synthesize input events across a wide range of devices. Designed for advanced workflows where traditional keybinding tools are too complicated or fall short.
 
-Supports `audio`, `evdev`, `gatt`, `hidraw`, `libusb`, and `midi` backends with force‑feedback routing and custom haptic effects.
+Supports `audio`, `evdev`, `gatt`, `hidraw`, `libusb`, `midi`, and `uhid` backends with force‑feedback routing and custom haptic effects.
 
 ## Why use Ælkey
 
