@@ -112,6 +112,7 @@ src_files = files(
   'source/device_in_midi.cc',
   'source/device_out_audio.cc',
   'source/device_out_midi.cc',
+  'source/device_out_uhid.cc',
   'source/device_out_uinput.cc',
   'source/device_parser.cc',
   'source/dispatcher.cc',

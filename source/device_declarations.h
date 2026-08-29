@@ -50,4 +50,8 @@ struct OutputDecl {
   // jack midi/audio
   std::string client;
   std::string port;
+
+  // uhid
+  std::string on_report;
+  std::string report_desc;
 };

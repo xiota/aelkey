@@ -251,6 +251,16 @@ OutputDecl parse_output(sol::table tbl) {
     decl.on_haptics = v.as<std::string>();
   }
 
+  // uhid report callback
+  if (sol::object v = tbl["on_report"]; v.valid() && v.is<std::string>()) {
+    decl.on_report = v.as<std::string>();
+  }
+
+  // uhid report descriptor
+  if (sol::object v = tbl["report_desc"]; v.valid() && v.is<std::string>()) {
+    decl.report_desc = v.as<std::string>();
+  }
+
   // capabilities
   if (sol::object caps_obj = tbl["capabilities"];
       caps_obj.valid() && caps_obj.is<sol::table>()) {
