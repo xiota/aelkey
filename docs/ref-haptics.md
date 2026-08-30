@@ -7,9 +7,13 @@
 - `create(effect_table)` - Register a custom effect. Returns the table with source and id injected.
 - `erase(effect_table)` - Unregister a custom effect.
 
-Note: Haptics events flow backwards, compared with normal input events.  `dev_id` corresponds to devices in the `inputs` table.
+Notes:
 
-> Game → virtual device (`outputs` table, haptic event) → Lua callback → real device (`inputs` table, actual vibration)
+- Haptics events flow backwards, compared with normal input events.  `dev_id` corresponds to devices in the `inputs` table.
+
+    > Game → virtual device (`outputs` table, haptic event) → Lua callback → real device (`inputs` table, actual vibration)
+
+- The haptics pipeline has significant lag when used over Bluetooth.
 
 ### haptics event callback table
 
