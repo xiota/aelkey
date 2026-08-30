@@ -13,6 +13,8 @@
 
 DeviceOutUhid::~DeviceOutUhid() {
   for (auto &[id, ctx] : devices_) {
+    DispatcherUhid::instance().remove_device(id);
+
     if (ctx.fd >= 0) {
       struct uhid_event ev;
       std::memset(&ev, 0, sizeof(ev));
@@ -20,8 +22,6 @@ DeviceOutUhid::~DeviceOutUhid() {
       write(ctx.fd, &ev, sizeof(ev));
       close(ctx.fd);
     }
-
-    DispatcherUhid::instance().remove_device(id);
   }
 }
 
