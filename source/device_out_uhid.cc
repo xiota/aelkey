@@ -36,12 +36,31 @@ bool DeviceOutUhid::create(const OutputDecl &decl) {
   std::memset(&ev, 0, sizeof(ev));
   ev.type = UHID_CREATE2;
 
-  // Copy identification and descriptor details
+  // Copy name
   std::strncpy(
       reinterpret_cast<char *>(ev.u.create2.name),
       decl.name.c_str(),
       sizeof(ev.u.create2.name) - 1
   );
+
+  // Copy phys (Physical path, e.g., "virt/input0")
+  if (!decl.phys.empty()) {
+    std::strncpy(
+        reinterpret_cast<char *>(ev.u.create2.phys),
+        decl.phys.c_str(),
+        sizeof(ev.u.create2.phys) - 1
+    );
+  }
+
+  // Copy uniq (Unique identifier, e.g., serial number or MAC address)
+  if (!decl.uniq.empty()) {
+    std::strncpy(
+        reinterpret_cast<char *>(ev.u.create2.uniq),
+        decl.uniq.c_str(),
+        sizeof(ev.u.create2.uniq) - 1
+    );
+  }
+
   ev.u.create2.rd_size = decl.report_desc.size();
 
   if (ev.u.create2.rd_size > sizeof(ev.u.create2.rd_data)) {
@@ -57,6 +76,7 @@ bool DeviceOutUhid::create(const OutputDecl &decl) {
   ev.u.create2.vendor = decl.vendor;
   ev.u.create2.product = decl.product;
   ev.u.create2.version = decl.version;
+  ev.u.create2.country = decl.country;
 
   ssize_t ret = write(fd, &ev, sizeof(ev));
   if (ret < 0) {
