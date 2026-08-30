@@ -19,7 +19,9 @@ DeviceOutUhid::~DeviceOutUhid() {
       struct uhid_event ev;
       std::memset(&ev, 0, sizeof(ev));
       ev.type = UHID_DESTROY;
-      write(ctx.fd, &ev, sizeof(ev));
+      if (write(ctx.fd, &ev, sizeof(ev)) < 0) {
+        // silence unused variable warning
+      }
       close(ctx.fd);
     }
   }
@@ -78,8 +80,7 @@ bool DeviceOutUhid::create(const OutputDecl &decl) {
   ev.u.create2.version = decl.version;
   ev.u.create2.country = decl.country;
 
-  ssize_t ret = write(fd, &ev, sizeof(ev));
-  if (ret < 0) {
+  if (write(fd, &ev, sizeof(ev)) < 0) {
     std::fprintf(stderr, "Failed to write UHID_CREATE2 for device: %s\n", decl.name.c_str());
     close(fd);
     return false;
@@ -119,7 +120,14 @@ void DeviceOutUhid::write_report(
   }
   std::memcpy(ev.u.input2.data, data.data(), ev.u.input2.size);
 
-  write(fd, &ev, sizeof(ev));
+  if (write(fd, &ev, sizeof(ev)) < 0) {
+    std::fprintf(
+        stderr,
+        "Failed to write UHID report for device ID %s: %s\n",
+        id.c_str(),
+        std::strerror(errno)
+    );
+  }
 }
 
 void DeviceOutUhid::reply(
@@ -146,5 +154,12 @@ void DeviceOutUhid::reply(
   }
   std::memcpy(ev.u.get_report_reply.data, data.data(), ev.u.get_report_reply.size);
 
-  write(fd, &ev, sizeof(ev));
+  if (write(fd, &ev, sizeof(ev)) < 0) {
+    std::fprintf(
+        stderr,
+        "Failed to write UHID reply for device ID %s: %s\n",
+        id.c_str(),
+        std::strerror(errno)
+    );
+  }
 }
