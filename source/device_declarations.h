@@ -54,4 +54,7 @@ struct OutputDecl {
   // uhid
   std::string on_report;
   std::string report_desc;
+  std::string phys;
+  std::string uniq;
+  int country = 0;
 };

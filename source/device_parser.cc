@@ -261,6 +261,21 @@ OutputDecl parse_output(sol::table tbl) {
     decl.report_desc = v.as<std::string>();
   }
 
+  // uhid report descriptor
+  if (sol::object v = tbl["phys"]; v.valid() && v.is<std::string>()) {
+    decl.phys = v.as<std::string>();
+  }
+
+  // uhid report descriptor
+  if (sol::object v = tbl["uniq"]; v.valid() && v.is<std::string>()) {
+    decl.uniq = v.as<std::string>();
+  }
+
+  // uhid report descriptor
+  if (sol::object v = tbl["country"]; v.valid() && v.is<int>()) {
+    decl.country = v.as<int>();
+  }
+
   // capabilities
   if (sol::object caps_obj = tbl["capabilities"];
       caps_obj.valid() && caps_obj.is<sol::table>()) {
