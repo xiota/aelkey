@@ -105,7 +105,7 @@ void DeviceOutUhid::write_report(
 void DeviceOutUhid::reply(
     const std::string &id,
     uint32_t trans_id,
-    const std::string &status,
+    int status,
     const std::string &data
 ) {
   int fd = get_fd(id);
@@ -116,10 +116,9 @@ void DeviceOutUhid::reply(
   struct uhid_event ev;
   std::memset(&ev, 0, sizeof(ev));
 
-  // Default to GET_REPORT reply framework
   ev.type = UHID_GET_REPORT_REPLY;
   ev.u.get_report_reply.id = trans_id;
-  ev.u.get_report_reply.err = (status == "ok") ? 0 : EIO;
+  ev.u.get_report_reply.err = status;
 
   ev.u.get_report_reply.size = data.size();
   if (ev.u.get_report_reply.size > sizeof(ev.u.get_report_reply.data)) {

@@ -16,12 +16,8 @@ class DeviceOutUhid : public DeviceOut, public Singleton<DeviceOutUhid> {
   int get_fd(const std::string &id) const;
 
   void write_report(const std::string &id, const std::string &type, const std::string &data);
-  void reply(
-      const std::string &id,
-      uint32_t trans_id,
-      const std::string &status,
-      const std::string &data
-  );
+  void
+  reply(const std::string &id, uint32_t trans_id, const int status, const std::string &data);
 
  private:
   DeviceOutUhid() = default;

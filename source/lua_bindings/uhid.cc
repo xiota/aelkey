@@ -5,14 +5,16 @@
 #include "device_out_uhid.h"
 
 // reply(tbl)
-// tbl: { dev_id = "...", trans_id = ..., status = "ok", data = "..." }
+// tbl: { dev_id = "...", trans_id = ..., status = 0, data = "..." }
 static sol::object uhid_reply(sol::this_state ts, sol::table tbl) {
   lua_State *L = ts;
   sol::state_view lua(L);
 
   std::string id = tbl["dev_id"];
   uint32_t trans_id = tbl["trans_id"].get_or<uint32_t>(0);
-  std::string status = tbl["status"].get_or(std::string("ok"));
+
+  // Accept integer status codes (like 0 or EIO) or fall back to 0 (success)
+  int status = tbl["status"].get_or(0);
   std::string data = tbl["data"].get_or(std::string(""));
 
   DeviceOutUhid::instance().reply(id, trans_id, status, data);
