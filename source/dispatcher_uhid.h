@@ -72,8 +72,7 @@ class DispatcherUhid : public Dispatcher<DispatcherUhid> {
     }
 
     struct uhid_event ev;
-    ssize_t r = ::read(fd, &ev, sizeof(ev));
-    if (r <= 0) {
+    if (read(fd, &ev, sizeof(ev)) <= 0) {
       return;
     }
 

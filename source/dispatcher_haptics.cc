@@ -486,7 +486,7 @@ void DispatcherHaptics::handle_event(EpollPayload *payload, uint32_t events) {
   }
 
   struct input_event ev{};
-  ssize_t n = ::read(fd, &ev, sizeof(ev));
+  ssize_t n = read(fd, &ev, sizeof(ev));
   if (n < 0) {
     if (errno == EAGAIN || errno == EWOULDBLOCK) {
       return;
