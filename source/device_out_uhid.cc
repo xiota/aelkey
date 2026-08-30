@@ -9,6 +9,8 @@
 #include <sys/ioctl.h>
 #include <unistd.h>
 
+#include "dispatcher_uhid.h"
+
 DeviceOutUhid::~DeviceOutUhid() {
   for (auto &[id, ctx] : devices_) {
     if (ctx.fd >= 0) {
@@ -18,6 +20,8 @@ DeviceOutUhid::~DeviceOutUhid() {
       write(ctx.fd, &ev, sizeof(ev));
       close(ctx.fd);
     }
+
+    DispatcherUhid::instance().remove_device(id);
   }
 }
 
@@ -62,6 +66,8 @@ bool DeviceOutUhid::create(const OutputDecl &decl) {
   }
 
   devices_[decl.id] = DeviceContext{ .fd = fd, .on_report = decl.on_report };
+
+  DispatcherUhid::instance().register_source(fd, decl.id, decl.on_report);
 
   std::cout << "Created uhid device: " << decl.name << " (id: " << decl.id << ")" << std::endl;
   return true;
