@@ -110,7 +110,8 @@ class DispatcherHaptics : public Dispatcher<DispatcherHaptics> {
  private:
   // Helpers
   void propagate_erase_to_sinks(const std::string &source_id, int virt_id);
-  static int upload_effect_to_sink(const std::string &sink_id, ff_effect &eff);
+  static int
+  upload_effect_to_sink(const std::string &sink_id, ff_effect &eff, int real_id = -1);
   static bool rebuild_effect(const ff_effect &src_eff, ff_effect &out_eff);
 
   void cleanup_sources();
