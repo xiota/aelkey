@@ -70,22 +70,32 @@ void DispatcherHaptics::propagate_erase_to_sinks(const std::string &source_id, i
   }
 }
 
-int DispatcherHaptics::upload_effect_to_sink(const std::string &sink_id, ff_effect &eff) {
+int DispatcherHaptics::upload_effect_to_sink(
+    const std::string &sink_id,
+    ff_effect &eff,
+    int real_id
+) {
   auto &disp = DispatcherHaptics::instance();
   HapticsSinkCtx *sink = disp.get_sink(sink_id);
   if (!sink) {
     return -1;
   }
 
-  eff.id = -1;
+  // Use the existing real ID if provided for an in-place update
+  eff.id = (real_id >= 0) ? real_id : -1;
   int rc = ioctl(sink->fd, EVIOCSFF, &eff);
 
-  if (rc < 0 && errno == ENOSPC) {
-    for (const auto &[key_pair, r_id] : sink->slots) {
-      ioctl(sink->fd, EVIOCRMFF, r_id);
+  // Fallback if ENOSPC occurs or if in-place update fails
+  if (rc < 0 && (errno == ENOSPC || real_id >= 0)) {
+    if (errno == ENOSPC) {
+      for (const auto &[key_pair, r_id] : sink->slots) {
+        ioctl(sink->fd, EVIOCRMFF, r_id);
+      }
+      sink->slots.clear();
     }
-    sink->slots.clear();
 
+    // Force a fresh allocation if the update failed
+    eff.id = -1;
     rc = ioctl(sink->fd, EVIOCSFF, &eff);
   }
 
@@ -337,7 +347,19 @@ bool DispatcherHaptics::handle_upload(HapticsSourceCtx &hctx, int request_id) {
 
   hctx.effects[virt_id] = normalized;
 
-  propagate_erase_to_sinks(hctx.id, virt_id);
+  // In-place update propagation to all sinks instead of erasing
+  auto key = std::make_pair(hctx.id, virt_id);
+  for (auto &[sink_id, sink] : sinks_) {
+    auto it = sink.slots.find(key);
+    if (it != sink.slots.end()) {
+      // Effect is already on this sink, update in-place with existing real_id
+      int real_id = it->second;
+      upload_effect_to_sink(sink_id, normalized, real_id);
+    }
+    // If it's not in the sink's slots yet, we do nothing here;
+    // it will be uploaded fresh the next time play_effect is called.
+  }
+
   return true;
 }
 
