@@ -96,7 +96,15 @@ class DispatcherUhid : public Dispatcher<DispatcherUhid> {
           reply.u.get_report_reply.id = ev.u.get_report.id;
           reply.u.get_report_reply.err = EIO;
           reply.u.get_report_reply.size = 0;
-          write(fd, &reply, sizeof(reply));
+
+          if (write(fd, &reply, sizeof(reply)) < 0) {
+            std::fprintf(
+                stderr,
+                "Failed to write UHID_GET_REPORT_REPLY for device ID %s: %s\n",
+                ctx.id.c_str(),
+                std::strerror(errno)
+            );
+          }
           break;
         }
 
@@ -105,7 +113,15 @@ class DispatcherUhid : public Dispatcher<DispatcherUhid> {
           reply.type = UHID_SET_REPORT_REPLY;
           reply.u.set_report_reply.id = ev.u.set_report.id;
           reply.u.set_report_reply.err = 0;
-          write(fd, &reply, sizeof(reply));
+
+          if (write(fd, &reply, sizeof(reply)) < 0) {
+            std::fprintf(
+                stderr,
+                "Failed to write UHID_SET_REPORT_REPLY for device ID %s: %s\n",
+                ctx.id.c_str(),
+                std::strerror(errno)
+            );
+          }
           break;
         }
 
