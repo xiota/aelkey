@@ -93,19 +93,25 @@ bool DeviceInEvdev::match(InputDecl &decl, std::string &devnode_out) {
             ok = false;
           }
 
-          if (!decl.name.empty() &&
-              !AelkeyUtil::match_string(decl.name, libevdev_get_name(evdev) ?: "")) {
-            ok = false;
+          if (!decl.name.empty()) {
+            const char *name = libevdev_get_name(evdev);
+            if (!AelkeyUtil::match_string(decl.name, name ? name : "")) {
+              ok = false;
+            }
           }
 
-          if (!decl.phys.empty() &&
-              !AelkeyUtil::match_string(decl.phys, libevdev_get_phys(evdev) ?: "")) {
-            ok = false;
+          if (!decl.phys.empty()) {
+            const char *phys = libevdev_get_phys(evdev);
+            if (!AelkeyUtil::match_string(decl.phys, phys ? phys : "")) {
+              ok = false;
+            }
           }
 
-          if (!decl.uniq.empty() &&
-              !AelkeyUtil::match_string(decl.uniq, libevdev_get_uniq(evdev) ?: "")) {
-            ok = false;
+          if (!decl.uniq.empty()) {
+            const char *uniq = libevdev_get_uniq(evdev);
+            if (!AelkeyUtil::match_string(decl.uniq, uniq ? uniq : "")) {
+              ok = false;
+            }
           }
 
           for (auto &[type, code] : decl.capabilities) {
