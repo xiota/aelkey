@@ -61,7 +61,7 @@ bool DeviceInEvdev::match(InputDecl &decl, std::string &devnode_out) {
           return {};
         }
 
-        int fd = ::open(devnode, O_RDONLY | O_NONBLOCK);
+        int fd = open(devnode, O_RDONLY | O_NONBLOCK);
         if (fd < 0) {
           return {};
         }

@@ -31,7 +31,7 @@ class DispatcherHidraw : public Dispatcher<DispatcherHidraw> {
   }
 
   int open_device(const std::string &devnode, const InputDecl &decl) {
-    int fd = ::open(devnode.c_str(), O_RDWR | O_NONBLOCK);
+    int fd = open(devnode.c_str(), O_RDWR | O_NONBLOCK);
     if (fd < 0) {
       perror("open hidraw");
       return -1;
@@ -83,7 +83,7 @@ class DispatcherHidraw : public Dispatcher<DispatcherHidraw> {
     }
 
     uint8_t buf[4096];
-    ssize_t r = ::read(fd, buf, sizeof(buf));
+    ssize_t r = read(fd, buf, sizeof(buf));
 
     if (decl.on_event.empty()) {
       return;
