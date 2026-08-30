@@ -64,6 +64,9 @@ outputs = {
     product      = <int>,      -- Product ID
     version      = <int>,      -- Version identifier
     report_desc  = "<binary string>", -- Raw HID report descriptor bytes
+    phys         = "<string>", -- optional
+    uniq         = "<string>", -- optional
+    country      = <int>,
 
     ----- uinput -----
     profile    = "digitizer" | "imu" | "keyboard" | "mouse" |
@@ -146,11 +149,14 @@ The libusb event callback receives a single table, similar to hidraw, but with a
 
 ```lua
 {
-  device = "<id string>",        -- decl.id
-  type   = "output" | "feature", -- Report type sent by the host
-  data   = "<binary string>",    -- Raw HID report payload
-  size   = <int>,                -- Payload size in bytes
-  status = "<string>",           -- "ok" or "error"
+  device      = "<id string>",     -- decl.id
+  type        = "output" | "get_report" | "set_report",
+  report_id   = <int>,             -- HID Report ID (rnum)
+  report_type = <int>,             -- HID Report Type (e.g., 2 for feature)
+  trans_id    = <int>,             -- Kernel transaction ID for replies
+  data        = "<binary string>", -- Raw HID report payload
+  size        = <int>,             -- Payload size in bytes
+  status      = "<string>",        -- "ok" or "error"
 }
 ```
 
