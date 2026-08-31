@@ -12,6 +12,7 @@
 #include "aelkey_state.h"
 #include "device_in_gatt.h"
 #include "dispatcher_gatt.h"
+#include "manager_device_in.h"
 #include "utils/regex_match.h"
 
 bool DeviceInGatt::on_init() {
@@ -31,6 +32,13 @@ bool DeviceInGatt::on_init() {
     conn_ = nullptr;
     return false;
   }
+
+  // Add match rule for device connection property changes
+  std::string rule =
+      "type='signal',sender='org.bluez',interface='org.freedesktop.DBus.Properties',member='"
+      "PropertiesChanged'";
+  dbus_bus_add_match(conn_, rule.c_str(), nullptr);
+  dbus_connection_flush(conn_);
 
   return DispatcherGATT::instance().lazy_init();
 }
@@ -57,24 +65,78 @@ void DeviceInGatt::pump_messages() {
 }
 
 void DeviceInGatt::process_one_message(DBusMessage *msg) {
-  sol::state_view lua(AelkeyState::instance().lua_vm);
+  auto &state = AelkeyState::instance();
+  sol::state_view lua(state.lua_vm);
 
   const char *path = dbus_message_get_path(msg);
   if (!path) {
     return;
   }
 
-  std::vector<uint8_t> bytes;
-
   DBusMessageIter args;
   dbus_message_iter_init(msg, &args);
 
   const char *iface = nullptr;
-  dbus_message_iter_get_basic(&args, &iface);
+  if (dbus_message_iter_get_arg_type(&args) == DBUS_TYPE_STRING) {
+    dbus_message_iter_get_basic(&args, &iface);
+  }
+
+  if (iface && strcmp(iface, "org.bluez.Device1") == 0) {
+    dbus_message_iter_next(&args);
+    if (dbus_message_iter_get_arg_type(&args) == DBUS_TYPE_ARRAY) {
+      DBusMessageIter dict;
+      dbus_message_iter_recurse(&args, &dict);
+
+      while (dbus_message_iter_get_arg_type(&dict) == DBUS_TYPE_DICT_ENTRY) {
+        DBusMessageIter entry;
+        dbus_message_iter_recurse(&dict, &entry);
+
+        const char *key = nullptr;
+        if (dbus_message_iter_get_arg_type(&entry) == DBUS_TYPE_STRING) {
+          dbus_message_iter_get_basic(&entry, &key);
+        }
+
+        dbus_message_iter_next(&entry);
+        if (key && strcmp(key, "ServicesResolved") == 0 &&
+            dbus_message_iter_get_arg_type(&entry) == DBUS_TYPE_VARIANT) {
+          DBusMessageIter variant;
+          dbus_message_iter_recurse(&entry, &variant);
+
+          if (dbus_message_iter_get_arg_type(&variant) == DBUS_TYPE_BOOLEAN) {
+            dbus_bool_t services_resolved = FALSE;
+            dbus_message_iter_get_basic(&variant, &services_resolved);
+
+            if (services_resolved) {
+              for (auto &decl : state.input_decls) {
+                if (decl.type == "gatt") {
+                  // Skip if already attached
+                  if (!decl.devnode.empty()) {
+                    continue;
+                  }
+
+                  auto &devmgr = ManagerDeviceIn::instance();
+                  std::string devnode;
+                  if (devmgr.match(decl, devnode)) {
+                    if (devmgr.attach(devnode, decl)) {
+                      decl.devnode = devnode;
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+        dbus_message_iter_next(&dict);
+      }
+    }
+    return;
+  }
 
   if (!iface || strcmp(iface, "org.bluez.GattCharacteristic1") != 0) {
     return;
   }
+
+  std::vector<uint8_t> bytes;
 
   dbus_message_iter_next(&args);
   DBusMessageIter dict;
@@ -112,7 +174,6 @@ void DeviceInGatt::process_one_message(DBusMessage *msg) {
     dbus_message_iter_next(&dict);
   }
 
-  auto &state = AelkeyState::instance();
   for (auto &[_, decl] : state.input_map) {
     if (decl.type != "gatt") {
       continue;
