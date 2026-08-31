@@ -27,7 +27,7 @@ sol::object core_open_device(sol::this_state ts, sol::optional<std::string> dev_
 
     // Create output devices and attach input devices
     state.create_outputs_from_decls();
-    state.attach_inputs_from_decls(ts);
+    state.attach_inputs_from_decls();
 
     return sol::make_object(lua, true);
   }

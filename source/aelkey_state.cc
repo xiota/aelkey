@@ -22,7 +22,7 @@ bool AelkeyState::on_init() {
   return false;
 }
 
-void AelkeyState::attach_inputs_from_decls(sol::this_state ts) {
+void AelkeyState::attach_inputs_from_decls() {
   auto &devmgr = ManagerDeviceIn::instance();
   for (auto &decl : input_decls) {
     std::string devnode;
