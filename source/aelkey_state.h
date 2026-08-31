@@ -23,7 +23,7 @@ class AelkeyState : public Singleton<AelkeyState> {
 
  public:
   // Attach all input devices declared in input_decls
-  void attach_inputs_from_decls(sol::this_state ts);
+  void attach_inputs_from_decls();
 
   // Create all uinput output devices declared in output_decls
   void create_outputs_from_decls();
