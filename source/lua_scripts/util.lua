@@ -54,22 +54,61 @@ function M.dump_raw(ev)
   return table.concat(out)
 end
 
-local function dump_table_inner(t, indent, out)
+local function is_binary_string(s)
+  for i = 1, #s do
+    local c = s:byte(i)
+
+    if c == 0 or c < 32 or c > 126 then
+      return true
+    end
+  end
+
+  return false
+end
+
+local function format_string(s, hex)
+  if hex and is_binary_string(s) then
+    local bytes = {}
+
+    for i = 1, #s do
+      bytes[#bytes + 1] = string.format("0x%02X", s:byte(i))
+    end
+
+    return "string.char(" .. table.concat(bytes, ", ") .. ")"
+  end
+
+  return string.format("%q", s)
+end
+
+local function dump_table_inner(t, indent, out, hex)
   for k, v in pairs(t) do
     if type(v) == "table" then
       out[#out+1] = string.format("%s%s = {", indent, tostring(k))
-      dump_table_inner(v, indent .. "  ", out)
-      out[#out+1] = indent .. "}"
+      dump_table_inner(v, indent .. "  ", out, hex)
+      out[#out+1] = indent .. "},"
+    elseif type(v) == "string" then
+      out[#out+1] = string.format(
+        "%s%s = %s,",
+        indent, tostring(k), format_string(v, hex)
+      )
     else
-      out[#out+1] = string.format("%s%s = %s", indent, tostring(k), tostring(v))
+      out[#out+1] = string.format(
+        "%s%s = %s,",
+        indent, tostring(k), tostring(v)
+      )
     end
   end
 end
 
-function M.dump_table(t)
+function M.dump_table(t, hex)
+  if hex == nil then
+    hex = true
+  end
+
   local out = { "{" }
-  dump_table_inner(t, "  ", out)
+  dump_table_inner(t, "  ", out, hex)
   out[#out+1] = "}"
+
   return table.concat(out, "\n")
 end
 
