@@ -95,8 +95,7 @@ When the event loop is running, the watchlist callback is run when devices in th
 - `crc32_core(data, seed)` - Compute a CRC‑32 iteration with no XORs.
 - `crc32_ieee(data [, seed])` - Compute an IEEE CRC‑32 checksum (with initial and final XOR).
 - `dump_events(events)` - Return a formatted string describing a list of input events.
-- `dump_hex(bytes)` - Return a hex‑dump a binary blob or array of bytes.
-- `dump_raw(data)` - Return a hex‑dump string of an hidraw report.
+- `dump_hex(bytes)` - Return a hex‑dump of a binary string, array of bytes, or hidraw report.
 - `dump_table(table)` - Return a semi-serialized representation of a Lua table.
 - `now([resolution])` - Return current monotonic time in milliseconds, or in `us`/`ns` if specified.
 - `tick(ms, callback, [oneshot])` - Schedule periodic ticks (e.g. timers inside the loop).  `callback` is a function name or reference.  `oneshot` is a bool.

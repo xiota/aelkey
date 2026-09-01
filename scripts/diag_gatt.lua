@@ -11,7 +11,7 @@ inputs = {
 
 function remap(ev)
   print(ev.path)
-  print(aelkey.util.dump_raw(ev))
+  print(aelkey.util.dump_hex(ev))
   print()
 end
 

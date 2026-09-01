@@ -15,43 +15,32 @@ function M.dump_events(events)
 end
 
 function M.dump_hex(data)
-  local bytes = {}
-
-  if type(data) == "string" then
-    -- Convert string → byte table
-    for i = 1, #data do
-      bytes[#bytes+1] = string.byte(data, i)
-    end
-  elseif type(data) == "table" then
-    -- Assume table of numbers
-    for i = 1, #data do
-      bytes[#bytes+1] = data[i]
-    end
-  else
-    return string.format("dump_hex: unsupported format, %s", type(data))
+  if type(data) == "table" and data.data ~= nil then
+    data = data.data
   end
 
-  -- Format as hex
+  if type(data) ~= "string" and type(data) ~= "table" then
+    return string.format(
+      "dump_hex: unsupported format, %s",
+      type(data)
+    )
+  end
+
   local out = {}
-  for i = 1, #bytes do
-    out[#out+1] = string.format("%02X", bytes[i])
+
+  for i = 1, #data do
+    local byte
+
+    if type(data) == "string" then
+      byte = data:byte(i)
+    else
+      byte = data[i]
+    end
+
+    out[#out + 1] = string.format("%02X", byte)
   end
 
   return table.concat(out, " ")
-end
-
-function M.dump_raw(ev)
-  local data = ev.data
-  local len = #data
-  local out = {}
-
-  out[#out+1] = string.format("raw data (%d bytes):", len)
-
-  for i = 1, len do
-    out[#out+1] = string.format(" %02X", string.byte(data, i))
-  end
-
-  return table.concat(out)
 end
 
 local function is_binary_string(s)
