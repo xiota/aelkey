@@ -73,6 +73,20 @@ function M.dump_table(t)
   return table.concat(out, "\n")
 end
 
+function M.pack_bytes(data)
+  assert(type(data) == "table", "pack_bytes: expected table")
+
+  local chunks = {}
+
+  for i = 1, #data, 200 do
+    chunks[#chunks+1] = string.char(
+      table.unpack(data, i, math.min(i + 199, #data))
+    )
+  end
+
+  return table.concat(chunks)
+end
+
 --[[
   bench_scope
   A tiny scope timer that measures execution time and the interval between calls.
