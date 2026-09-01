@@ -5,6 +5,7 @@
 ### `aelkey.click`
 
 Detects single, double, and triple clicks.
+
 - `configure{window=300, interval=20}`
 - `detect(id, single_fn, double_fn, triple_fn)`
 - `reset()`
@@ -12,6 +13,7 @@ Detects single, double, and triple clicks.
 ### `aelkey.edge`
 
 Detects state changes (edges) in continuously reported events.
+
 - `configure{active_reference=false}`
 - `detect(id, pressed, press_fn, release_fn)` - return `true`/`false` on edge, otherwise `nil`.
 - `get_active()` - return table of actively pressed buttons
@@ -65,6 +67,7 @@ Remap tables (`normal_map`, `modifier_map`, `fn_map`) map physical key codes to 
 ### `aelkey.mouse`
 
 Mouse report parsing and emulation.
+
 - `parse_report(data)` - Returns report table.
 - `emit_events(dev_id, report)`
 - `emit_motion(dev_id, report)`
