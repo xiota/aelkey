@@ -145,3 +145,5 @@ shared_library(
   install: true,
   install_dir: lua_dep.get_variable('INSTALL_CMOD')
 )
+
+subdir('docs')
