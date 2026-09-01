@@ -53,3 +53,5 @@ conf_data.set('VERSION', '"' + meson.project_version() + '"')
 
 subdir('source')
 subdir('docs')
+
+subdir('scripts')
