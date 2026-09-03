@@ -101,15 +101,26 @@ function M.dump_table(t, hex)
   return table.concat(out, "\n")
 end
 
-function M.pack_bytes(data)
-  assert(type(data) == "table", "pack_bytes: expected table")
-
+function M.pack_bytes(...)
   local chunks = {}
 
-  for i = 1, #data, 200 do
-    chunks[#chunks+1] = string.char(
-      table.unpack(data, i, math.min(i + 199, #data))
-    )
+  local function process(item)
+    local t = type(item)
+    if t == "table" then
+      for _, sub in ipairs(item) do
+        process(sub)
+      end
+    elseif t == "number" then
+      chunks[#chunks + 1] = string.char(item)
+    elseif t == "string" then
+      chunks[#chunks + 1] = item
+    else
+      error("pack_bytes: unexpected type " .. t)
+    end
+  end
+
+  for i = 1, select("#", ...) do
+    process(select(i, ...))
   end
 
   return table.concat(chunks)
