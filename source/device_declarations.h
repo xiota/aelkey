@@ -28,7 +28,8 @@ struct InputDecl {
   std::string uniq;
 
   bool grab = false;
-  std::vector<std::pair<int, int>> capabilities;
+  std::vector<std::pair<int, int>> capabilities;  // event_code, code_id
+  std::vector<int> properties;                    // populated from capabilities table
 
   std::vector<int> services;
   std::vector<int> characteristics;

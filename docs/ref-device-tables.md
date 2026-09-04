@@ -18,10 +18,16 @@ inputs = {
     grab       = <bool>,     -- Attempt exclusive access
 
     -- for matching --
-    name       = "<string>",     -- Device name
-    bus        = "<string>",     -- Bus type ("usb", "bluetooth")
-    vid_pid    = { {<int>, <int>}, ... }
-    interfaces = { <int>, ... }  -- HID interface indices (libusb)
+    name       = "<string>",            -- Device name
+    bus        = "<string>",            -- Bus type ("usb", "bluetooth")
+    vid_pid    = { {<int>, <int>}, ... },
+    interfaces = { <int>, ... },        -- HID interface indices (libusb)
+
+    capabilities = {          -- (evdev)
+      "<string>",             -- Capability code ("BTN_EAST") or
+      "INPUT_PROP_<string>",  -- Device property ("INPUT_PROP_POINTER")
+      ...
+    },
 
     -- callbacks --
     on_event   = "<string>", -- Function name to receive event frames

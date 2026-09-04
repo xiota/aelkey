@@ -100,30 +100,50 @@ InputDecl parse_input(sol::table tbl) {
     decl.uniq = v.as<std::string>();
   }
 
-  // capabilities: array of { type = "EV_KEY", code = "KEY_A" }
+  // capabilities: array of shorthand strings ("KEY_A")
+  // or properties ("INPUT_PROP_POINTER")
   if (sol::object caps_obj = tbl["capabilities"];
       caps_obj.valid() && caps_obj.is<sol::table>()) {
     sol::table caps = caps_obj.as<sol::table>();
     caps.for_each([&](sol::object /*k*/, sol::object v) {
-      if (!v.is<sol::table>()) {
+      if (!v.is<std::string>()) {
         return;
       }
-      sol::table cap_tbl = v.as<sol::table>();
+      std::string code_str = v.as<std::string>();
 
-      std::string type_str;
-      std::string code_str;
-
-      if (sol::object t = cap_tbl["type"]; t.valid() && t.is<std::string>()) {
-        type_str = t.as<std::string>();
+      if (code_str.rfind("INPUT_PROP_", 0) == 0) {
+        int prop_id = libevdev_property_from_name(code_str.c_str());
+        if (prop_id >= 0) {
+          decl.properties.push_back(prop_id);
+        } else {
+          std::fprintf(stderr, "Unknown input property string: %s\n", code_str.c_str());
+        }
+        return;
       }
-      if (sol::object c = cap_tbl["code"]; c.valid() && c.is<std::string>()) {
-        code_str = c.as<std::string>();
+
+      int type_id = -1;
+
+      if (code_str.rfind("KEY_", 0) == 0 || code_str.rfind("BTN_", 0) == 0) {
+        type_id = EV_KEY;
+      } else if (code_str.rfind("REL_", 0) == 0) {
+        type_id = EV_REL;
+      } else if (code_str.rfind("ABS_", 0) == 0) {
+        type_id = EV_ABS;
+      } else if (code_str.rfind("MSC_", 0) == 0) {
+        type_id = EV_MSC;
+      } else if (code_str.rfind("LED_", 0) == 0) {
+        type_id = EV_LED;
+      } else if (code_str.rfind("SND_", 0) == 0) {
+        type_id = EV_SND;
+      } else if (code_str.rfind("SW_", 0) == 0) {
+        type_id = EV_SW;
+      } else if (code_str.rfind("FF_", 0) == 0) {
+        type_id = EV_FF;
       }
 
-      if (!type_str.empty() && !code_str.empty()) {
-        int type_id = libevdev_event_type_from_name(type_str.c_str());
+      if (type_id >= 0) {
         int code_id = libevdev_event_code_from_name(type_id, code_str.c_str());
-        if (type_id >= 0 && code_id >= 0) {
+        if (code_id >= 0) {
           decl.capabilities.emplace_back(type_id, code_id);
         }
       }

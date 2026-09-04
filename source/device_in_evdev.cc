@@ -121,6 +121,13 @@ bool DeviceInEvdev::match(InputDecl &decl, std::string &devnode_out) {
             }
           }
 
+          for (int prop : decl.properties) {
+            if (!libevdev_has_property(evdev, prop)) {
+              ok = false;
+              break;
+            }
+          }
+
           // store vendor/product after match
           if (ok) {
             decl.vendor = dev_vendor;
