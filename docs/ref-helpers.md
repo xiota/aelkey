@@ -46,35 +46,6 @@ Available `ease_fn` functions:
 - `ease_smootherstep(t)`
 - `ease_smoothstep(t)`
 
-### `aelkey.mouse`
-
-Mouse report parsing and emulation.
-
-- `parse_report(data)` - Returns report table.
-- `emit_events(dev_id, report)`
-- `emit_motion(dev_id, report)`
-- `emit_buttons(dev_id, report)`
-- `emit_wheels(dev_id, report)`
-
-Report table:
-```
-{
-  left   = false,
-  right  = false,
-  middle = false,
-  side   = false,
-  extra  = false,
-  back   = false,
-  forward = false,
-
-  dx = 0,
-  dy = 0,
-
-  wheel_vert = 0,
-  wheel_horz = 0,
-}
-```
-
 ### `aelkey.ticker`
 
 Repeats events at specified interval.

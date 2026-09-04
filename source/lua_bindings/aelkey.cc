@@ -37,7 +37,6 @@ constexpr ScriptModule script_modules[] = {
   { "edge", aelkey_edge_script },
   { "filter", aelkey_filter_script },
   { "log", aelkey_log_script },
-  { "mouse", aelkey_mouse_script },
   { "sequence", aelkey_sequence_script },
   { "ticker", aelkey_ticker_script },
   { "tracker", aelkey_tracker_script },
