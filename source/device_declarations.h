@@ -1,7 +1,17 @@
 #pragma once
 
+#include <optional>
 #include <string>
 #include <vector>
+
+struct OutputCapability {
+  std::string code;
+  std::optional<int> min;
+  std::optional<int> max;
+  std::optional<int> fuzz;
+  std::optional<int> flat;
+  std::optional<int> resolution;
+};
 
 struct InputDecl {
   std::string id;
@@ -45,7 +55,7 @@ struct OutputDecl {
   int version = 1;
   std::string name;
   std::string on_haptics;
-  std::vector<std::string> capabilities;
+  std::vector<OutputCapability> capabilities;
 
   // jack midi/audio
   std::string client;

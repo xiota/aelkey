@@ -122,28 +122,67 @@ static void enable_codes(libevdev *dev, unsigned int type, const Codes &codes) {
   }
 }
 
-static void enable_capability(libevdev *dev, const std::string &cap) {
-  unsigned int evtype = EV_KEY;
+static void enable_capability(libevdev *dev, const OutputCapability &cap) {
+  const std::string &code_str = cap.code;
 
-  if (cap.rfind("KEY_", 0) == 0 || cap.rfind("BTN_", 0) == 0) {
+  if (code_str.rfind("INPUT_PROP_", 0) == 0) {
+    int prop = libevdev_property_from_name(code_str.c_str());
+    if (prop < 0) {
+      std::fprintf(stderr, "Unknown input property string: %s\n", code_str.c_str());
+      return;
+    }
+    libevdev_enable_property(dev, prop);
+    return;
+  }
+
+  unsigned int evtype = EV_KEY;
+  if (code_str.rfind("KEY_", 0) == 0 || code_str.rfind("BTN_", 0) == 0) {
     evtype = EV_KEY;
-  } else if (cap.rfind("REL_", 0) == 0) {
+  } else if (code_str.rfind("REL_", 0) == 0) {
     evtype = EV_REL;
-  } else if (cap.rfind("ABS_", 0) == 0) {
+  } else if (code_str.rfind("ABS_", 0) == 0) {
     evtype = EV_ABS;
-  } else if (cap.rfind("MSC_", 0) == 0) {
+  } else if (code_str.rfind("MSC_", 0) == 0) {
     evtype = EV_MSC;
-  } else if (cap.rfind("SW_", 0) == 0) {
+  } else if (code_str.rfind("SW_", 0) == 0) {
     evtype = EV_SW;
-  } else if (cap.rfind("FF_", 0) == 0) {
+  } else if (code_str.rfind("FF_", 0) == 0) {
     evtype = EV_FF;
   }
 
-  int code = libevdev_event_code_from_name(evtype, cap.c_str());
-  if (code >= 0) {
-    enable_codes(dev, evtype, std::vector{ code });
+  int code = libevdev_event_code_from_name(evtype, code_str.c_str());
+  if (code < 0) {
+    std::fprintf(stderr, "Unknown capability string: %s\n", code_str.c_str());
+    return;
+  }
+
+  libevdev_enable_event_type(dev, evtype);
+
+  if (evtype == EV_ABS) {
+    // Start with default absinfo if available, otherwise zero-initialize
+    const input_absinfo *def_info = default_absinfo_for(code);
+    input_absinfo info = def_info ? *def_info : input_absinfo{ 0, 0, 0, 0, 0, 0 };
+
+    // Override with any explicitly provided custom bounds
+    if (cap.min.has_value()) {
+      info.minimum = *cap.min;
+    }
+    if (cap.max.has_value()) {
+      info.maximum = *cap.max;
+    }
+    if (cap.fuzz.has_value()) {
+      info.fuzz = *cap.fuzz;
+    }
+    if (cap.flat.has_value()) {
+      info.flat = *cap.flat;
+    }
+    if (cap.resolution.has_value()) {
+      info.resolution = *cap.resolution;
+    }
+
+    libevdev_enable_event_code(dev, EV_ABS, code, &info);
   } else {
-    std::fprintf(stderr, "Unknown capability string: %s\n", cap.c_str());
+    libevdev_enable_event_code(dev, evtype, code, nullptr);
   }
 }
 

@@ -75,7 +75,20 @@ outputs = {
     vendor     = <int>,
     product    = <int>,
     version    = <int>,      -- version identifier
-    capabilities = { <string>, ... },  -- optional
+
+    capabilities = {
+      "<string>",             -- Shorthand capability ("BTN_WEST")
+      "INPUT_PROP_<string>",  -- Device property ("INPUT_PROP_POINTER")
+      {                       -- Detailed configuration override table
+        code        = "<string>", -- Required: Capability code name ("ABS_X")
+        min         = <int>,      -- (optional) Minimum axis boundary
+        max         = <int>,      -- (optional) Maximum axis boundary
+        fuzz        = <int>,      -- (optional) Fuzz value for filtering noise
+        flat        = <int>,      -- (optional) Flat value for deadzone handling
+        resolution  = <int>,      -- (optional) Resolution in units/mm or units/rad
+      },
+      ...
+    },
   },
 }
 ```

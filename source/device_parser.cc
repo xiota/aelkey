@@ -276,13 +276,44 @@ OutputDecl parse_output(sol::table tbl) {
     decl.country = v.as<int>();
   }
 
-  // capabilities
+  // capabilities: hybrid array of strings or configuration tables
   if (sol::object caps_obj = tbl["capabilities"];
       caps_obj.valid() && caps_obj.is<sol::table>()) {
     sol::table caps = caps_obj.as<sol::table>();
     caps.for_each([&](sol::object /*k*/, sol::object v) {
       if (v.is<std::string>()) {
-        decl.capabilities.push_back(v.as<std::string>());
+        // Shorthand string (e.g., "BTN_SOUTH")
+        OutputCapability cap;
+        cap.code = v.as<std::string>();
+        decl.capabilities.push_back(std::move(cap));
+      } else if (v.is<sol::table>()) {
+        // Detailed configuration table (e.g., { code = "ABS_X", min = -32767, max = 32767 })
+        sol::table cap_tbl = v.as<sol::table>();
+        OutputCapability cap;
+
+        if (sol::object c = cap_tbl["code"]; c.valid() && c.is<std::string>()) {
+          cap.code = c.as<std::string>();
+        }
+
+        if (!cap.code.empty()) {
+          if (sol::object m = cap_tbl["min"]; m.valid() && m.is<int>()) {
+            cap.min = m.as<int>();
+          }
+          if (sol::object m = cap_tbl["max"]; m.valid() && m.is<int>()) {
+            cap.max = m.as<int>();
+          }
+          if (sol::object f = cap_tbl["fuzz"]; f.valid() && f.is<int>()) {
+            cap.fuzz = f.as<int>();
+          }
+          if (sol::object f = cap_tbl["flat"]; f.valid() && f.is<int>()) {
+            cap.flat = f.as<int>();
+          }
+          if (sol::object r = cap_tbl["resolution"]; r.valid() && r.is<int>()) {
+            cap.resolution = r.as<int>();
+          }
+
+          decl.capabilities.push_back(std::move(cap));
+        }
       }
     });
   }
