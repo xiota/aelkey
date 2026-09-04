@@ -1,5 +1,56 @@
 fs = import('fs')
 
+luac_prog = ''
+if lua_version == 'luajit'
+  luac_prog = 'luajit'
+elif lua_version.startswith('lua5.1')
+  luac_prog = 'luac5.1'
+elif lua_version == 'lua5.2'
+  luac_prog = 'luac5.2'
+elif lua_version == 'lua5.3'
+  luac_prog = 'luac5.3'
+elif lua_version == 'lua5.4'
+  luac_prog = 'luac5.4'
+elif lua_version == 'lua5.5'
+  luac_prog = 'luac5.5'
+else
+  luac_prog = 'luac'
+endif
+
+luac = find_program(luac_prog)
+
+if luac.found()
+  lua_files = [
+    'click.lua',
+    'edge.lua',
+    'filter.lua',
+    'log.lua',
+    'midi.lua',
+    'monitor.lua',
+    'sequence.lua',
+    'ticker.lua',
+    'tracker.lua',
+    'util.lua',
+  ]
+
+foreach lua_file: lua_files
+    if lua_version == 'luajit'
+      cmd = [luac, '-b', '@INPUT@', '@OUTPUT@']
+    else
+      cmd = [luac, '-p', '@INPUT@']
+    endif
+
+    custom_target(
+      'check_' + fs.name(lua_file),
+      input: lua_file,
+      output: fs.name(lua_file) + '.stamp',
+      command: cmd,
+      build_always_stale: true,
+      build_by_default: true,
+    )
+  endforeach
+endif
+
 lua_click_content = fs.read('click.lua')
 lua_edge_content = fs.read('edge.lua')
 lua_filter_content = fs.read('filter.lua')
