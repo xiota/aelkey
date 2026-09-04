@@ -47,10 +47,6 @@ constexpr const char *aelkey_tracker_script = R"LUA(
 @AELKEY_TRACKER_SCRIPT@
 )LUA";
 
-constexpr const char *aelkey_touchpad_script = R"LUA(
-@AELKEY_TOUCHPAD_SCRIPT@
-)LUA";
-
 constexpr const char *aelkey_util_script = R"LUA(
 @AELKEY_UTIL_SCRIPT@
 )LUA";
