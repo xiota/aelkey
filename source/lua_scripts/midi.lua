@@ -135,13 +135,20 @@ function M.decode(bytes)
   return out
 end
 
+-- helper for encode
+local function push(...)
+  local n = #out
+  for i = 1, select("#", ...) do
+    n = n + 1
+    out[n] = (select(i, ...))
+  end
+end
+
 -- Public: encode(msg) → raw binary string
 function M.encode(msg)
   local t = msg.type
   local ch = msg.channel or 0
   local out = {}
-
-  local function push(...) for _,v in ipairs({...}) do out[#out+1] = v end end
 
   if t == "note_on" then
     push(0x90 | ch, msg.note, msg.velocity)
