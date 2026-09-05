@@ -46,6 +46,37 @@ Available `ease_fn` functions:
 - `ease_smootherstep(t)`
 - `ease_smoothstep(t)`
 
+### `aelkey.profiles`
+
+Pre-configured virtual device templates for uinput outputs.
+
+Each factory function accepts an optional configuration table to override
+default properties, add custom capabilities, or specify identifiers.
+
+Supported Profiles:
+
+- keyboard, consumer, mouse, touchpad
+- gamepad
+- gamepad_ds4, gamepad_ds4_imu
+- gamepad_nsp, gamepad_nsp_imu
+- gamepad_xpad, gamepad_xpad_bt
+
+Usage:
+
+```lua
+outputs = {
+  aelkey.profiles.mouse{},
+  aelkey.profiles.gamepad{
+    id = "virtual_gamepad",
+    name = "Custom Gamepad",
+    capabilities = {
+      { code = "ABS_X", min = -32768, max = 32767, fuzz = 16 },
+      "BTN_TRIGGER_HAPPY1",
+    },
+  },
+}
+```
+
 ### `aelkey.ticker`
 
 Repeats events at specified interval.

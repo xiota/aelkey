@@ -27,6 +27,7 @@ if luac.found()
     'log.lua',
     'midi.lua',
     'monitor.lua',
+    'profiles.lua',
     'sequence.lua',
     'ticker.lua',
     'tracker.lua',
@@ -57,6 +58,7 @@ lua_filter_content = fs.read('filter.lua')
 lua_log_content = fs.read('log.lua')
 lua_midi_content = fs.read('midi.lua')
 lua_monitor_content = fs.read('monitor.lua')
+lua_profiles_content = fs.read('profiles.lua')
 lua_sequence_content = fs.read('sequence.lua')
 lua_ticker_content = fs.read('ticker.lua')
 lua_tracker_content = fs.read('tracker.lua')
@@ -69,6 +71,7 @@ lua_scripts.set('AELKEY_FILTER_SCRIPT',  lua_filter_content.strip())
 lua_scripts.set('AELKEY_LOG_SCRIPT',  lua_log_content.strip())
 lua_scripts.set('AELKEY_MIDI_SCRIPT',  lua_midi_content.strip())
 lua_scripts.set('AELKEY_MONITOR_SCRIPT',  lua_monitor_content.strip())
+lua_scripts.set('AELKEY_PROFILES_SCRIPT',  lua_profiles_content.strip())
 lua_scripts.set('AELKEY_SEQUENCE_SCRIPT',  lua_sequence_content.strip())
 lua_scripts.set('AELKEY_TICKER_SCRIPT',  lua_ticker_content.strip())
 lua_scripts.set('AELKEY_TRACKER_SCRIPT',  lua_tracker_content.strip())

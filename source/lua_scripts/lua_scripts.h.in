@@ -27,6 +27,10 @@ constexpr const char *aelkey_monitor_script = R"LUA(
 @AELKEY_MONITOR_SCRIPT@
 )LUA";
 
+constexpr const char *aelkey_profiles_script = R"LUA(
+@AELKEY_PROFILES_SCRIPT@
+)LUA";
+
 constexpr const char *aelkey_sequence_script = R"LUA(
 @AELKEY_SEQUENCE_SCRIPT@
 )LUA";
