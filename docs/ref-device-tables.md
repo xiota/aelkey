@@ -75,8 +75,6 @@ outputs = {
     country      = <int>,
 
     ----- uinput -----
-    profile    = "digitizer" | "imu" | "keyboard" | "mouse" |
-                 "touchpad" | "touchpad_mt" | "touchscreen",
     bus        = "<string>", -- bus type ("usb", "bluetooth")
     vendor     = <int>,
     product    = <int>,

@@ -49,7 +49,6 @@ struct InputDecl {
 struct OutputDecl {
   std::string id;
   std::string type;
-  std::string profile;
   int vendor = 0x1234;
   int product = 0x5678;
   int bus = 3;

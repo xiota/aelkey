@@ -1,39 +1,33 @@
 #include "device_out_uinput.h"
 
 #include <cstdio>
-#include <iostream>
 #include <string>
 #include <vector>
 
 #include <libevdev/libevdev-uinput.h>
 #include <libevdev/libevdev.h>
 
-#include "device_capabilities.h"
 #include "device_declarations.h"
 #include "dispatcher_haptics.h"
 
 // Provide sensible max ranges for ABS axes
 // value, min, max, fuzz, flat, resolution
-static input_absinfo pos_default = { 0, 0, 65535, 0, 0, 0 };
-static input_absinfo stick_default = { 0, -32767, 32767, 0, 0, 0 };
+static input_absinfo pos_default = { 0, 0, 4095, 0, 0, 0 };
+static input_absinfo stick_default = { 0, -32768, 32767, 16, 128, 0 };
 static input_absinfo trigger_default = { 0, 0, 255, 0, 0, 0 };
-static input_absinfo pressure_default = { 0, 0, 65535, 0, 0, 0 };
+static input_absinfo pressure_default = { 0, 0, 255, 0, 0, 0 };
 static input_absinfo tilt_default = { 0, -90, 90, 0, 0, 0 };
 static input_absinfo distance_default = { 0, 0, 255, 0, 0, 0 };
 static input_absinfo orient_default = { 0, 0, 3, 0, 0, 0 };
 static input_absinfo wheel_default = { 0, -32768, 32767, 0, 0, 0 };
 static input_absinfo hat_default = { 0, -1, 1, 0, 0, 0 };
 
-// imu defaults
-static input_absinfo accel_default = { 0, -32767, 32767, 0, 0, 4096 };
-static input_absinfo gyro_default = { 0, -32767000, 32767000, 0, 0, 14247 };
-
 // multitouch defaults
-static input_absinfo mt_pos_default = { 0, 0, 65535, 0, 0, 0 };       // positions
-static input_absinfo mt_slot_default = { 0, 0, 4, 0, 0, 0 };          // 5 slots (0–4)
-static input_absinfo mt_trackid_default = { 0, -1, 65535, 0, 0, 0 };  // tracking IDs
-static input_absinfo mt_tooltype_default = { 0, 0, 2, 0, 0, 0 };      // finger/pen/palm
-static input_absinfo mt_misc_default = { 0, 0, 255, 0, 0, 0 };        // pressure/size
+static input_absinfo mt_pos_default = { 0, 0, 4095, 0, 0, 0 };       // positions
+static input_absinfo mt_slot_default = { 0, 0, 16, 0, 0, 0 };        // slots
+static input_absinfo mt_trackid_default = { 0, 0, 65535, 0, 0, 0 };  // tracking IDs
+static input_absinfo mt_tooltype_default = { 0, 0, 2, 0, 0, 0 };     // finger/pen/palm
+static input_absinfo mt_misc_default = { 0, 0, 255, 0, 0, 0 };       // pressure/size
 
 static const input_absinfo *default_absinfo_for(int code) {
   switch (code) {
@@ -194,60 +188,6 @@ static libevdev_uinput *create_output_device(const OutputDecl &out) {
   libevdev_set_id_product(dev, out.product);
   libevdev_set_id_version(dev, out.version);
 
-  if (out.profile == "keyboard") {
-    enable_codes(dev, EV_KEY, aelkey::capabilities::keyboard_keys);
-
-    // scan codes
-    libevdev_enable_event_type(dev, EV_MSC);
-    libevdev_enable_event_code(dev, EV_MSC, MSC_SCAN, nullptr);
-
-    // repeating event settings
-    libevdev_enable_event_type(dev, EV_REP);
-    libevdev_enable_event_code(dev, EV_REP, REP_DELAY, nullptr);
-    libevdev_enable_event_code(dev, EV_REP, REP_PERIOD, nullptr);
-  } else if (out.profile == "consumer") {
-    enable_codes(dev, EV_KEY, aelkey::capabilities::consumer_keys);
-  } else if (out.profile == "gamepad") {
-    enable_codes(dev, EV_KEY, aelkey::capabilities::gamepad_buttons);
-    enable_codes(dev, EV_ABS, aelkey::capabilities::gamepad_abs);
-    enable_codes(dev, EV_FF, aelkey::capabilities::gamepad_ff);
-
-    // Override ABS_X/ABS_Y to stick range
-    libevdev_enable_event_code(dev, EV_ABS, ABS_X, &stick_default);
-    libevdev_enable_event_code(dev, EV_ABS, ABS_Y, &stick_default);
-  } else if (out.profile == "imu") {
-    libevdev_enable_event_type(dev, EV_ABS);
-    libevdev_enable_event_code(dev, EV_ABS, ABS_X, &accel_default);
-    libevdev_enable_event_code(dev, EV_ABS, ABS_Y, &accel_default);
-    libevdev_enable_event_code(dev, EV_ABS, ABS_Z, &accel_default);
-    libevdev_enable_event_code(dev, EV_ABS, ABS_RX, &gyro_default);
-    libevdev_enable_event_code(dev, EV_ABS, ABS_RY, &gyro_default);
-    libevdev_enable_event_code(dev, EV_ABS, ABS_RZ, &gyro_default);
-
-    libevdev_enable_event_type(dev, EV_MSC);
-    libevdev_enable_event_code(dev, EV_MSC, MSC_TIMESTAMP, nullptr);
-  } else if (out.profile == "mouse") {
-    enable_codes(dev, EV_KEY, aelkey::capabilities::mouse_buttons);
-    enable_codes(dev, EV_REL, aelkey::capabilities::mouse_rel);
-  } else if (out.profile == "touchpad") {
-    enable_codes(dev, EV_KEY, aelkey::capabilities::touchpad_buttons);
-    enable_codes(dev, EV_REL, aelkey::capabilities::touchpad_rel);
-    enable_codes(dev, EV_ABS, aelkey::capabilities::touchpad_abs);
-    libevdev_enable_property(dev, INPUT_PROP_POINTER);
-  } else if (out.profile == "touchpad_mt") {
-    enable_codes(dev, EV_KEY, aelkey::capabilities::touchpad_buttons);
-    enable_codes(dev, EV_ABS, aelkey::capabilities::touchpad_mt_abs);
-    libevdev_enable_property(dev, INPUT_PROP_POINTER);
-  } else if (out.profile == "touchscreen") {
-    enable_codes(dev, EV_KEY, aelkey::capabilities::touchscreen_keys);
-    enable_codes(dev, EV_ABS, aelkey::capabilities::touchscreen_abs);
-    libevdev_enable_property(dev, INPUT_PROP_DIRECT);
-  } else if (out.profile == "digitizer") {
-    enable_codes(dev, EV_KEY, aelkey::capabilities::digitizer_keys);
-    enable_codes(dev, EV_ABS, aelkey::capabilities::digitizer_abs);
-    libevdev_enable_property(dev, INPUT_PROP_DIRECT);
-  }
-
   for (const auto &cap : out.capabilities) {
     enable_capability(dev, cap);
   }
@@ -264,8 +204,9 @@ static libevdev_uinput *create_output_device(const OutputDecl &out) {
 
   DispatcherHaptics::instance().register_source(out.id, ufd, out.on_haptics);
 
-  std::cout << "Created uinput device: " << out.name << " at "
-            << libevdev_uinput_get_devnode(uidev) << std::endl;
+  std::printf(
+      "Created uinput device: %s at %s\n", out.name.c_str(), libevdev_uinput_get_devnode(uidev)
+  );
 
   libevdev_free(dev);
   return uidev;

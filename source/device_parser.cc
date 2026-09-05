@@ -16,7 +16,6 @@
 #include <sys/ioctl.h>
 
 #include "aelkey_state.h"
-#include "device_capabilities.h"
 #include "dispatcher_haptics.h"
 
 namespace DeviceParser {
@@ -227,11 +226,6 @@ OutputDecl parse_output(sol::table tbl) {
   // type
   if (sol::object v = tbl["type"]; v.valid() && v.is<std::string>()) {
     decl.type = v.as<std::string>();
-  }
-
-  // profile
-  if (sol::object v = tbl["profile"]; v.valid() && v.is<std::string>()) {
-    decl.profile = v.as<std::string>();
   }
 
   // vendor
