@@ -31,7 +31,6 @@ class DeviceInLibUSB : public DeviceIn, public Singleton<DeviceInLibUSB> {
 
   bool on_init() override;
 
-  bool matches_vidpid(const InputDecl &decl, const libusb_device_descriptor &desc) const;
   int claim_interface(libusb_device_handle *devh, int iface);
 
   libusb_context *context() const;

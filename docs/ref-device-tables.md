@@ -22,6 +22,7 @@ inputs = {
     bus        = "<string>",            -- Bus type ("usb", "bluetooth")
     vid_pid    = { {<int>, <int>}, ... },
     interfaces = { <int>, ... },        -- HID interface indices (libusb)
+    version    = <int>,                 -- Firmware version/revision (evdev, hidraw, libusb)
 
     capabilities = {          -- (evdev)
       "<string>",             -- Capability code ("BTN_EAST") or

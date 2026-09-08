@@ -72,6 +72,11 @@ InputDecl parse_input(sol::table tbl) {
     });
   }
 
+  // version
+  if (sol::object v = tbl["version"]; v.valid() && v.is<int>()) {
+    decl.version = v.as<int>();
+  }
+
   // bus
   if (sol::object v = tbl["bus"]; v.valid() && v.is<std::string>()) {
     std::string busstr = v.as<std::string>();

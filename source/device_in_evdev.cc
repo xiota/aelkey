@@ -74,6 +74,7 @@ bool DeviceInEvdev::match(InputDecl &decl, std::string &devnode_out) {
 
           int dev_vendor = libevdev_get_id_vendor(evdev);
           int dev_product = libevdev_get_id_product(evdev);
+          int dev_version = libevdev_get_id_version(evdev);
 
           // vid_pid matching
           bool vidpid_ok = decl.vid_pid.empty();
@@ -86,6 +87,10 @@ bool DeviceInEvdev::match(InputDecl &decl, std::string &devnode_out) {
             }
           }
           if (!vidpid_ok) {
+            ok = false;
+          }
+
+          if (decl.version != 0 && decl.version != dev_version) {
             ok = false;
           }
 
@@ -128,10 +133,11 @@ bool DeviceInEvdev::match(InputDecl &decl, std::string &devnode_out) {
             }
           }
 
-          // store vendor/product after match
+          // store vendor, product, version after match
           if (ok) {
             decl.vendor = dev_vendor;
             decl.product = dev_product;
+            decl.version = dev_version;
           }
         }
 

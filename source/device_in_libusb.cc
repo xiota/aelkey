@@ -16,6 +16,27 @@
 #include "singleton.h"
 #include "utils/signal.h"
 
+static bool matches_decl(const InputDecl &decl, const libusb_device_descriptor &desc) {
+  bool vidpid_ok = decl.vid_pid.empty();
+  for (auto &[v, p] : decl.vid_pid) {
+    bool vendor_ok = (v == 0 || v == desc.idVendor);
+    bool product_ok = (p == 0 || p == desc.idProduct);
+    if (vendor_ok && product_ok) {
+      vidpid_ok = true;
+      break;
+    }
+  }
+  if (!vidpid_ok) {
+    return false;
+  }
+
+  if (decl.version != 0 && decl.version != desc.bcdDevice) {
+    return false;
+  }
+
+  return true;
+}
+
 DeviceInLibUSB::DeviceInLibUSB() {
   tok_udev_event_ =
       DispatcherUdev::instance().sig_udev_event_.subscribe([this](const UdevEvent &ev) {
@@ -45,7 +66,7 @@ DeviceInLibUSB::DeviceInLibUSB() {
               continue;
             }
 
-            if (!matches_vidpid(decl, desc)) {
+            if (!matches_decl(decl, desc)) {
               continue;
             }
 
@@ -114,7 +135,7 @@ bool DeviceInLibUSB::attach(const std::string &devnode, InputDecl &decl) {
       continue;
     }
 
-    if (!matches_vidpid(decl, desc)) {
+    if (!matches_decl(decl, desc)) {
       continue;
     }
 
@@ -203,20 +224,6 @@ bool DeviceInLibUSB::on_init() {
     return true;
   }
 
-  return false;
-}
-
-bool DeviceInLibUSB::matches_vidpid(
-    const InputDecl &decl,
-    const libusb_device_descriptor &desc
-) const {
-  for (auto &[v, p] : decl.vid_pid) {
-    bool vendor_ok = (v == 0 || v == desc.idVendor);
-    bool product_ok = (p == 0 || p == desc.idProduct);
-    if (vendor_ok && product_ok) {
-      return true;
-    }
-  }
   return false;
 }
 

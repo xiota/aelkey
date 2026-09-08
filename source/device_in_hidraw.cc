@@ -61,6 +61,14 @@ DeviceInHidraw::DeviceInHidraw() {
       });
 }
 
+static int get_device_revision(struct udev_device *dev) {
+  const char *rev_str = udev_device_get_property_value(dev, "ID_REVISION");
+  if (!rev_str) {
+    return -1;
+  }
+  return std::stoi(rev_str, nullptr, 16);
+}
+
 bool DeviceInHidraw::match(InputDecl &decl, std::string &devnode_out) {
   if (decl.type != "hidraw") {
     return false;
@@ -86,6 +94,7 @@ bool DeviceInHidraw::match(InputDecl &decl, std::string &devnode_out) {
 
           int dev_vendor = static_cast<unsigned short>(info.vendor);
           int dev_product = static_cast<unsigned short>(info.product);
+          int dev_version = get_device_revision(dev);
 
           // vid_pid matching
           bool vidpid_ok = decl.vid_pid.empty();
@@ -99,6 +108,12 @@ bool DeviceInHidraw::match(InputDecl &decl, std::string &devnode_out) {
           }
           if (!vidpid_ok) {
             ok = false;
+          }
+
+          if (ok && decl.version != 0) {
+            if (decl.version != dev_version) {
+              ok = false;
+            }
           }
 
           if (ok && decl.bus && static_cast<int>(info.bustype) != decl.bus) {
@@ -150,10 +165,11 @@ bool DeviceInHidraw::match(InputDecl &decl, std::string &devnode_out) {
             }
           }
 
-          // store vendor/product after match
+          // store vendor, product, version after match
           if (ok) {
             decl.vendor = dev_vendor;
             decl.product = dev_product;
+            decl.version = dev_version;
           }
         }
 

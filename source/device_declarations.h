@@ -22,6 +22,8 @@ struct InputDecl {
   std::vector<std::pair<int, int>> vid_pid;
 
   int bus = 0;
+  int version = 0;
+
   std::vector<int> interfaces;
   std::string name;
   std::string phys;
