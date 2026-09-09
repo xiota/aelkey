@@ -10,6 +10,19 @@
 #include "singleton.h"
 #include "utils/signal.h"
 
+struct AudioEvent {
+  std::string id;             // InputDecl/OutputDecl id
+  std::vector<uint8_t> data;  // raw float32 bytes
+  uint64_t timestamp_us = 0;
+  uint32_t frames = 0;
+};
+
+struct MidiEvent {
+  std::string id;             // InputDecl/OutputDecl id
+  std::vector<uint8_t> data;  // raw MIDI bytes
+  uint64_t timestamp_us;
+};
+
 struct JackPortEvent {
   std::string type;       // "add" or "remove"
   std::string full_name;  // "Client:Port"

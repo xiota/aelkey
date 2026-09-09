@@ -4,26 +4,12 @@
 #include <cstring>
 #include <string>
 
-#include <jack/ringbuffer.h>
-
 #include "backend_jack.h"
 #include "tick_scheduler.h"
 #include "utils/regex_match.h"
 #include "utils/signal.h"
 
 bool DeviceOutMidi::on_init() {
-  if (ring_) {
-    return true;
-  }
-
-  ring_ = jack_ringbuffer_create(kRingSize);
-  if (!ring_) {
-    std::fprintf(stderr, "MIDI OUT: failed to create ringbuffer\n");
-    return false;
-  }
-
-  jack_ringbuffer_mlock(ring_);
-
   auto &jack = BackendJack::instance();
   tok_jack_process_ =
       jack.sig_jack_process_.subscribe([this](jack_nframes_t nframes) { process(nframes); });
@@ -43,11 +29,6 @@ DeviceOutMidi::~DeviceOutMidi() {
   }
   output_ports_.clear();
   output_decls_.clear();
-
-  if (ring_) {
-    jack_ringbuffer_free(ring_);
-    ring_ = nullptr;
-  }
 }
 
 bool DeviceOutMidi::create(const OutputDecl &decl) {
@@ -101,10 +82,6 @@ bool DeviceOutMidi::create(const OutputDecl &decl) {
 }
 
 bool DeviceOutMidi::send(const std::string &id, const uint8_t *data, size_t len) {
-  if (!ring_) {
-    return false;
-  }
-
   auto it = output_ports_.find(id);
   if (it == output_ports_.end()) {
     return false;
@@ -114,22 +91,11 @@ bool DeviceOutMidi::send(const std::string &id, const uint8_t *data, size_t len)
     return false;
   }
 
-  uint8_t msg_len = static_cast<uint8_t>(len);
-  uint8_t id_len = static_cast<uint8_t>(id.size());
-  size_t total = 1 + 1 + id_len + msg_len;
+  MidiEvent me;
+  me.id = id;
+  me.data.assign(data, data + len);
 
-  if (jack_ringbuffer_write_space(ring_) < total) {
-    return false;
-  }
-
-  jack_ringbuffer_write(ring_, reinterpret_cast<const char *>(&msg_len), 1);
-  jack_ringbuffer_write(ring_, reinterpret_cast<const char *>(&id_len), 1);
-  if (id_len > 0) {
-    jack_ringbuffer_write(ring_, id.data(), id_len);
-  }
-  jack_ringbuffer_write(ring_, reinterpret_cast<const char *>(data), msg_len);
-
-  return true;
+  return queue_.enqueue(me);
 }
 
 bool DeviceOutMidi::destroy(const std::string &id) {
@@ -158,50 +124,20 @@ void DeviceOutMidi::process(jack_nframes_t nframes) {
     jack.midi_clear_buffer(buf);
   }
 
-  if (!ring_) {
-    return;
-  }
-
-  while (true) {
-    if (jack_ringbuffer_read_space(ring_) < 2) {
-      break;
-    }
-
-    uint8_t len = 0;
-    uint8_t id_len = 0;
-
-    jack_ringbuffer_read(ring_, reinterpret_cast<char *>(&len), 1);
-    jack_ringbuffer_read(ring_, reinterpret_cast<char *>(&id_len), 1);
-
-    if (len == 0 || len > 3) {
-      size_t skip = id_len + len;
-      if (jack_ringbuffer_read_space(ring_) >= skip) {
-        jack_ringbuffer_read_advance(ring_, skip);
-      }
-      continue;
-    }
-
-    std::string id;
-    id.resize(id_len);
-    if (id_len > 0) {
-      jack_ringbuffer_read(ring_, id.data(), id_len);
-    }
-
-    uint8_t data[3] = { 0, 0, 0 };
-    jack_ringbuffer_read(ring_, reinterpret_cast<char *>(data), len);
-
-    auto it = output_ports_.find(id);
+  MidiEvent me;
+  while (queue_.try_dequeue(me)) {
+    auto it = output_ports_.find(me.id);
     if (it == output_ports_.end()) {
       continue;
     }
 
     void *buf = jack.port_buffer(it->second, nframes);
-    jack_midi_data_t *dst = jack.midi_event_reserve(buf, 0, len);
+    jack_midi_data_t *dst = jack.midi_event_reserve(buf, 0, me.data.size());
     if (!dst) {
       continue;
     }
 
-    std::memcpy(dst, data, len);
+    std::memcpy(dst, me.data.data(), me.data.size());
   }
 }
 

@@ -5,24 +5,12 @@
 #include <string>
 #include <vector>
 
-#include <jack/ringbuffer.h>
-
 #include "backend_jack.h"
 #include "tick_scheduler.h"
 #include "utils/regex_match.h"
 #include "utils/signal.h"
 
 bool DeviceOutAudio::on_init() {
-  if (ring_) {
-    return true;
-  }
-
-  ring_ = jack_ringbuffer_create(kRingSize);
-  if (!ring_) {
-    std::fprintf(stderr, "AUDIO OUT: failed to create ringbuffer\n");
-    return false;
-  }
-
   auto &jack = BackendJack::instance();
   tok_jack_process_ =
       jack.sig_jack_process_.subscribe([this](jack_nframes_t nframes) { process(nframes); });
@@ -42,11 +30,6 @@ DeviceOutAudio::~DeviceOutAudio() {
   }
   output_ports_.clear();
   output_decls_.clear();
-
-  if (ring_) {
-    jack_ringbuffer_free(ring_);
-    ring_ = nullptr;
-  }
 }
 
 bool DeviceOutAudio::create(const OutputDecl &decl) {
@@ -101,10 +84,6 @@ bool DeviceOutAudio::create(const OutputDecl &decl) {
 }
 
 bool DeviceOutAudio::send(const std::string &id, const float *samples, size_t frames) {
-  if (!ring_) {
-    return false;
-  }
-
   auto it = output_ports_.find(id);
   if (it == output_ports_.end()) {
     return false;
@@ -114,29 +93,15 @@ bool DeviceOutAudio::send(const std::string &id, const float *samples, size_t fr
     return false;
   }
 
-  uint32_t frames_u32 = static_cast<uint32_t>(frames);
-  uint32_t id_len = static_cast<uint32_t>(id.size());
-  uint32_t data_bytes = frames_u32 * sizeof(float);
+  AudioEvent ev;
+  ev.id = id;
+  ev.frames = static_cast<uint32_t>(frames);
 
-  // frames + id_len + id + data
-  size_t total = sizeof(frames_u32) + sizeof(id_len) + id_len + data_bytes;
+  size_t data_bytes = frames * sizeof(float);
+  ev.data.resize(data_bytes);
+  std::memcpy(ev.data.data(), samples, data_bytes);
 
-  if (jack_ringbuffer_write_space(ring_) < total) {
-    return false;
-  }
-
-  jack_ringbuffer_write(ring_, reinterpret_cast<const char *>(&frames_u32), sizeof(frames_u32));
-  jack_ringbuffer_write(ring_, reinterpret_cast<const char *>(&id_len), sizeof(id_len));
-
-  if (id_len > 0) {
-    jack_ringbuffer_write(ring_, id.data(), id_len);
-  }
-
-  if (data_bytes > 0) {
-    jack_ringbuffer_write(ring_, reinterpret_cast<const char *>(samples), data_bytes);
-  }
-
-  return true;
+  return queue_.enqueue(ev);
 }
 
 bool DeviceOutAudio::destroy(const std::string &id) {
@@ -167,44 +132,9 @@ void DeviceOutAudio::process(jack_nframes_t nframes) {
     }
   }
 
-  if (!ring_) {
-    return;
-  }
-
-  // For each JACK callback, try to consume as many packets as possible.
-  // Each packet targets a specific output id and a mono block of samples.
-  while (true) {
-    // Need at least frames + id_len
-    if (jack_ringbuffer_read_space(ring_) < sizeof(uint32_t) * 2) {
-      break;
-    }
-
-    uint32_t frames = 0;
-    uint32_t id_len = 0;
-
-    jack_ringbuffer_read(ring_, reinterpret_cast<char *>(&frames), sizeof(frames));
-    jack_ringbuffer_read(ring_, reinterpret_cast<char *>(&id_len), sizeof(id_len));
-
-    size_t data_bytes = static_cast<size_t>(frames) * sizeof(float);
-
-    // Check if the rest of the packet is available
-    if (jack_ringbuffer_read_space(ring_) < id_len + data_bytes) {
-      break;
-    }
-
-    std::string id;
-    id.resize(id_len);
-    if (id_len > 0) {
-      jack_ringbuffer_read(ring_, id.data(), id_len);
-    }
-
-    std::vector<float> samples;
-    samples.resize(frames);
-    if (data_bytes > 0) {
-      jack_ringbuffer_read(ring_, reinterpret_cast<char *>(samples.data()), data_bytes);
-    }
-
-    auto it = output_ports_.find(id);
+  AudioEvent ev;
+  while (queue_.try_dequeue(ev)) {
+    auto it = output_ports_.find(ev.id);
     if (it == output_ports_.end()) {
       continue;
     }
@@ -215,17 +145,16 @@ void DeviceOutAudio::process(jack_nframes_t nframes) {
     }
 
     float *out = reinterpret_cast<float *>(buf);
+    size_t frames = ev.frames;
+    size_t data_bytes = frames * sizeof(float);
 
     // Zero-pad or truncate to match nframes
     if (frames == nframes) {
-      std::memcpy(out, samples.data(), data_bytes);
+      std::memcpy(out, ev.data.data(), data_bytes);
     } else if (frames < nframes) {
-      // Copy what we have, leave the rest as zero (already cleared)
-      std::memcpy(out, samples.data(), frames * sizeof(float));
-      // remaining samples are already zero from initial clear
+      std::memcpy(out, ev.data.data(), frames * sizeof(float));
     } else {  // frames > nframes
-      // Truncate
-      std::memcpy(out, samples.data(), nframes * sizeof(float));
+      std::memcpy(out, ev.data.data(), nframes * sizeof(float));
     }
   }
 }

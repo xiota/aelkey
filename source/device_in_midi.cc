@@ -6,8 +6,6 @@
 #include <string_view>
 #include <vector>
 
-#include <jack/ringbuffer.h>
-
 #include "backend_jack.h"
 #include "tick_scheduler.h"
 #include "utils/regex_match.h"
@@ -27,24 +25,9 @@ DeviceInMidi::~DeviceInMidi() {
 
   input_ports_.clear();
   input_decls_.clear();
-
-  if (ring_) {
-    jack_ringbuffer_free(ring_);
-    ring_ = nullptr;
-  }
 }
 
 bool DeviceInMidi::on_init() {
-  if (ring_) {
-    return true;
-  }
-
-  ring_ = jack_ringbuffer_create(MIDI_RINGBUFFER_BYTES);
-  if (!ring_) {
-    std::fprintf(stderr, "MIDI: failed to create ringbuffer\n");
-    return false;
-  }
-
   auto &jack = BackendJack::instance();
   tok_jack_process_ =
       jack.sig_jack_process_.subscribe([this](jack_nframes_t nframes) { process(nframes); });
@@ -152,10 +135,6 @@ bool DeviceInMidi::detach(const std::string &id) {
 }
 
 void DeviceInMidi::process(jack_nframes_t nframes) {
-  if (!ring_) {
-    return;
-  }
-
   auto &jack = BackendJack::instance();
 
   for (auto &[id, port] : input_ports_) {
@@ -173,84 +152,9 @@ void DeviceInMidi::process(jack_nframes_t nframes) {
       me.data.assign(ev.buffer, ev.buffer + ev.size);
       me.timestamp_us = AelkeyUtil::now("us");
 
-      push_event(me);
+      queue_.enqueue(me);
     }
   }
-}
-
-void DeviceInMidi::push_event(const MidiEvent &ev) {
-  if (!ring_) {
-    return;
-  }
-
-  uint32_t size = static_cast<uint32_t>(ev.data.size());
-  uint32_t id_len = static_cast<uint32_t>(ev.id.size());
-  uint64_t timestamp_us = ev.timestamp_us;
-
-  // size + id_len + id + timestamp + data
-  size_t total = sizeof(size) + sizeof(id_len) + id_len + sizeof(timestamp_us) + size;
-
-  if (jack_ringbuffer_write_space(ring_) < total) {
-    return;
-  }
-
-  jack_ringbuffer_write(ring_, reinterpret_cast<const char *>(&size), sizeof(size));
-  jack_ringbuffer_write(ring_, reinterpret_cast<const char *>(&id_len), sizeof(id_len));
-
-  if (id_len) {
-    jack_ringbuffer_write(ring_, ev.id.data(), id_len);
-  }
-
-  jack_ringbuffer_write(
-      ring_, reinterpret_cast<const char *>(&timestamp_us), sizeof(timestamp_us)
-  );
-
-  if (size) {
-    jack_ringbuffer_write(ring_, reinterpret_cast<const char *>(ev.data.data()), size);
-  }
-}
-
-bool DeviceInMidi::pop_event(MidiEvent &out) {
-  if (!ring_) {
-    return false;
-  }
-
-  // Need at least the header
-  if (jack_ringbuffer_read_space(ring_) < sizeof(uint32_t) * 2) {
-    return false;
-  }
-
-  // Peek first
-  uint32_t header[2];
-  jack_ringbuffer_peek(ring_, reinterpret_cast<char *>(header), sizeof(header));
-
-  uint32_t size = header[0];
-  uint32_t id_len = header[1];
-
-  // Check if full message is available
-  size_t total_needed = sizeof(uint32_t) + sizeof(uint32_t) + id_len + sizeof(uint64_t) + size;
-
-  if (jack_ringbuffer_read_space(ring_) < total_needed) {
-    return false;
-  }
-
-  // Safe to read
-  jack_ringbuffer_read(ring_, reinterpret_cast<char *>(&size), sizeof(size));
-  jack_ringbuffer_read(ring_, reinterpret_cast<char *>(&id_len), sizeof(id_len));
-
-  out.id.resize(id_len);
-  if (id_len) {
-    jack_ringbuffer_read(ring_, out.id.data(), id_len);
-  }
-
-  jack_ringbuffer_read(ring_, reinterpret_cast<char *>(&out.timestamp_us), sizeof(uint64_t));
-
-  out.data.resize(size);
-  if (size) {
-    jack_ringbuffer_read(ring_, reinterpret_cast<char *>(out.data.data()), size);
-  }
-
-  return true;
 }
 
 void DeviceInMidi::dispatch_batch_to_lua(
@@ -294,7 +198,7 @@ void DeviceInMidi::dispatch_batch_to_lua(
 
 void DeviceInMidi::pump_messages() {
   MidiEvent ev;
-  while (pop_event(ev)) {
+  while (queue_.try_dequeue(ev)) {
     // Look up InputDecl to find callback name
     auto it_decl = input_decls_.find(ev.id);
     if (it_decl == input_decls_.end()) {

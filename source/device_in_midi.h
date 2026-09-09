@@ -4,7 +4,7 @@
 #include <string>
 #include <vector>
 
-#include <jack/ringbuffer.h>
+#include <readerwriterqueue.h>
 
 #include "aelkey_state.h"
 #include "backend_jack.h"
@@ -12,12 +12,6 @@
 #include "device_in.h"
 #include "singleton.h"
 #include "utils/signal.h"
-
-struct MidiEvent {
-  std::string id;             // InputDecl id
-  std::vector<uint8_t> data;  // raw MIDI bytes
-  uint64_t timestamp_us;
-};
 
 class DeviceInMidi : public DeviceIn, public Singleton<DeviceInMidi> {
   friend class Singleton<DeviceInMidi>;
@@ -38,9 +32,6 @@ class DeviceInMidi : public DeviceIn, public Singleton<DeviceInMidi> {
  private:
   void process(jack_nframes_t nframes);
 
-  void push_event(const MidiEvent &ev);
-  bool pop_event(MidiEvent &out);
-
   void
   dispatch_batch_to_lua(const std::string &callback_name, const std::vector<MidiEvent> &events);
 
@@ -48,7 +39,7 @@ class DeviceInMidi : public DeviceIn, public Singleton<DeviceInMidi> {
   void process_hotplug_events();
 
  private:
-  jack_ringbuffer_t *ring_ = nullptr;
+  moodycamel::ReaderWriterQueue<MidiEvent> queue_;
 
   // key = id
   std::map<std::string, jack_port_t *> input_ports_;
@@ -62,6 +53,4 @@ class DeviceInMidi : public DeviceIn, public Singleton<DeviceInMidi> {
 
   std::vector<JackPortEvent> pending_hotplug_;
   AelkeyUtil::Signal<void(const JackPortEvent &)>::Connection tok_jack_hotplug_;
-
-  static constexpr size_t MIDI_RINGBUFFER_BYTES = 8 * 1024;
 };

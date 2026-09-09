@@ -4,7 +4,7 @@
 #include <map>
 #include <string>
 
-#include <jack/ringbuffer.h>
+#include <readerwriterqueue.h>
 
 #include "backend_jack.h"
 #include "device_declarations.h"
@@ -37,12 +37,11 @@ class DeviceOutAudio : public DeviceOut, public Singleton<DeviceOutAudio> {
   void process_hotplug_events();
 
  private:
+  moodycamel::ReaderWriterQueue<AudioEvent> queue_;
+
   // key = id
   std::map<std::string, jack_port_t *> output_ports_;
   std::map<std::string, OutputDecl> output_decls_;
-
-  jack_ringbuffer_t *ring_ = nullptr;
-  static constexpr size_t kRingSize = 512 * 1024;
 
   std::vector<JackPortEvent> pending_hotplug_;
   AelkeyUtil::Signal<void(const JackPortEvent &)>::Connection tok_jack_hotplug_;

@@ -4,7 +4,7 @@
 #include <string>
 #include <vector>
 
-#include <jack/ringbuffer.h>
+#include <readerwriterqueue.h>
 
 #include "aelkey_state.h"
 #include "backend_jack.h"
@@ -12,17 +12,6 @@
 #include "device_in.h"
 #include "singleton.h"
 #include "utils/signal.h"
-
-struct AudioEvent {
-  std::string id;             // InputDecl id
-  std::vector<uint8_t> data;  // raw float32 bytes
-  uint64_t timestamp_us = 0;
-  uint32_t frames = 0;
-};
-
-struct AudioBatch {
-  std::vector<AudioEvent> events;
-};
 
 class DeviceInAudio : public DeviceIn, public Singleton<DeviceInAudio> {
   friend class Singleton<DeviceInAudio>;
@@ -43,9 +32,6 @@ class DeviceInAudio : public DeviceIn, public Singleton<DeviceInAudio> {
  private:
   void process(jack_nframes_t nframes);
 
-  void push_event(const AudioEvent &ev);
-  bool pop_event(AudioEvent &out);
-
   void dispatch_batch_to_lua(
       const std::string &callback_name,
       const std::vector<AudioEvent> &events
@@ -55,7 +41,7 @@ class DeviceInAudio : public DeviceIn, public Singleton<DeviceInAudio> {
   void process_hotplug_events();
 
  private:
-  jack_ringbuffer_t *ring_ = nullptr;
+  moodycamel::ReaderWriterQueue<AudioEvent> queue_;
 
   // key = id
   std::map<std::string, jack_port_t *> input_ports_;
@@ -69,6 +55,4 @@ class DeviceInAudio : public DeviceIn, public Singleton<DeviceInAudio> {
 
   std::vector<JackPortEvent> pending_hotplug_;
   AelkeyUtil::Signal<void(const JackPortEvent &)>::Connection tok_jack_hotplug_;
-
-  static constexpr size_t AUDIO_RINGBUFFER_BYTES = 512 * 1024;
 };
