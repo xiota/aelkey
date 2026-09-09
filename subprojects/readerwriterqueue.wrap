@@ -1,0 +1,9 @@
+[wrap-git]
+directory = readerwriterqueue
+url = https://github.com/cameron314/readerwriterqueue.git
+revision = head
+depth = 1
+patch_directory = readerwriterqueue
+
+[provide]
+dependency_names = readerwriterqueue

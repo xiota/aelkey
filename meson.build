@@ -18,6 +18,10 @@ libevdev_dep = dependency('libevdev')
 libudev_dep = dependency('libudev')
 libusb_dep = dependency('libusb-1.0')
 
+readerwriterqueue_dep = dependency('readerwriterqueue',
+  fallback: ['readerwriterqueue', 'readerwriterqueue_dep']
+)
+
 # lua and sol
 lua_version = get_option('lua_version')
 if lua_version == 'auto'

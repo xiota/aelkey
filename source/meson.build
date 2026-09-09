@@ -54,6 +54,7 @@ shared_library(
     libudev_dep,
     libusb_dep,
     lua_dep,
+    readerwriterqueue_dep,
     sol2_dep,
   ],
   name_prefix: '',
