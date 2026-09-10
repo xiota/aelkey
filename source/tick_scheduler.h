@@ -59,16 +59,16 @@ class TickScheduler : public Dispatcher<TickScheduler> {
       try {
         cb.native();
       } catch (const std::exception &e) {
-        fprintf(stderr, "tick native error: %s\n", e.what());
+        std::fprintf(stderr, "tick native error: %s\n", e.what());
       } catch (...) {
-        fprintf(stderr, "tick native error: unknown exception\n");
+        std::fprintf(stderr, "tick native error: unknown exception\n");
       }
     } else if (cb.is_function && cb.fn.valid()) {
       sol::protected_function pf = cb.fn;
       sol::protected_function_result result = pf();
       if (!result.valid()) {
         sol::error err = result;
-        fprintf(stderr, "tick function error: %s\n", err.what());
+        std::fprintf(stderr, "tick function error: %s\n", err.what());
       }
     } else if (!cb.name.empty()) {
       sol::state_view lua_state(AelkeyState::instance().lua_vm);
@@ -118,6 +118,28 @@ class TickScheduler : public Dispatcher<TickScheduler> {
     register_fd(fd, EPOLLIN);
     callbacks_[fd] = std::move(cb);
     return fd;
+  }
+
+  // Expire timerfd and preserve current recurring interval.
+  // Safe to call from device_in background threads.
+  void trigger(int fd) {
+    if (fd < 0) {
+      return;
+    }
+
+    struct itimerspec old_spec{};
+    if (timerfd_gettime(fd, &old_spec) < 0) {
+      return;
+    }
+
+    struct itimerspec spec{};
+    spec.it_value.tv_sec = 0;
+    spec.it_value.tv_nsec = 1;
+    spec.it_interval = old_spec.it_interval;
+
+    if (timerfd_settime(fd, 0, &spec, nullptr) < 0) {
+      perror("timerfd_settime");
+    }
   }
 
   void cancel_matching(const TickCb &key) {
