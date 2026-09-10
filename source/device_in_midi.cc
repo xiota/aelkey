@@ -96,7 +96,7 @@ bool DeviceInMidi::attach(const std::string &devnode, InputDecl &decl) {
     cb.native = [this]() { this->pump_messages(); };
     cb.oneshot = false;
 
-    tick_fd_ = TickScheduler::instance().schedule(8, cb);
+    tick_fd_ = TickScheduler::instance().schedule(10000, cb);
     if (tick_fd_ < 0) {
       std::fprintf(stderr, "MIDI: failed to schedule tick\n");
     }
@@ -137,6 +137,8 @@ bool DeviceInMidi::detach(const std::string &id) {
 void DeviceInMidi::process(jack_nframes_t nframes) {
   auto &jack = BackendJack::instance();
 
+  bool queued = false;
+
   for (auto &[id, port] : input_ports_) {
     void *buf = jack.port_buffer(port, nframes);
     uint32_t count = jack.midi_event_count(buf);
@@ -153,7 +155,12 @@ void DeviceInMidi::process(jack_nframes_t nframes) {
       me.timestamp_us = AelkeyUtil::now("us");
 
       queue_.enqueue(me);
+      queued = true;
     }
+  }
+
+  if (queued && tick_fd_ >= 0) {
+    TickScheduler::instance().trigger(tick_fd_);
   }
 }
 
