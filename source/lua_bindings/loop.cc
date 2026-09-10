@@ -86,6 +86,4 @@ void loop_cleanup() {
     close(state.epfd);
     state.epfd = -1;
   }
-
-  SignalHandler::reraise();
 }

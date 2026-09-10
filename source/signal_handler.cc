@@ -20,7 +20,6 @@ void handle(int sig) {
   }
 
   loop_cleanup();
-  _exit(128 + sig);
 }
 
 void install() {
