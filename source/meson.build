@@ -19,6 +19,7 @@ src_files = files(
   'lua_bindings/util.cc',
 
   'aelkey_state.cc',
+  'backend_bluez.cc',
   'backend_jack.cc',
   'device_in_audio.cc',
   'device_in_evdev.cc',

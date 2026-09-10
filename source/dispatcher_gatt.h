@@ -1,5 +1,8 @@
 #pragma once
 
+#include <sys/epoll.h>
+
+#include "backend_bluez.h"
 #include "device_in_gatt.h"
 #include "dispatcher.h"
 
@@ -20,7 +23,7 @@ class DispatcherGATT : public Dispatcher<DispatcherGATT> {
 
  protected:
   bool on_init() override {
-    int fd = DeviceInGatt::instance().fd();
+    int fd = BackendBluez::instance().fd();
     if (fd < 0) {
       return false;
     }
