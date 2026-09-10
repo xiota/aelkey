@@ -96,7 +96,7 @@ bool DeviceInAudio::attach(const std::string &devnode, InputDecl &decl) {
     cb.native = [this]() { this->pump_messages(); };
     cb.oneshot = false;
 
-    tick_fd_ = TickScheduler::instance().schedule(8, cb);
+    tick_fd_ = TickScheduler::instance().schedule(10000, cb);
     if (tick_fd_ < 0) {
       std::fprintf(stderr, "AUDIO: failed to schedule tick\n");
     }
@@ -135,6 +135,8 @@ bool DeviceInAudio::detach(const std::string &id) {
 void DeviceInAudio::process(jack_nframes_t nframes) {
   auto &jack = BackendJack::instance();
 
+  bool queued = false;
+
   for (auto &[id, port] : input_ports_) {
     void *buf = jack.port_buffer(port, nframes);
     if (!buf) {
@@ -151,6 +153,11 @@ void DeviceInAudio::process(jack_nframes_t nframes) {
     std::memcpy(ev.data.data(), buf, bytes);
 
     queue_.enqueue(ev);
+    queued = true;
+  }
+
+  if (queued && tick_fd_ >= 0) {
+    TickScheduler::instance().trigger(tick_fd_);
   }
 }
 
