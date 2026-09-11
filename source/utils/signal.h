@@ -3,6 +3,7 @@
 #include <functional>
 #include <list>
 #include <memory>
+#include <mutex>
 #include <type_traits>
 #include <utility>
 #include <vector>
@@ -16,6 +17,7 @@ template <typename R, typename... Args>
 class Signal<R(Args...)> {
  private:
   struct SignalData {
+    std::mutex mtx;
     std::list<std::function<R(Args...)>> callbacks;
   };
 
@@ -57,6 +59,7 @@ class Signal<R(Args...)> {
 
     void disconnect() {
       if (active_ && data_) {
+        std::lock_guard<std::mutex> lock(data_->mtx);
         data_->callbacks.erase(it_);
         active_ = false;
         data_.reset();
@@ -68,7 +71,6 @@ class Signal<R(Args...)> {
     }
 
    private:
-    friend class Signal;
     std::shared_ptr<SignalData> data_;
     CallbackIt it_{};
     bool active_ = false;
@@ -81,21 +83,26 @@ class Signal<R(Args...)> {
   Signal &operator=(Signal &&) = default;
 
   Connection subscribe(Callback cb) {
+    std::lock_guard<std::mutex> lock(data_->mtx);
     auto it = data_->callbacks.insert(data_->callbacks.end(), std::move(cb));
     return Connection(data_, it);
   }
 
   std::conditional_t<std::is_void_v<R>, void, std::vector<R>> emit(Args... args) {
+    std::vector<Callback> local;
+    {
+      std::lock_guard<std::mutex> lock(data_->mtx);
+      local.assign(data_->callbacks.begin(), data_->callbacks.end());
+    }
+
     if constexpr (std::is_void_v<R>) {
-      for (auto it = data_->callbacks.begin(); it != data_->callbacks.end();) {
-        auto current = it++;
-        std::invoke(*current, args...);
+      for (auto &cb : local) {
+        cb(args...);
       }
     } else {
       std::vector<R> results;
-      for (auto it = data_->callbacks.begin(); it != data_->callbacks.end();) {
-        auto current = it++;
-        results.push_back(std::invoke(*current, args...));
+      for (auto &cb : local) {
+        results.push_back(cb(args...));
       }
       return results;
     }
