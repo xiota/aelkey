@@ -9,9 +9,13 @@
 
 #include "device_declarations.h"
 #include "singleton.h"
-#include "utils/signal.h"
 
 enum class GattPathType { Device, Service, Characteristic };
+
+struct GattNotifySession {
+  int fd = -1;
+  uint16_t mtu = 0;
+};
 
 class BackendBluez : public Singleton<BackendBluez> {
   friend class Singleton<BackendBluez>;
@@ -26,8 +30,7 @@ class BackendBluez : public Singleton<BackendBluez> {
   void shutdown();
 
   // --- D-Bus / BlueZ operations ---
-  bool start_notify(const std::string &char_path);
-  void stop_notify(const std::string &char_path);
+  GattNotifySession acquire_notify(const std::string &char_path);
 
   bool read_characteristic(const std::string &char_path, std::vector<uint8_t> &out_data);
   bool write_characteristic(
@@ -51,9 +54,6 @@ class BackendBluez : public Singleton<BackendBluez> {
 
   std::string
   resolve_gatt_paths(const InputDecl &decl, std::vector<std::string> *found_characteristics);
-
-  // Signal: path, value bytes
-  AelkeyUtil::Signal<void(const std::string &, const std::vector<uint8_t> &)> sig_gatt_value_;
 
  private:
   bool on_init() override;
@@ -81,5 +81,6 @@ class BackendBluez : public Singleton<BackendBluez> {
 
  private:
   std::unique_ptr<sdbus::IConnection> conn_;
-  std::unordered_map<std::string, sdbus::Slot> match_slots_;
+  std::unordered_set<std::string> acquired_devs_;
+  sdbus::Slot monitor_;
 };

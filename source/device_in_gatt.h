@@ -7,8 +7,6 @@
 #include <string>
 #include <vector>
 
-#include <readerwriterqueue.h>
-
 #include "backend_bluez.h"
 #include "device_declarations.h"
 #include "device_in.h"
@@ -24,7 +22,7 @@ class DeviceInGatt : public DeviceIn, public Singleton<DeviceInGatt> {
 
  protected:
   DeviceInGatt() = default;
-  ~DeviceInGatt();
+  ~DeviceInGatt() = default;
 
   bool on_init() override;
 
@@ -80,17 +78,7 @@ class DeviceInGatt : public DeviceIn, public Singleton<DeviceInGatt> {
     return it->second;
   }
 
-  // --- message dispatch ---
-  void pump_messages();
-
  private:
   // dev_id -> gatt_path, /org/bluez/hci0/dev_XX_XX_XX_XX_XX_XX
   std::map<std::string, std::string> gatt_paths_;
-
-  int tick_fd_ = -1;
-
-  moodycamel::ReaderWriterQueue<GattEvent> queue_;
-
-  AelkeyUtil::Signal<void(const std::string &, const std::vector<uint8_t> &)>::Connection
-      tok_gatt_;
 };

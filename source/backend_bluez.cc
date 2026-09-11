@@ -42,7 +42,7 @@ bool BackendBluez::ensure_client() {
         [this](sdbus::Message msg) { on_device_properties_changed(msg); },
         sdbus::return_slot
     );
-    match_slots_["aelkey_bluez_device_monitor"] = std::move(slot);
+    monitor_ = std::move(slot);
 
     return true;
   } catch (const sdbus::Error &e) {
@@ -64,8 +64,14 @@ bool BackendBluez::ensure_client() {
 }
 
 void BackendBluez::shutdown() {
-  match_slots_.clear();
+  monitor_ = sdbus::Slot{};
+
   if (conn_) {
+    for (const auto &dev_path : acquired_devs_) {
+      disconnect_device(dev_path);
+    }
+    acquired_devs_.clear();
+
     conn_.reset();
   }
 }
@@ -75,7 +81,7 @@ bool BackendBluez::disconnect_device(const std::string &path) {
     return false;
   }
 
-  const std::string device_path = derive_device_path_from_char_path(path);
+  std::string device_path = derive_device_path_from_char_path(path);
 
   try {
     auto proxy = sdbus::createProxy(
@@ -124,7 +130,6 @@ void BackendBluez::on_properties_changed(sdbus::Message &msg) {
     std::vector<uint8_t> bytes = it->second.get<std::vector<uint8_t>>();
 
     std::string path = msg.getPath();
-    sig_gatt_value_.emit(path, bytes);
   } catch (const sdbus::Error &e) {
     std::fprintf(
         stderr,
@@ -205,7 +210,7 @@ std::string BackendBluez::derive_device_path_from_char_path(const std::string &c
   std::string prefix = "/service";
   size_t pos = char_path.find(prefix);
   if (pos == std::string::npos) {
-    return {};
+    return char_path;
   }
   return char_path.substr(0, pos);
 }
@@ -646,9 +651,9 @@ bool BackendBluez::write_characteristic(
   }
 }
 
-bool BackendBluez::start_notify(const std::string &char_path) {
+GattNotifySession BackendBluez::acquire_notify(const std::string &char_path) {
   if (!ensure_client()) {
-    return false;
+    return { -1, 0 };
   }
 
   try {
@@ -656,67 +661,29 @@ bool BackendBluez::start_notify(const std::string &char_path) {
         *conn_, sdbus::ServiceName{ "org.bluez" }, sdbus::ObjectPath{ char_path }
     );
 
-    std::string rule =
-        "type='signal',"
-        "interface='org.freedesktop.DBus.Properties',"
-        "member='PropertiesChanged',"
-        "arg0='org.bluez.GattCharacteristic1',"
-        "path='" +
-        char_path + "'";
+    std::map<std::string, sdbus::Variant> options;
+    sdbus::UnixFd fd;
+    uint16_t mtu = 0;
 
-    sdbus::Slot slot = conn_->addMatch(
-        rule, [this](sdbus::Message msg) { on_properties_changed(msg); }, sdbus::return_slot
-    );
-    match_slots_[char_path] = std::move(slot);
+    proxy->callMethod("AcquireNotify")
+        .onInterface("org.bluez.GattCharacteristic1")
+        .withArguments(options)
+        .storeResultsTo(fd, mtu);
 
-    proxy->callMethod("StartNotify").onInterface("org.bluez.GattCharacteristic1");
-    return true;
+    std::string dev_path = derive_device_path_from_char_path(char_path);
+    if (!dev_path.empty()) {
+      acquired_devs_.insert(dev_path);
+    }
+
+    return { fd.release(), mtu };
   } catch (const sdbus::Error &e) {
     std::fprintf(
         stderr,
-        "BackendBluez: failed to start notify on %s (%s: %s)\n",
+        "BackendBluez: failed to acquire notify on %s (%s: %s)\n",
         char_path.c_str(),
         e.getName().c_str(),
         e.getMessage().c_str()
     );
-    return false;
-  } catch (const std::exception &e) {
-    std::fprintf(
-        stderr,
-        "BackendBluez: unexpected error starting notify on %s: %s\n",
-        char_path.c_str(),
-        e.what()
-    );
-    return false;
-  }
-}
-
-void BackendBluez::stop_notify(const std::string &char_path) {
-  if (!ensure_client()) {
-    return;
-  }
-
-  try {
-    auto proxy = sdbus::createProxy(
-        *conn_, sdbus::ServiceName{ "org.bluez" }, sdbus::ObjectPath{ char_path }
-    );
-
-    proxy->callMethod("StopNotify").onInterface("org.bluez.GattCharacteristic1");
-    match_slots_.erase(char_path);
-  } catch (const sdbus::Error &e) {
-    std::fprintf(
-        stderr,
-        "BackendBluez: failed to stop notify on %s (%s: %s)\n",
-        char_path.c_str(),
-        e.getName().c_str(),
-        e.getMessage().c_str()
-    );
-  } catch (const std::exception &e) {
-    std::fprintf(
-        stderr,
-        "BackendBluez: unexpected error stopping notify on %s: %s\n",
-        char_path.c_str(),
-        e.what()
-    );
+    return { -1, 0 };
   }
 }
