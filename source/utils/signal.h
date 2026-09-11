@@ -2,6 +2,7 @@
 
 #include <functional>
 #include <list>
+#include <memory>
 #include <type_traits>
 #include <utility>
 #include <vector>
@@ -9,10 +10,17 @@
 namespace AelkeyUtil {
 
 template <typename Signature>
-class Signal;  // primary template
+class Signal;
 
 template <typename R, typename... Args>
 class Signal<R(Args...)> {
+ private:
+  struct SignalData {
+    std::list<std::function<R(Args...)>> callbacks;
+  };
+
+  std::shared_ptr<SignalData> data_ = std::make_shared<SignalData>();
+
  public:
   using Callback = std::function<R(Args...)>;
   using CallbackIt = typename std::list<Callback>::iterator;
@@ -21,21 +29,24 @@ class Signal<R(Args...)> {
    public:
     Connection() = default;
 
-    Connection(Signal *sig, CallbackIt it) : sig_(sig), it_(it) {}
+    Connection(std::shared_ptr<SignalData> data, CallbackIt it)
+        : data_(std::move(data)), it_(it), active_(true) {}
 
     Connection(const Connection &) = delete;
     Connection &operator=(const Connection &) = delete;
 
-    Connection(Connection &&other) noexcept : sig_(other.sig_), it_(other.it_) {
-      other.sig_ = nullptr;
+    Connection(Connection &&other) noexcept
+        : data_(std::move(other.data_)), it_(other.it_), active_(other.active_) {
+      other.active_ = false;
     }
 
     Connection &operator=(Connection &&other) noexcept {
       if (this != &other) {
         disconnect();
-        sig_ = other.sig_;
+        data_ = std::move(other.data_);
         it_ = other.it_;
-        other.sig_ = nullptr;
+        active_ = other.active_;
+        other.active_ = false;
       }
       return *this;
     }
@@ -45,20 +56,22 @@ class Signal<R(Args...)> {
     }
 
     void disconnect() {
-      if (sig_) {
-        sig_->unsubscribe(*this);
-        sig_ = nullptr;
+      if (active_ && data_) {
+        data_->callbacks.erase(it_);
+        active_ = false;
+        data_.reset();
       }
     }
 
     bool connected() const noexcept {
-      return sig_ != nullptr;
+      return active_;
     }
 
    private:
     friend class Signal;
-    Signal *sig_ = nullptr;
+    std::shared_ptr<SignalData> data_;
     CallbackIt it_{};
+    bool active_ = false;
   };
 
   Signal() = default;
@@ -68,38 +81,25 @@ class Signal<R(Args...)> {
   Signal &operator=(Signal &&) = default;
 
   Connection subscribe(Callback cb) {
-    auto it = callbacks_.insert(callbacks_.end(), std::move(cb));
-    return Connection(this, it);
-  }
-
-  void unsubscribe(Connection &c) {
-    if (!c.sig_ || c.sig_ != this) {
-      return;
-    }
-    callbacks_.erase(c.it_);
-    c.sig_ = nullptr;
+    auto it = data_->callbacks.insert(data_->callbacks.end(), std::move(cb));
+    return Connection(data_, it);
   }
 
   std::conditional_t<std::is_void_v<R>, void, std::vector<R>> emit(Args... args) {
     if constexpr (std::is_void_v<R>) {
-      // Call all callbacks, ignore results
-      for (auto it = callbacks_.begin(); it != callbacks_.end();) {
+      for (auto it = data_->callbacks.begin(); it != data_->callbacks.end();) {
         auto current = it++;
         std::invoke(*current, args...);
       }
     } else {
-      // Collect all results into a vector<R>
       std::vector<R> results;
-      for (auto it = callbacks_.begin(); it != callbacks_.end();) {
+      for (auto it = data_->callbacks.begin(); it != data_->callbacks.end();) {
         auto current = it++;
         results.push_back(std::invoke(*current, args...));
       }
       return results;
     }
   }
-
- private:
-  std::list<Callback> callbacks_;
 };
 
 }  // namespace AelkeyUtil
