@@ -55,9 +55,7 @@ sol::object loop_start(sol::this_state ts) {
       payload->dispatcher->handle_event(payload, events[i].events);
     }
 
-    for (auto &[type, dispatcher] : dispatcher_registry()) {
-      dispatcher->flush_deferred();
-    }
+    ManagerDeviceIn::instance().dispatcher_flush_deferred();
   }
 
   loop_cleanup();

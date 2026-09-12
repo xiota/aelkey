@@ -12,7 +12,6 @@
 
 #include "aelkey_state.h"
 #include "dispatcher.h"
-#include "dispatcher_registry.h"
 
 struct TickCb {
   bool is_function = false;      // true if using a sol::function

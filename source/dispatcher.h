@@ -4,7 +4,6 @@
 #include <map>
 #include <vector>
 
-#include "dispatcher_registry.h"
 #include "singleton.h"
 
 class AelkeyState;
@@ -49,11 +48,6 @@ class Dispatcher : public DispatcherBase, public Singleton<Derived> {
  public:
   bool lazy_init() override {
     return Singleton<Derived>::lazy_init();
-  }
-
-  static void register_self() {
-    auto &reg = dispatcher_registry();
-    reg[Derived::instance().type()] = &Derived::instance();
   }
 
  protected:

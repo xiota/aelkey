@@ -17,13 +17,13 @@
 
 ManagerDeviceIn::ManagerDeviceIn() {
   // Register dispatchers
-  DispatcherEvdev::register_self();
-  DispatcherGatt::register_self();
-  DispatcherHaptics::register_self();
-  DispatcherHidraw::register_self();
-  DispatcherLibUSB::register_self();
-  DispatcherUdev::register_self();
-  TickScheduler::register_self();
+  dispatchers_["evdev"] = &DispatcherEvdev::instance();
+  dispatchers_["gatt"] = &DispatcherGatt::instance();
+  dispatchers_["haptics"] = &DispatcherHaptics::instance();
+  dispatchers_["hidraw"] = &DispatcherHidraw::instance();
+  dispatchers_["libusb"] = &DispatcherLibUSB::instance();
+  dispatchers_["tick"] = &TickScheduler::instance();
+  dispatchers_["udev"] = &DispatcherUdev::instance();
 
   // Register backends
   backends_["audio"] = &DeviceInAudio::instance();
@@ -37,6 +37,22 @@ ManagerDeviceIn::ManagerDeviceIn() {
 DeviceIn *ManagerDeviceIn::backend_for_type(const std::string &type) {
   auto it = backends_.find(type);
   return (it != backends_.end()) ? it->second : nullptr;
+}
+
+bool ManagerDeviceIn::init_dispatcher_for_type(const std::string &type) {
+  auto it = dispatchers_.find(type);
+  DispatcherBase *dispatcher = (it != dispatchers_.end()) ? it->second : nullptr;
+
+  if (dispatcher != nullptr) {
+    return dispatcher->lazy_init();
+  }
+  return true;
+}
+
+void ManagerDeviceIn::dispatcher_flush_deferred() {
+  for (auto &[type, dispatcher] : dispatchers_) {
+    dispatcher->flush_deferred();
+  }
 }
 
 bool ManagerDeviceIn::match(InputDecl &decl, std::string &devnode_out) {

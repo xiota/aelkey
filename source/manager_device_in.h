@@ -6,6 +6,7 @@
 
 #include "device_declarations.h"
 #include "device_in.h"
+#include "dispatcher.h"
 #include "singleton.h"
 #include "utils/signal.h"
 
@@ -24,6 +25,9 @@ class ManagerDeviceIn : public Singleton<ManagerDeviceIn> {
  public:
   DeviceIn *backend_for_type(const std::string &type);
 
+  bool init_dispatcher_for_type(const std::string &type);
+  void dispatcher_flush_deferred();
+
   bool match(InputDecl &decl, std::string &devnode_out);
   bool attach(const std::string &devnode, InputDecl &decl);
   std::optional<InputDecl> detach(const std::string &dev_id);
@@ -33,4 +37,5 @@ class ManagerDeviceIn : public Singleton<ManagerDeviceIn> {
 
  private:
   std::map<std::string, DeviceIn *> backends_;
+  std::map<std::string, DispatcherBase *> dispatchers_;
 };

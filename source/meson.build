@@ -34,7 +34,6 @@ src_files = files(
   'device_parser.cc',
   'dispatcher.cc',
   'dispatcher_haptics.cc',
-  'dispatcher_registry.cc',
   'dispatcher_udev.cc',
   'manager_device_in.cc',
   'manager_device_out.cc',

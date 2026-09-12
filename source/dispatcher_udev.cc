@@ -10,7 +10,6 @@
 #include "aelkey_state.h"
 #include "device_declarations.h"
 #include "device_in_libusb.h"
-#include "dispatcher_registry.h"
 #include "manager_device_in.h"
 
 DispatcherUdev::~DispatcherUdev() {
