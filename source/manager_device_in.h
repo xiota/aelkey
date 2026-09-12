@@ -7,6 +7,7 @@
 #include "device_declarations.h"
 #include "device_in.h"
 #include "dispatcher.h"
+#include "dispatcher_next.h"
 #include "singleton.h"
 #include "utils/signal.h"
 

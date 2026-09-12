@@ -8,6 +8,7 @@
 #include "device_in_libusb.h"
 #include "device_in_midi.h"
 #include "dispatcher_evdev.h"
+#include "dispatcher_event.h"
 #include "dispatcher_gatt.h"
 #include "dispatcher_haptics.h"
 #include "dispatcher_hidraw.h"
@@ -18,6 +19,7 @@
 ManagerDeviceIn::ManagerDeviceIn() {
   // Register dispatchers
   dispatchers_["evdev"] = &DispatcherEvdev::instance();
+  dispatchers_["event"] = &DispatcherEvent::instance();
   dispatchers_["gatt"] = &DispatcherGatt::instance();
   dispatchers_["haptics"] = &DispatcherHaptics::instance();
   dispatchers_["hidraw"] = &DispatcherHidraw::instance();
