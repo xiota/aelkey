@@ -6,13 +6,13 @@
 #include <sol/sol.hpp>
 
 #include "aelkey_state.h"
+#include "backend_udev.h"
 #include "device_declarations.h"
-#include "dispatcher_udev.h"
 #include "manager_device_in.h"
 
 RouterWatchList::RouterWatchList() {
   tok_udev_event_ =
-      DispatcherUdev::instance().sig_udev_event_.subscribe([this](const UdevEvent &ev) {
+      BackendUdev::instance().sig_udev_event_.subscribe([this](const UdevEvent &ev) {
         if (ev.action == "remove") {
           auto it = active_map_.find(ev.devnode);
           if (it != active_map_.end()) {

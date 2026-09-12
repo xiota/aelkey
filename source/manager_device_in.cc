@@ -9,7 +9,6 @@
 #include "device_in_midi.h"
 #include "dispatcher_event.h"
 #include "dispatcher_haptics.h"
-#include "dispatcher_udev.h"
 #include "tick_scheduler.h"
 
 ManagerDeviceIn::ManagerDeviceIn() {
@@ -17,7 +16,6 @@ ManagerDeviceIn::ManagerDeviceIn() {
   dispatchers_["event"] = &DispatcherEvent::instance();
   dispatchers_["haptics"] = &DispatcherHaptics::instance();
   dispatchers_["tick"] = &TickScheduler::instance();
-  dispatchers_["udev"] = &DispatcherUdev::instance();
 
   // Register backends
   backends_["audio"] = &DeviceInAudio::instance();

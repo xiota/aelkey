@@ -1,18 +1,16 @@
-#include "dispatcher_udev.h"
+#include "backend_udev.h"
 
 #include <cstring>
 #include <iostream>
-#include <stdexcept>
 
-#include <sol/sol.hpp>
-#include <sys/epoll.h>
+#include <unistd.h>
 
-#include "aelkey_state.h"
-#include "device_declarations.h"
-#include "device_in_libusb.h"
-#include "manager_device_in.h"
+#include "dispatcher_vulgate.h"
 
-DispatcherUdev::~DispatcherUdev() {
+BackendUdev::~BackendUdev() {
+  if (mon_fd_ >= 0) {
+    DispatcherVulgate::instance().unregister_device_fd(mon_fd_);
+  }
   if (mon_) {
     udev_monitor_unref(mon_);
     mon_ = nullptr;
@@ -24,11 +22,7 @@ DispatcherUdev::~DispatcherUdev() {
   mon_fd_ = -1;
 }
 
-const char *DispatcherUdev::type() const {
-  return "udev";
-}
-
-bool DispatcherUdev::on_init() {
+bool BackendUdev::on_init() {
   if (udev_ctx_) {
     return true;
   }
@@ -57,12 +51,21 @@ bool DispatcherUdev::on_init() {
     return false;
   }
 
-  register_fd(mon_fd_, EPOLLIN);
+  DispatcherCb cb;
+  cb.native = [this]() { handle_udev_event(mon_fd_); };
+  cb.cleanup = [](int fd_to_clean) {
+    // Mon fd cleanup is handled in destructor via unregister_device_fd
+  };
+
+  DispatcherVulgate::instance().register_device_fd(
+      mon_fd_, EPOLLIN | EPOLLHUP | EPOLLERR, std::move(cb), "udev_monitor"
+  );
+
   return true;
 }
 
-void DispatcherUdev::handle_event(EpollPayload *, uint32_t events) {
-  if (!(events & EPOLLIN) || !mon_) {
+void BackendUdev::handle_udev_event(int fd) {
+  if (!mon_) {
     return;
   }
 
@@ -73,9 +76,9 @@ void DispatcherUdev::handle_event(EpollPayload *, uint32_t events) {
 
   const char *action = udev_device_get_action(dev);
   if (action) {
-    if (strcmp(action, "add") == 0) {
+    if (std::strcmp(action, "add") == 0) {
       handle_udev_add(dev);
-    } else if (strcmp(action, "remove") == 0) {
+    } else if (std::strcmp(action, "remove") == 0) {
       handle_udev_remove(dev);
     }
   }
@@ -83,10 +86,14 @@ void DispatcherUdev::handle_event(EpollPayload *, uint32_t events) {
   udev_device_unref(dev);
 }
 
-std::string DispatcherUdev::enumerate_and_match(
+std::string BackendUdev::enumerate_and_match(
     const char *subsystem,
     const std::function<std::string(struct udev_device *)> &matcher
 ) {
+  if (!lazy_init() || !udev_ctx_) {
+    return {};
+  }
+
   struct udev_enumerate *enumerate = udev_enumerate_new(udev_ctx_);
   if (!enumerate) {
     return {};
@@ -118,11 +125,11 @@ std::string DispatcherUdev::enumerate_and_match(
   return {};
 }
 
-struct udev *DispatcherUdev::get_udev() const {
+struct udev *BackendUdev::get_udev() const {
   return udev_ctx_;
 }
 
-void DispatcherUdev::handle_udev_add(struct udev_device *dev) {
+void BackendUdev::handle_udev_add(struct udev_device *dev) {
   const char *subsystem = udev_device_get_subsystem(dev);
   const char *node = udev_device_get_devnode(dev);
   const char *syspath = udev_device_get_syspath(dev);
@@ -137,8 +144,7 @@ void DispatcherUdev::handle_udev_add(struct udev_device *dev) {
   ev.devnode = node ? node : "";
   ev.syspath = syspath;
 
-  // USB-specific metadata
-  if (strcmp(subsystem, "usb") == 0) {
+  if (std::strcmp(subsystem, "usb") == 0) {
     const char *devtype = udev_device_get_devtype(dev);
     if (devtype) {
       ev.devtype = devtype;
@@ -166,7 +172,7 @@ void DispatcherUdev::handle_udev_add(struct udev_device *dev) {
   sig_udev_event_.emit(ev);
 }
 
-void DispatcherUdev::handle_udev_remove(struct udev_device *dev) {
+void BackendUdev::handle_udev_remove(struct udev_device *dev) {
   const char *subsystem = udev_device_get_subsystem(dev);
   const char *node = udev_device_get_devnode(dev);
   const char *syspath = udev_device_get_syspath(dev);
@@ -181,8 +187,7 @@ void DispatcherUdev::handle_udev_remove(struct udev_device *dev) {
   ev.devnode = node ? node : "";
   ev.syspath = syspath;
 
-  // USB-specific metadata
-  if (strcmp(subsystem, "usb") == 0) {
+  if (std::strcmp(subsystem, "usb") == 0) {
     const char *devtype = udev_device_get_devtype(dev);
     if (devtype) {
       ev.devtype = devtype;

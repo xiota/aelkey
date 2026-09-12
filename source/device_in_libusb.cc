@@ -11,8 +11,8 @@
 #include <poll.h>
 
 #include "aelkey_state.h"
+#include "backend_udev.h"
 #include "device_in.h"
-#include "dispatcher_udev.h"
 #include "dispatcher_vulgate.h"
 #include "manager_device_in.h"
 #include "singleton.h"
@@ -41,7 +41,7 @@ static bool matches_decl(const InputDecl &decl, const libusb_device_descriptor &
 
 DeviceInLibUSB::DeviceInLibUSB() {
   tok_udev_event_ =
-      DispatcherUdev::instance().sig_udev_event_.subscribe([this](const UdevEvent &ev) {
+      BackendUdev::instance().sig_udev_event_.subscribe([this](const UdevEvent &ev) {
         if (ev.subsystem != "usb") {
           return;
         }

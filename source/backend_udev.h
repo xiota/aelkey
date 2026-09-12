@@ -5,11 +5,8 @@
 
 #include <libudev.h>
 
-#include "dispatcher.h"
 #include "singleton.h"
 #include "utils/signal.h"
-
-struct InputDecl;
 
 struct UdevEvent {
   std::string action;
@@ -25,22 +22,19 @@ struct UdevEvent {
   std::string devnum;
 };
 
-class DispatcherUdev : public Dispatcher<DispatcherUdev> {
-  friend class Singleton<DispatcherUdev>;
-  friend class Dispatcher<DispatcherUdev>;
+class BackendUdev : public Singleton<BackendUdev> {
+  friend class Singleton<BackendUdev>;
 
  protected:
-  DispatcherUdev() = default;
-  ~DispatcherUdev();
+  BackendUdev() = default;
+  ~BackendUdev();
 
   bool on_init() override;
 
   bool auto_init_ = true;
 
  public:
-  const char *type() const override;
-
-  void handle_event(EpollPayload *, uint32_t events) override;
+  void handle_udev_event(int fd);
 
   std::string enumerate_and_match(
       const char *subsystem,
@@ -48,6 +42,10 @@ class DispatcherUdev : public Dispatcher<DispatcherUdev> {
   );
 
   struct udev *get_udev() const;
+
+  int get_monitor_fd() const {
+    return mon_fd_;
+  }
 
  public:
   AelkeyUtil::Signal<void(const UdevEvent &)> sig_udev_event_;
@@ -61,5 +59,3 @@ class DispatcherUdev : public Dispatcher<DispatcherUdev> {
   struct udev_monitor *mon_ = nullptr;
   int mon_fd_ = -1;
 };
-
-template class Dispatcher<DispatcherUdev>;

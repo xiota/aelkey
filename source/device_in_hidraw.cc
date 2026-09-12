@@ -7,7 +7,7 @@
 #include <unistd.h>
 
 #include "aelkey_state.h"
-#include "dispatcher_udev.h"
+#include "backend_udev.h"
 #include "dispatcher_vulgate.h"
 #include "manager_device_in.h"
 #include "utils/regex_match.h"
@@ -15,7 +15,7 @@
 
 DeviceInHidraw::DeviceInHidraw() {
   tok_udev_event_ =
-      DispatcherUdev::instance().sig_udev_event_.subscribe([this](const UdevEvent &ev) {
+      BackendUdev::instance().sig_udev_event_.subscribe([this](const UdevEvent &ev) {
         if (ev.subsystem != "hidraw") {
           return;
         }
@@ -74,7 +74,7 @@ bool DeviceInHidraw::match(InputDecl &decl, std::string &devnode_out) {
     return false;
   }
 
-  std::string result = DispatcherUdev::instance().enumerate_and_match(
+  std::string result = BackendUdev::instance().enumerate_and_match(
       "hidraw", [&](struct udev_device *dev) -> std::string {
         const char *devnode = udev_device_get_devnode(dev);
         if (!devnode) {
@@ -232,7 +232,7 @@ bool DeviceInHidraw::detach(const std::string &id) {
 }
 
 int DeviceInHidraw::get_interface_num(const std::string &devnode) {
-  struct udev *udev = DispatcherUdev::instance().get_udev();
+  struct udev *udev = BackendUdev::instance().get_udev();
 
   struct udev_device *dev = udev_device_new_from_subsystem_sysname(
       udev, "hidraw", devnode.substr(devnode.find_last_of('/') + 1).c_str()

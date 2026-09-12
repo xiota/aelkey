@@ -6,8 +6,8 @@
 #include <unistd.h>
 
 #include "aelkey_state.h"
+#include "backend_udev.h"
 #include "dispatcher_haptics.h"
-#include "dispatcher_udev.h"
 #include "dispatcher_vulgate.h"
 #include "manager_device_in.h"
 #include "utils/regex_match.h"
@@ -15,7 +15,7 @@
 
 DeviceInEvdev::DeviceInEvdev() {
   tok_udev_event_ =
-      DispatcherUdev::instance().sig_udev_event_.subscribe([this](const UdevEvent &ev) {
+      BackendUdev::instance().sig_udev_event_.subscribe([this](const UdevEvent &ev) {
         if (ev.subsystem != "input") {
           return;
         }
@@ -56,7 +56,7 @@ bool DeviceInEvdev::match(InputDecl &decl, std::string &devnode_out) {
     return false;
   }
 
-  std::string result = DispatcherUdev::instance().enumerate_and_match(
+  std::string result = BackendUdev::instance().enumerate_and_match(
       "input", [&](struct udev_device *dev) -> std::string {
         const char *devnode = udev_device_get_devnode(dev);
         if (!devnode) {
