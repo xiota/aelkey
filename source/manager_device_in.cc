@@ -8,7 +8,6 @@
 #include "device_in_libusb.h"
 #include "device_in_midi.h"
 #include "dispatcher_event.h"
-#include "dispatcher_gatt.h"
 #include "dispatcher_haptics.h"
 #include "dispatcher_udev.h"
 #include "tick_scheduler.h"
@@ -16,7 +15,6 @@
 ManagerDeviceIn::ManagerDeviceIn() {
   // Register dispatchers
   dispatchers_["event"] = &DispatcherEvent::instance();
-  dispatchers_["gatt"] = &DispatcherGatt::instance();
   dispatchers_["haptics"] = &DispatcherHaptics::instance();
   dispatchers_["tick"] = &TickScheduler::instance();
   dispatchers_["udev"] = &DispatcherUdev::instance();

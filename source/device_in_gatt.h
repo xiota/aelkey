@@ -79,6 +79,9 @@ class DeviceInGatt : public DeviceIn, public Singleton<DeviceInGatt> {
   }
 
  private:
+  void handle_gatt_event(int fd, const std::string &id, const std::string &path, uint16_t mtu);
+
   // dev_id -> gatt_path, /org/bluez/hci0/dev_XX_XX_XX_XX_XX_XX
   std::map<std::string, std::string> gatt_paths_;
+  std::map<int, std::string> fd_to_id_;
 };

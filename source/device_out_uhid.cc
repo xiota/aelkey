@@ -88,7 +88,9 @@ bool DeviceOutUhid::create(const OutputDecl &decl) {
     struct uhid_event destroy_ev;
     std::memset(&destroy_ev, 0, sizeof(destroy_ev));
     destroy_ev.type = UHID_DESTROY;
-    write(fd_to_clean, &destroy_ev, sizeof(destroy_ev));
+    if (write(fd_to_clean, &destroy_ev, sizeof(destroy_ev)) < 0) {
+      // silence unused variable warning
+    }
     close(fd_to_clean);
   };
 
