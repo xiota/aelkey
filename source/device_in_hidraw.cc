@@ -7,8 +7,8 @@
 #include <unistd.h>
 
 #include "aelkey_state.h"
-#include "dispatcher_hidraw.h"
 #include "dispatcher_udev.h"
+#include "dispatcher_vulgate.h"
 #include "manager_device_in.h"
 #include "utils/regex_match.h"
 #include "utils/signal.h"
@@ -188,23 +188,44 @@ bool DeviceInHidraw::match(InputDecl &decl, std::string &devnode_out) {
 }
 
 bool DeviceInHidraw::attach(const std::string &devnode, InputDecl &decl) {
-  int fd = DispatcherHidraw::instance().open_device(devnode, decl);
+  int fd = open(devnode.c_str(), O_RDWR | O_NONBLOCK);
   if (fd < 0) {
+    perror("open hidraw");
     return false;
   }
 
+  if (decl.grab) {
+    int flags = fcntl(fd, F_GETFL, 0);
+    if (flags != -1) {
+      fcntl(fd, F_SETFL, flags & ~O_NONBLOCK);
+    }
+  }
+
+  DispatcherCb cb;
+  cb.native = [this, fd, decl]() { handle_hidraw_event(fd, decl); };
+  cb.cleanup = [](int fd) { close(fd); };
+
+  DispatcherVulgate::instance().register_device_fd(
+      fd, EPOLLIN | EPOLLHUP | EPOLLERR, std::move(cb), decl.id
+  );
+
+  devices_[decl.id] = fd;
   decl.devnode = devnode;
   decl.fd = fd;
   return true;
 }
 
 bool DeviceInHidraw::detach(const std::string &id) {
-  DispatcherHidraw::instance().remove_device(id);
+  auto it = devices_.find(id);
+  if (it != devices_.end()) {
+    DispatcherVulgate::instance().unregister_device_fd(it->second);
+    devices_.erase(it);
+  }
 
   auto &state = AelkeyState::instance();
-  auto it = state.input_map.find(id);
-  if (it != state.input_map.end()) {
-    auto decl_copy = it->second;
+  auto it2 = state.input_map.find(id);
+  if (it2 != state.input_map.end()) {
+    auto decl_copy = it2->second;
   }
 
   return true;
@@ -230,4 +251,43 @@ int DeviceInHidraw::get_interface_num(const std::string &devnode) {
   udev_device_unref(dev);
 
   return iface;
+}
+
+void DeviceInHidraw::handle_hidraw_event(int fd, const InputDecl &decl) {
+  uint8_t buf[4096];
+  ssize_t r = read(fd, buf, sizeof(buf));
+
+  if (decl.on_event.empty()) {
+    return;
+  }
+
+  auto &state = AelkeyState::instance();
+  sol::state_view lua(state.lua_vm);
+
+  sol::object obj = lua[decl.on_event];
+  if (!obj.is<sol::function>()) {
+    return;
+  }
+
+  sol::function cb = obj.as<sol::function>();
+
+  sol::table tbl = lua.create_table();
+  tbl["device"] = decl.id;
+
+  if (r > 0) {
+    tbl["data"] = std::string_view(reinterpret_cast<const char *>(buf), r);
+    tbl["size"] = static_cast<int>(r);
+    tbl["status"] = "ok";
+  } else if (r == 0) {
+    tbl["status"] = "disconnect";
+  } else {
+    tbl["status"] = strerror(errno);
+  }
+
+  sol::protected_function pf = cb;
+  sol::protected_function_result res = pf(tbl);
+  if (!res.valid()) {
+    sol::error err = res;
+    fprintf(stderr, "Lua hidraw callback error: %s\n", err.what());
+  }
 }

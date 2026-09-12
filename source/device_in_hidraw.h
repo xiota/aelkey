@@ -1,5 +1,6 @@
 #pragma once
 
+#include <map>
 #include <optional>
 #include <string>
 
@@ -27,6 +28,8 @@ class DeviceInHidraw : public DeviceIn, public Singleton<DeviceInHidraw> {
 
  private:
   int get_interface_num(const std::string &devnode);
+  void handle_hidraw_event(int fd, const InputDecl &decl);
 
+  std::map<std::string, int> devices_;  // maps id -> fd
   AelkeyUtil::Signal<void(const UdevEvent &)>::Connection tok_udev_event_;
 };

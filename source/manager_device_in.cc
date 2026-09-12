@@ -4,14 +4,13 @@
 #include "device_in_audio.h"
 #include "device_in_evdev.h"
 #include "device_in_gatt.h"
-#include "device_in_hidraw.h"
 #include "device_in_libusb.h"
 #include "device_in_midi.h"
 #include "dispatcher_evdev.h"
 #include "dispatcher_event.h"
 #include "dispatcher_gatt.h"
 #include "dispatcher_haptics.h"
-#include "dispatcher_hidraw.h"
+#include "device_in_hidraw.h"
 #include "dispatcher_udev.h"
 #include "tick_scheduler.h"
 
@@ -21,7 +20,6 @@ ManagerDeviceIn::ManagerDeviceIn() {
   dispatchers_["event"] = &DispatcherEvent::instance();
   dispatchers_["gatt"] = &DispatcherGatt::instance();
   dispatchers_["haptics"] = &DispatcherHaptics::instance();
-  dispatchers_["hidraw"] = &DispatcherHidraw::instance();
   dispatchers_["tick"] = &TickScheduler::instance();
   dispatchers_["udev"] = &DispatcherUdev::instance();
 
