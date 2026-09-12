@@ -12,7 +12,6 @@
 #include "dispatcher_gatt.h"
 #include "dispatcher_haptics.h"
 #include "dispatcher_hidraw.h"
-#include "dispatcher_libusb.h"
 #include "dispatcher_udev.h"
 #include "tick_scheduler.h"
 
@@ -23,7 +22,6 @@ ManagerDeviceIn::ManagerDeviceIn() {
   dispatchers_["gatt"] = &DispatcherGatt::instance();
   dispatchers_["haptics"] = &DispatcherHaptics::instance();
   dispatchers_["hidraw"] = &DispatcherHidraw::instance();
-  dispatchers_["libusb"] = &DispatcherLibUSB::instance();
   dispatchers_["tick"] = &TickScheduler::instance();
   dispatchers_["udev"] = &DispatcherUdev::instance();
 

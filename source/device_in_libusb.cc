@@ -8,10 +8,12 @@
 
 #include <libudev.h>
 #include <libusb-1.0/libusb.h>
+#include <poll.h>
 
 #include "aelkey_state.h"
 #include "device_in.h"
 #include "dispatcher_udev.h"
+#include "dispatcher_vulgate.h"
 #include "manager_device_in.h"
 #include "singleton.h"
 #include "utils/signal.h"
@@ -221,10 +223,54 @@ bool DeviceInLibUSB::on_init() {
   }
 
   if (libusb_init(&libusb_) == 0) {
+    libusb_set_pollfd_notifiers(
+        libusb_,
+        [](int fd, short events, void *user_data) {
+          static_cast<DeviceInLibUSB *>(user_data)->on_add_pollfd(fd, events);
+        },
+        [](int fd, void *user_data) {
+          static_cast<DeviceInLibUSB *>(user_data)->on_remove_pollfd(fd);
+        },
+        this
+    );
+
+    // Fetch and register any pre-existing libusb pollfds
+    const libusb_pollfd **pollfds = libusb_get_pollfds(libusb_);
+    if (pollfds) {
+      for (const libusb_pollfd **p = pollfds; *p != nullptr; ++p) {
+        on_add_pollfd((*p)->fd, (*p)->events);
+      }
+      libusb_free_pollfds(pollfds);
+    }
+
     return true;
   }
 
   return false;
+}
+
+void DeviceInLibUSB::on_add_pollfd(int fd, short events) {
+  uint32_t evmask = 0;
+  if (events & POLLIN) {
+    evmask |= EPOLLIN;
+  }
+  if (events & POLLOUT) {
+    evmask |= EPOLLOUT;
+  }
+
+  DispatcherCb cb;
+  cb.native = [this]() {
+    timeval tv{ 0, 0 };
+    libusb_handle_events_timeout_completed(libusb_, &tv, nullptr);
+  };
+
+  DispatcherVulgate::instance().register_device_fd(
+      fd, evmask | EPOLLHUP | EPOLLERR, std::move(cb), "libusb_poll"
+  );
+}
+
+void DeviceInLibUSB::on_remove_pollfd(int fd) {
+  DispatcherVulgate::instance().unregister_device_fd(fd);
 }
 
 int DeviceInLibUSB::claim_interface(libusb_device_handle *devh, int iface) {

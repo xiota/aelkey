@@ -36,6 +36,9 @@ class DeviceInLibUSB : public DeviceIn, public Singleton<DeviceInLibUSB> {
   libusb_context *context() const;
   libusb_device_handle *get_handle(const std::string &id) const;
 
+  void on_add_pollfd(int fd, short events);
+  void on_remove_pollfd(int fd);
+
  private:
   libusb_context *libusb_ = nullptr;
   std::map<std::string, libusb_device_handle *> devices_;
