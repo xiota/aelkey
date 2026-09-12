@@ -45,7 +45,7 @@ class DeviceInMidi : public DeviceIn, public Singleton<DeviceInMidi> {
   std::map<std::string, jack_port_t *> input_ports_;
   std::map<std::string, InputDecl> input_decls_;
 
-  int tick_fd_ = -1;
+  int dispatch_fd_ = -1;
 
   // key = callback name
   std::map<std::string, std::vector<MidiEvent>> batches_;

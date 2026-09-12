@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "backend_jack.h"
+#include "dispatcher_event.h"
 #include "dispatcher_next.h"
 #include "tick_scheduler.h"
 #include "utils/regex_match.h"
@@ -14,11 +15,6 @@
 #include "utils/time.h"
 
 DeviceInAudio::~DeviceInAudio() {
-  if (tick_fd_ >= 0) {
-    TickScheduler::instance().unregister_fd(tick_fd_);
-    tick_fd_ = -1;
-  }
-
   auto &jack = BackendJack::instance();
   for (auto &kv : input_ports_) {
     jack.destroy_port(kv.second);
@@ -92,14 +88,14 @@ bool DeviceInAudio::attach(const std::string &devnode, InputDecl &decl) {
   decl.devnode = devnode;  // unused
   decl.fd = -1;
 
-  if (tick_fd_ < 0) {
+  if (dispatch_fd_ < 0) {
     DispatcherCb cb;
     cb.native = [this]() { this->pump_messages(); };
     cb.oneshot = false;
 
-    tick_fd_ = TickScheduler::instance().schedule(10000, cb);
-    if (tick_fd_ < 0) {
-      std::fprintf(stderr, "AUDIO: failed to schedule tick\n");
+    dispatch_fd_ = DispatcherEvent::instance().create(cb);
+    if (dispatch_fd_ < 0) {
+      std::fprintf(stderr, "AUDIO: failed to create event dispatcher\n");
     }
   }
 
@@ -120,9 +116,9 @@ bool DeviceInAudio::detach(const std::string &id) {
   jack.destroy_port(it->second);
   input_ports_.erase(it);
 
-  if (input_ports_.empty() && tick_fd_ >= 0) {
-    TickScheduler::instance().unregister_fd(tick_fd_);
-    tick_fd_ = -1;
+  if (input_ports_.empty() && dispatch_fd_ >= 0) {
+    DispatcherEvent::instance().unregister_fd(dispatch_fd_);
+    dispatch_fd_ = -1;
   }
 
   auto it2 = input_decls_.find(id);
@@ -157,8 +153,8 @@ void DeviceInAudio::process(jack_nframes_t nframes) {
     queued = true;
   }
 
-  if (queued && tick_fd_ >= 0) {
-    TickScheduler::instance().trigger(tick_fd_);
+  if (queued && dispatch_fd_ >= 0) {
+    DispatcherEvent::instance().trigger(dispatch_fd_);
   }
 }
 
