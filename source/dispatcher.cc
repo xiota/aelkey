@@ -18,7 +18,10 @@ EpollPayload *DispatcherBase::get_payload(int fd) const {
 void DispatcherBase::register_fd(int fd, uint32_t events) {
   auto &state = AelkeyState::instance();
 
-  EpollPayload payload{ this, fd };
+  EpollPayload payload;
+  payload.dispatcher = this;
+  payload.fd = fd;
+
   auto [it, inserted] = pollfds_.emplace(fd, payload);
 
   struct epoll_event ev{};

@@ -7,13 +7,7 @@
 #include "singleton.h"
 
 class AelkeyState;
-class DispatcherBase;
-
-struct EpollPayload {
-  DispatcherBase *dispatcher = nullptr;
-  int fd = -1;
-  bool dead = false;
-};
+class EpollPayload;
 
 // Polymorphic base class for all dispatchers
 class DispatcherBase {
@@ -52,4 +46,14 @@ class Dispatcher : public DispatcherBase, public Singleton<Derived> {
 
  protected:
   Dispatcher() = default;
+};
+
+struct EpollPayload {
+  DispatcherBase *dispatcher = nullptr;
+  int fd = -1;
+  bool dead = false;
+
+  void dispatch(uint32_t events) {
+    dispatcher->handle_event(this, events);
+  }
 };

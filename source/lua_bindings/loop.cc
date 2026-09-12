@@ -49,10 +49,9 @@ sol::object loop_start(sol::this_state ts) {
 
     for (int i = 0; i < n; ++i) {
       auto *payload = static_cast<EpollPayload *>(events[i].data.ptr);
-      if (payload->dead) {
-        continue;
+      if (!payload->dead) {
+        payload->dispatch(events[i].events);
       }
-      payload->dispatcher->handle_event(payload, events[i].events);
     }
 
     ManagerDeviceIn::instance().dispatcher_flush_deferred();
