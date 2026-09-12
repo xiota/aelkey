@@ -8,13 +8,11 @@
 #include "device_in_libusb.h"
 #include "device_in_midi.h"
 #include "dispatcher_event.h"
-#include "dispatcher_haptics.h"
 #include "tick_scheduler.h"
 
 ManagerDeviceIn::ManagerDeviceIn() {
   // Register dispatchers
   dispatchers_["event"] = &DispatcherEvent::instance();
-  dispatchers_["haptics"] = &DispatcherHaptics::instance();
   dispatchers_["tick"] = &TickScheduler::instance();
 
   // Register backends

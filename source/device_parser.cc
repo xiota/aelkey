@@ -16,7 +16,6 @@
 #include <sys/ioctl.h>
 
 #include "aelkey_state.h"
-#include "dispatcher_haptics.h"
 
 namespace DeviceParser {
 

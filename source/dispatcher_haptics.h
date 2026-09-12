@@ -9,7 +9,8 @@
 
 #include "aelkey_state.h"
 #include "device_declarations.h"
-#include "dispatcher.h"
+#include "dispatcher_vulgate.h"
+#include "singleton.h"
 
 static constexpr const char *HAPTICS_SOURCE_CUSTOM = "_aelkey_haptics_custom_";
 static constexpr const char *HAPTICS_SOURCE_ONESHOT = "_aelkey_haptics_oneshot_";
@@ -32,9 +33,8 @@ struct HapticsSinkCtx {
   std::map<std::pair<std::string, int>, int> slots;
 };
 
-class DispatcherHaptics : public Dispatcher<DispatcherHaptics> {
+class DispatcherHaptics : public Singleton<DispatcherHaptics> {
   friend class Singleton<DispatcherHaptics>;
-  friend class Dispatcher<DispatcherHaptics>;
 
  protected:
   DispatcherHaptics() = default;
@@ -43,10 +43,6 @@ class DispatcherHaptics : public Dispatcher<DispatcherHaptics> {
   }
 
  public:
-  const char *type() const override {
-    return "haptics";
-  }
-
   // High-level operations (Lua-free)
   int create_persistent_effect(
       const std::string &source_id,
@@ -104,9 +100,6 @@ class DispatcherHaptics : public Dispatcher<DispatcherHaptics> {
   static ff_effect lua_to_ff_effect(sol::table t);
   static sol::table haptics_effect_to_lua(sol::state_view lua, const ff_effect &eff);
 
-  // EPOLL callback
-  void handle_event(EpollPayload *payload, uint32_t events) override;
-
  private:
   // Helpers
   void propagate_erase_to_sinks(const std::string &source_id, int virt_id);
@@ -119,10 +112,9 @@ class DispatcherHaptics : public Dispatcher<DispatcherHaptics> {
   bool handle_erase(HapticsSourceCtx &hctx, int request_id);
   void handle_play(sol::this_state ts, HapticsSourceCtx &src, int virt_id, int magnitude);
   void handle_stop(sol::this_state ts, HapticsSourceCtx &src, int virt_id);
+  void handle_source_event(HapticsSourceCtx &src);
 
  private:
   std::map<std::string, HapticsSourceCtx> sources_;
   std::map<std::string, HapticsSinkCtx> sinks_;
 };
-
-template class Dispatcher<DispatcherHaptics>;

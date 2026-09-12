@@ -12,7 +12,7 @@
 void DispatcherHaptics::cleanup_sources() {
   for (auto &[id, src] : sources_) {
     if (src.fd >= 0) {
-      unregister_fd(src.fd);
+      DispatcherVulgate::instance().unregister_device_fd(src.fd);
       src.fd = -1;
     }
   }
@@ -34,9 +34,15 @@ void DispatcherHaptics::register_source(
   ctx.callback = callback;
   sources_[id] = std::move(ctx);
 
-  // register epoll only for real fd
   if (uinput_fd >= 0) {
-    register_fd(uinput_fd, EPOLLIN);
+    DispatcherCb cb;
+    cb.native = [this, id]() {
+      auto it = sources_.find(id);
+      if (it != sources_.end()) {
+        handle_source_event(it->second);
+      }
+    };
+    DispatcherVulgate::instance().register_device_fd(uinput_fd, EPOLLIN, std::move(cb), id);
   }
 }
 
@@ -266,7 +272,6 @@ ff_effect DispatcherHaptics::lua_to_ff_effect(sol::table t) {
   } else if (type == "constant") {
     eff.type = FF_CONSTANT;
     eff.u.constant.level = t.get_or("level", 0);
-
     eff.u.constant.envelope.attack_length = t.get_or("attack_length", 0);
     eff.u.constant.envelope.attack_level = t.get_or("attack_level", 0);
     eff.u.constant.envelope.fade_length = t.get_or("fade_length", 0);
@@ -489,23 +494,8 @@ void DispatcherHaptics::handle_stop(sol::this_state ts, HapticsSourceCtx &src, i
   }
 }
 
-void DispatcherHaptics::handle_event(EpollPayload *payload, uint32_t events) {
-  if (!(events & EPOLLIN)) {
-    return;
-  }
-
-  int fd = payload->fd;
-
-  HapticsSourceCtx *src = nullptr;
-  for (auto &[id, ctx] : sources_) {
-    if (ctx.fd == fd) {
-      src = &ctx;
-      break;
-    }
-  }
-  if (!src) {
-    return;
-  }
+void DispatcherHaptics::handle_source_event(HapticsSourceCtx &src) {
+  int fd = src.fd;
 
   struct input_event ev{};
   ssize_t n = read(fd, &ev, sizeof(ev));
@@ -524,18 +514,18 @@ void DispatcherHaptics::handle_event(EpollPayload *payload, uint32_t events) {
 
   if (ev.type == EV_UINPUT) {
     if (ev.code == UI_FF_UPLOAD) {
-      handle_upload(*src, ev.value);
+      handle_upload(src, ev.value);
     } else if (ev.code == UI_FF_ERASE) {
-      handle_erase(*src, ev.value);
+      handle_erase(src, ev.value);
     }
   } else if (ev.type == EV_FF) {
     int virt_id = ev.code;
     int magnitude = ev.value;
 
     if (magnitude > 0) {
-      handle_play(ts, *src, virt_id, magnitude);
+      handle_play(ts, src, virt_id, magnitude);
     } else {
-      handle_stop(ts, *src, virt_id);
+      handle_stop(ts, src, virt_id);
     }
   }
 }
