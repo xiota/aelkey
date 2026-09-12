@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "backend_jack.h"
+#include "dispatcher_next.h"
 #include "tick_scheduler.h"
 #include "utils/regex_match.h"
 #include "utils/signal.h"
@@ -92,7 +93,7 @@ bool DeviceInMidi::attach(const std::string &devnode, InputDecl &decl) {
   decl.fd = -1;
 
   if (tick_fd_ < 0) {
-    TickCb cb;
+    DispatcherCb cb;
     cb.native = [this]() { this->pump_messages(); };
     cb.oneshot = false;
 
@@ -241,7 +242,7 @@ void DeviceInMidi::on_hotplug_event(const JackPortEvent &ev) {
   pending_hotplug_.push_back(ev);
 
   // Schedule a one-shot tick to process them
-  TickCb cb;
+  DispatcherCb cb;
   cb.native = [this]() { this->process_hotplug_events(); };
   cb.oneshot = true;
 

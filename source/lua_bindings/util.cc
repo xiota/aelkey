@@ -7,6 +7,7 @@
 
 #include <sol/sol.hpp>
 
+#include "dispatcher.h"
 #include "lua_scripts.h"
 #include "tick_scheduler.h"
 #include "utils/time.h"
@@ -76,7 +77,7 @@ util_tick(sol::this_state ts, int ms, sol::object cb_obj, sol::optional<bool> on
   }
 
   // Parse callback key
-  TickCb key{};
+  DispatcherCb key{};
   if (cb_obj.is<std::string>()) {
     key.name = cb_obj.as<std::string>();
     key.is_function = false;

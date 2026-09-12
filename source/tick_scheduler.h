@@ -12,22 +12,18 @@
 
 #include "aelkey_state.h"
 #include "dispatcher.h"
+#include "dispatcher_next.h"
 
-struct TickCb {
-  bool is_function = false;      // true if using a sol::function
-  sol::function fn;              // Lua callback (if is_function == true)
-  std::string name;              // Lua global name (if not using fn)
-  std::function<void()> native;  // native C++ callback
-  bool oneshot = false;          // if true, timer is removed after first fire
-};
-
-class TickScheduler : public Dispatcher<TickScheduler> {
+class TickScheduler : public DispatcherNext<TickScheduler> {
   friend class Singleton<TickScheduler>;
 
  protected:
   TickScheduler() = default;
   ~TickScheduler() {
     cancel_all();
+    for (int i = 0; i < 3; ++i) {
+      flush_deferred();
+    }
   }
 
  public:
@@ -36,61 +32,25 @@ class TickScheduler : public Dispatcher<TickScheduler> {
   }
 
   void on_unregister(int fd) override {
-    callbacks_.erase(fd);
+    clear_callback(fd);
     close(fd);
   }
 
-  void handle_event(EpollPayload *payload, uint32_t /*events*/) override {
-    int fd = payload->fd;
+  // Pre-callback: drain timerfd
+  bool on_handle_event_before(int fd) override {
     uint64_t expirations;
     if (read(fd, &expirations, sizeof(expirations)) < 0) {
-      return;  // EAGAIN or transient error
+      // EAGAIN or transient error: skip callback
+      return false;
     }
-
-    auto it = callbacks_.find(fd);
-    if (it == callbacks_.end()) {
-      return;
-    }
-
-    auto cb = it->second;  // copy so we can erase safely after
-
-    if (cb.native) {
-      try {
-        cb.native();
-      } catch (const std::exception &e) {
-        std::fprintf(stderr, "tick native error: %s\n", e.what());
-      } catch (...) {
-        std::fprintf(stderr, "tick native error: unknown exception\n");
-      }
-    } else if (cb.is_function && cb.fn.valid()) {
-      sol::protected_function pf = cb.fn;
-      sol::protected_function_result result = pf();
-      if (!result.valid()) {
-        sol::error err = result;
-        std::fprintf(stderr, "tick function error: %s\n", err.what());
-      }
-    } else if (!cb.name.empty()) {
-      sol::state_view lua_state(AelkeyState::instance().lua_vm);
-      sol::object obj = lua_state[cb.name];
-      if (obj.is<sol::function>()) {
-        sol::protected_function pf = obj.as<sol::function>();
-        sol::protected_function_result result = pf();
-        if (!result.valid()) {
-          sol::error err = result;
-        }
-      }
-    }
-
-    if (cb.oneshot) {
-      unregister_fd(fd);
-    }
+    return true;
   }
 
   // Schedule a timer with the given callback.
   // - ms: delay/interval in milliseconds
   // - cb: callback descriptor (Lua function, global name, or native)
   // Returns timerfd on success, -1 on failure.
-  int schedule(int ms, TickCb cb) {
+  int schedule(int ms, DispatcherCb cb) {
     int fd = timerfd_create(CLOCK_MONOTONIC, TFD_NONBLOCK);
     if (fd < 0) {
       perror("timerfd_create");
@@ -115,7 +75,7 @@ class TickScheduler : public Dispatcher<TickScheduler> {
     }
 
     register_fd(fd, EPOLLIN);
-    callbacks_[fd] = std::move(cb);
+    set_callback(fd, std::move(cb));
     return fd;
   }
 
@@ -141,7 +101,8 @@ class TickScheduler : public Dispatcher<TickScheduler> {
     }
   }
 
-  void cancel_matching(const TickCb &key) {
+  void cancel_matching(const DispatcherCb &key) {
+    // iterate over callbacks_ in base
     for (auto it = callbacks_.begin(); it != callbacks_.end(); ++it) {
       auto &existing = it->second;
       bool match = false;
@@ -159,10 +120,6 @@ class TickScheduler : public Dispatcher<TickScheduler> {
     }
   }
 
-  // Cancel any timers whose callback matches the provided key.
-  // Matching rules:
-  // - if key.is_function && existing.is_function: compare sol::function identity
-  // - if both are name-based: compare name strings
   void cancel_all() {
     for (auto &[fd, cb] : callbacks_) {
       unregister_fd(fd);
@@ -171,7 +128,7 @@ class TickScheduler : public Dispatcher<TickScheduler> {
   }
 
  private:
-  std::map<int, TickCb> callbacks_;
+  using DispatcherNextBase::callbacks_;
 };
 
-template class Dispatcher<TickScheduler>;
+template class DispatcherNext<TickScheduler>;
