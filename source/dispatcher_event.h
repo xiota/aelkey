@@ -10,10 +10,10 @@
 #include <sys/eventfd.h>
 #include <unistd.h>
 
-#include "dispatcher_next.h"
+#include "dispatcher.h"
 #include "singleton.h"
 
-class DispatcherEvent : public DispatcherNext<DispatcherEvent> {
+class DispatcherEvent : public Dispatcher<DispatcherEvent> {
   friend class Singleton<DispatcherEvent>;
 
  protected:
@@ -94,5 +94,5 @@ class DispatcherEvent : public DispatcherNext<DispatcherEvent> {
   }
 
  private:
-  using DispatcherNextBase::callbacks_;
+  using DispatcherBase::callbacks_;
 };

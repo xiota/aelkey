@@ -6,12 +6,12 @@
 #include <unistd.h>
 #include <vector>
 
-#include "dispatcher_next.h"
+#include "dispatcher.h"
 #include "singleton.h"
 
-class DispatcherVulgate : public DispatcherNext<DispatcherVulgate> {
+class DispatcherVulgate : public Dispatcher<DispatcherVulgate> {
   friend class Singleton<DispatcherVulgate>;
-  friend class DispatcherNext<DispatcherVulgate>;
+  friend class Dispatcher<DispatcherVulgate>;
 
  protected:
   DispatcherVulgate() = default;
@@ -26,7 +26,7 @@ class DispatcherVulgate : public DispatcherNext<DispatcherVulgate> {
 
   void cleanup_fds() override {
     device_ids_.clear();
-    DispatcherNextBase::cleanup_fds();
+    DispatcherBase::cleanup_fds();
   }
 
   // Generic registration for any file descriptor and callback
@@ -49,4 +49,4 @@ class DispatcherVulgate : public DispatcherNext<DispatcherVulgate> {
   std::map<int, std::string> device_ids_;
 };
 
-template class DispatcherNext<DispatcherVulgate>;
+template class Dispatcher<DispatcherVulgate>;

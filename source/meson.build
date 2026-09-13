@@ -34,7 +34,6 @@ src_files = files(
   'device_out_uinput.cc',
   'device_parser.cc',
   'dispatcher.cc',
-  'dispatcher_next.cc',
   'haptic_sink_evdev.cc',
   'haptic_source_uinput.cc',
   'manager_device_in.cc',

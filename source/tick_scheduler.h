@@ -12,9 +12,8 @@
 
 #include "aelkey_state.h"
 #include "dispatcher.h"
-#include "dispatcher_next.h"
 
-class TickScheduler : public DispatcherNext<TickScheduler> {
+class TickScheduler : public Dispatcher<TickScheduler> {
   friend class Singleton<TickScheduler>;
 
  protected:
@@ -128,7 +127,7 @@ class TickScheduler : public DispatcherNext<TickScheduler> {
   }
 
  private:
-  using DispatcherNextBase::callbacks_;
+  using DispatcherBase::callbacks_;
 };
 
-template class DispatcherNext<TickScheduler>;
+template class Dispatcher<TickScheduler>;

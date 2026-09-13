@@ -5,7 +5,7 @@
 #include <string>
 
 #include "backend_jack.h"
-#include "dispatcher_next.h"
+#include "dispatcher.h"
 #include "tick_scheduler.h"
 #include "utils/regex_match.h"
 #include "utils/signal.h"

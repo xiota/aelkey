@@ -55,6 +55,7 @@ void DispatcherBase::cleanup_fds() {
     on_unregister(fd);
   }
   pollfds_.clear();
+  callbacks_.clear();
 }
 
 void DispatcherBase::flush_deferred() {
@@ -69,6 +70,7 @@ void DispatcherBase::flush_deferred() {
       if (it != pollfds_.end()) {
         on_unregister(fd);
         pollfds_.erase(it);
+        clear_callback(fd);
       }
     }
     list.clear();
@@ -76,4 +78,56 @@ void DispatcherBase::flush_deferred() {
 
   // cycle + 1: already cleared, ready for next cycle
   cycle_ = (cycle_ + 1) % 3;
+}
+
+void DispatcherBase::handle_event(EpollPayload *payload, uint32_t /*events*/) {
+  if (!payload) {
+    return;
+  }
+
+  int fd = payload->fd;
+
+  if (!on_handle_event_before(fd)) {
+    return;
+  }
+
+  DispatcherCb *cb = get_callback(fd);
+  if (!cb) {
+    return;
+  }
+
+  // Generic callback handling
+  if (cb->native) {
+    try {
+      cb->native();
+    } catch (const std::exception &e) {
+      std::fprintf(stderr, "%s native error: %s\n", type(), e.what());
+    } catch (...) {
+      std::fprintf(stderr, "%s native error: unknown exception\n", type());
+    }
+  } else if (cb->is_function && cb->fn.valid()) {
+    sol::protected_function pf = cb->fn;
+    sol::protected_function_result result = pf();
+    if (!result.valid()) {
+      sol::error err = result;
+      std::fprintf(stderr, "%s function error: %s\n", type(), err.what());
+    }
+  } else if (!cb->name.empty()) {
+    sol::state_view lua_state(AelkeyState::instance().lua_vm);
+    sol::object obj = lua_state[cb->name];
+    if (obj.is<sol::function>()) {
+      sol::protected_function pf = obj.as<sol::function>();
+      sol::protected_function_result result = pf();
+      if (!result.valid()) {
+        sol::error err = result;
+        std::fprintf(stderr, "%s name function error: %s\n", type(), err.what());
+      }
+    }
+  }
+
+  on_handle_event_after(fd);
+
+  if (cb->oneshot) {
+    unregister_fd(fd);
+  }
 }
