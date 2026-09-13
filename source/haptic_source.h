@@ -6,6 +6,8 @@
 #include <linux/input.h>
 #include <sol/sol.hpp>
 
+#include "utils/signal.h"
+
 class HapticSource {
  public:
   virtual ~HapticSource() = default;
@@ -18,5 +20,9 @@ class HapticSource {
     return const_cast<HapticSource *>(this)->get_effects();
   }
 
-  virtual void handle_source_event(sol::this_state ts, class ManagerHaptics &dispatcher) = 0;
+  virtual void handle_source_event(sol::this_state ts) = 0;
+
+  // Signals for sinks to automatically track changes
+  AelkeyUtil::Signal<void(int virt_id, ff_effect &normalized)> sig_effect_updated_;
+  AelkeyUtil::Signal<void(int virt_id)> sig_effect_erased_;
 };

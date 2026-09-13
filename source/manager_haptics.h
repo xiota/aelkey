@@ -23,11 +23,7 @@ class ManagerHaptics : public Singleton<ManagerHaptics> {
   ~ManagerHaptics() = default;
 
  public:
-  // High-level operations (Lua-free)
-  int create_persistent_effect(
-      const std::string &source_id,
-      ff_effect &eff_out  // eff_out.id assigned here
-  );
+  int create_persistent_effect(const std::string &source_id, ff_effect &eff_out);
 
   bool erase_persistent_effect(const std::string &source_id, int virt_id);
 
@@ -41,12 +37,9 @@ class ManagerHaptics : public Singleton<ManagerHaptics> {
 
   bool stop_effect(const std::string &sink_id, const std::string &source_id, int virt_id);
 
-  // Register a virtual FF source (uinput device)
   void register_source(const std::string &id, int uinput_fd, const std::string &callback);
-
   void register_sink(const std::string &id, int evdev_fd);
 
-  // Lookup by id (for Lua API layer if needed)
   HapticSource *get_source(const std::string &id) {
     auto it = sources_.find(id);
     return (it != sources_.end()) ? it->second.get() : nullptr;
@@ -76,13 +69,11 @@ class ManagerHaptics : public Singleton<ManagerHaptics> {
     return it->second;
   }
 
-  // Conversion helpers (shared with Lua API layer)
-  static ff_effect lua_to_ff_effect(sol::table t);
+  const std::map<std::string, std::unique_ptr<HapticSource>> &get_sources_map() const {
+    return sources_;
+  }
 
-  // Internal propagation helpers used by implementations
-  void propagate_erase_to_sinks(const std::string &source_id, int virt_id);
-  void
-  propagate_update_to_sinks(const std::string &source_id, int virt_id, ff_effect &normalized);
+  static ff_effect lua_to_ff_effect(sol::table t);
 
  private:
   std::map<std::string, std::unique_ptr<HapticSource>> sources_;

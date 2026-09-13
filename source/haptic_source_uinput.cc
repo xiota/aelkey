@@ -9,7 +9,6 @@
 
 #include "aelkey_state.h"
 #include "dispatcher_vulgate.h"
-#include "manager_haptics.h"
 
 HapticSourceUinput::HapticSourceUinput(std::string id, int fd, std::string callback)
     : id_(std::move(id)), fd_(fd), callback_(std::move(callback)) {
@@ -18,7 +17,7 @@ HapticSourceUinput::HapticSourceUinput(std::string id, int fd, std::string callb
     cb.native = [this]() {
       sol::state_view lua(AelkeyState::instance().lua_vm);
       sol::this_state ts(lua.lua_state());
-      handle_source_event(ts, ManagerHaptics::instance());
+      handle_source_event(ts);
     };
     DispatcherVulgate::instance().register_device_fd(fd_, EPOLLIN, std::move(cb), id_);
   }
@@ -66,7 +65,7 @@ bool HapticSourceUinput::rebuild_effect(const ff_effect &src_eff, ff_effect &out
   return true;
 }
 
-bool HapticSourceUinput::handle_upload(ManagerHaptics &dispatcher, int request_id) {
+bool HapticSourceUinput::handle_upload(int request_id) {
   struct uinput_ff_upload up{};
   up.request_id = request_id;
 
@@ -91,12 +90,12 @@ bool HapticSourceUinput::handle_upload(ManagerHaptics &dispatcher, int request_i
   }
 
   effects_[virt_id] = normalized;
-  dispatcher.propagate_update_to_sinks(id_, virt_id, normalized);
+  sig_effect_updated_.emit(virt_id, normalized);
 
   return true;
 }
 
-bool HapticSourceUinput::handle_erase(ManagerHaptics &dispatcher, int request_id) {
+bool HapticSourceUinput::handle_erase(int request_id) {
   struct uinput_ff_erase er{};
   er.request_id = request_id;
 
@@ -108,7 +107,7 @@ bool HapticSourceUinput::handle_erase(ManagerHaptics &dispatcher, int request_id
   int virt_id = er.effect_id;
 
   effects_.erase(virt_id);
-  dispatcher.propagate_erase_to_sinks(id_, virt_id);
+  sig_effect_erased_.emit(virt_id);
 
   er.retval = 0;
 
@@ -216,7 +215,7 @@ void HapticSourceUinput::handle_stop(sol::this_state ts, int virt_id) {
   }
 }
 
-void HapticSourceUinput::handle_source_event(sol::this_state ts, ManagerHaptics &dispatcher) {
+void HapticSourceUinput::handle_source_event(sol::this_state ts) {
   struct input_event ev{};
   ssize_t n = read(fd_, &ev, sizeof(ev));
   if (n < 0) {
@@ -231,9 +230,9 @@ void HapticSourceUinput::handle_source_event(sol::this_state ts, ManagerHaptics 
 
   if (ev.type == EV_UINPUT) {
     if (ev.code == UI_FF_UPLOAD) {
-      handle_upload(dispatcher, ev.value);
+      handle_upload(ev.value);
     } else if (ev.code == UI_FF_ERASE) {
-      handle_erase(dispatcher, ev.value);
+      handle_erase(ev.value);
     }
   } else if (ev.type == EV_FF) {
     int virt_id = ev.code;
