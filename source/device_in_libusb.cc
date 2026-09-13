@@ -54,7 +54,8 @@ DeviceInLibUSB::DeviceInLibUSB() {
           return;
         }
 
-        std::string inst_node = "usb:" + ev.busnum + "-" + ev.devnum;
+        std::string inst_node =
+            std::format("usb:{:03}-{:03}", std::stoi(ev.busnum), std::stoi(ev.devnum));
 
         auto &state = AelkeyState::instance();
 
