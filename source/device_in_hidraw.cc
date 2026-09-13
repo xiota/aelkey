@@ -222,12 +222,6 @@ bool DeviceInHidraw::detach(const std::string &id) {
     devices_.erase(it);
   }
 
-  auto &state = AelkeyState::instance();
-  auto it2 = state.input_map.find(id);
-  if (it2 != state.input_map.end()) {
-    auto decl_copy = it2->second;
-  }
-
   return true;
 }
 

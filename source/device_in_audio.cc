@@ -121,11 +121,6 @@ bool DeviceInAudio::detach(const std::string &id) {
     dispatch_fd_ = -1;
   }
 
-  auto it2 = input_decls_.find(id);
-  if (it2 != input_decls_.end()) {
-    input_decls_.erase(it2);
-  }
-
   return true;
 }
 
