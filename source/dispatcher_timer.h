@@ -13,12 +13,12 @@
 #include "aelkey_state.h"
 #include "dispatcher.h"
 
-class TickScheduler : public Dispatcher<TickScheduler> {
-  friend class Singleton<TickScheduler>;
+class DispatcherTimer : public Dispatcher<DispatcherTimer> {
+  friend class Singleton<DispatcherTimer>;
 
  protected:
-  TickScheduler() = default;
-  ~TickScheduler() {
+  DispatcherTimer() = default;
+  ~DispatcherTimer() {
     cancel_all();
     for (int i = 0; i < 3; ++i) {
       flush_deferred();
@@ -27,7 +27,7 @@ class TickScheduler : public Dispatcher<TickScheduler> {
 
  public:
   const char *type() const override {
-    return "tick";
+    return "timer";
   }
 
   void on_unregister(int fd) override {
@@ -130,4 +130,4 @@ class TickScheduler : public Dispatcher<TickScheduler> {
   using DispatcherBase::callbacks_;
 };
 
-template class Dispatcher<TickScheduler>;
+template class Dispatcher<DispatcherTimer>;

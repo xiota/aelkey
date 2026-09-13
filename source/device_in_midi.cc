@@ -9,7 +9,7 @@
 #include "backend_jack.h"
 #include "dispatcher.h"
 #include "dispatcher_event.h"
-#include "tick_scheduler.h"
+#include "dispatcher_timer.h"
 #include "utils/regex_match.h"
 #include "utils/signal.h"
 #include "utils/time.h"
@@ -237,12 +237,12 @@ void DeviceInMidi::on_hotplug_event(const JackPortEvent &ev) {
 
   pending_hotplug_.push_back(ev);
 
-  // Schedule a one-shot tick to process them
+  // Schedule a one-shot timer to process them
   DispatcherCb cb;
   cb.native = [this]() { this->process_hotplug_events(); };
   cb.oneshot = true;
 
-  TickScheduler::instance().schedule(4, cb);
+  DispatcherTimer::instance().schedule(4, cb);
 }
 
 void DeviceInMidi::process_hotplug_events() {

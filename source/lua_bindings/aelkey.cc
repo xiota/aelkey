@@ -3,6 +3,7 @@
 #include <sol/sol.hpp>
 
 #include "aelkey_state.h"
+#include "dispatcher_timer.h"
 #include "lua_bindings/audio.h"
 #include "lua_bindings/core.h"
 #include "lua_bindings/evdev.h"
@@ -17,7 +18,6 @@
 #include "lua_bindings/usb.h"
 #include "lua_bindings/util.h"
 #include "lua_scripts.h"
-#include "tick_scheduler.h"
 
 namespace {
 

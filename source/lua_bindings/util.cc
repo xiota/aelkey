@@ -8,8 +8,8 @@
 #include <sol/sol.hpp>
 
 #include "dispatcher.h"
+#include "dispatcher_timer.h"
 #include "lua_scripts.h"
-#include "tick_scheduler.h"
 #include "utils/time.h"
 
 // Compute one CRC32 entry
@@ -66,7 +66,7 @@ static uint32_t util_crc32_ieee(const std::string &data, uint32_t seed = 0) {
 static sol::object
 util_tick(sol::this_state ts, int ms, sol::object cb_obj, sol::optional<bool> oneshot_opt) {
   sol::state_view lua(ts);
-  auto &scheduler = TickScheduler::instance();
+  auto &scheduler = DispatcherTimer::instance();
 
   // tick(0, nil) → cancel all timers
   if (cb_obj.is<sol::nil_t>()) {
