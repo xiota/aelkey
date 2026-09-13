@@ -26,11 +26,11 @@ class HapticSourceUinput : public HapticSource {
     return effects_;
   }
 
-  void handle_source_event(sol::this_state ts, DispatcherHaptics &dispatcher) override;
+  void handle_source_event(sol::this_state ts, ManagerHaptics &dispatcher) override;
 
  private:
-  bool handle_upload(DispatcherHaptics &dispatcher, int request_id);
-  bool handle_erase(DispatcherHaptics &dispatcher, int request_id);
+  bool handle_upload(ManagerHaptics &dispatcher, int request_id);
+  bool handle_erase(ManagerHaptics &dispatcher, int request_id);
   void handle_play(sol::this_state ts, int virt_id, int magnitude);
   void handle_stop(sol::this_state ts, int virt_id);
 

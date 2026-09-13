@@ -1,5 +1,4 @@
-//
-#include "dispatcher_haptics.h"
+#include "manager_haptics.h"
 
 #include <cerrno>
 #include <cstdio>
@@ -9,7 +8,7 @@
 #include "haptic_sink_evdev.h"
 #include "haptic_source_uinput.h"
 
-void DispatcherHaptics::register_source(
+void ManagerHaptics::register_source(
     const std::string &id,
     int uinput_fd,
     const std::string &callback
@@ -18,7 +17,7 @@ void DispatcherHaptics::register_source(
   sources_[id] = std::move(src);
 }
 
-void DispatcherHaptics::register_sink(const std::string &id, int evdev_fd) {
+void ManagerHaptics::register_sink(const std::string &id, int evdev_fd) {
   if (evdev_fd < 0) {
     return;
   }
@@ -27,7 +26,7 @@ void DispatcherHaptics::register_sink(const std::string &id, int evdev_fd) {
   sinks_[id] = std::move(sink);
 }
 
-void DispatcherHaptics::propagate_erase_to_sinks(const std::string &source_id, int virt_id) {
+void ManagerHaptics::propagate_erase_to_sinks(const std::string &source_id, int virt_id) {
   auto key = std::make_pair(source_id, virt_id);
 
   for (auto &[sink_id, sink] : sinks_) {
@@ -46,7 +45,7 @@ void DispatcherHaptics::propagate_erase_to_sinks(const std::string &source_id, i
   }
 }
 
-void DispatcherHaptics::propagate_update_to_sinks(
+void ManagerHaptics::propagate_update_to_sinks(
     const std::string &source_id,
     int virt_id,
     ff_effect &normalized
@@ -65,10 +64,7 @@ void DispatcherHaptics::propagate_update_to_sinks(
   }
 }
 
-int DispatcherHaptics::create_persistent_effect(
-    const std::string &source_id,
-    ff_effect &eff_out
-) {
+int ManagerHaptics::create_persistent_effect(const std::string &source_id, ff_effect &eff_out) {
   HapticSource *src = get_source(source_id);
   if (!src) {
     register_source(source_id, -1, "");
@@ -86,7 +82,7 @@ int DispatcherHaptics::create_persistent_effect(
   return eff_out.id;
 }
 
-bool DispatcherHaptics::erase_persistent_effect(const std::string &source_id, int virt_id) {
+bool ManagerHaptics::erase_persistent_effect(const std::string &source_id, int virt_id) {
   HapticSource *src = get_source(source_id);
   if (!src) {
     return false;
@@ -97,7 +93,7 @@ bool DispatcherHaptics::erase_persistent_effect(const std::string &source_id, in
   return true;
 }
 
-int DispatcherHaptics::play_effect(
+int ManagerHaptics::play_effect(
     const std::string &sink_id,
     const std::string &source_id,
     int virt_id,
@@ -159,7 +155,7 @@ int DispatcherHaptics::play_effect(
   return real_id;
 }
 
-bool DispatcherHaptics::stop_effect(
+bool ManagerHaptics::stop_effect(
     const std::string &sink_id,
     const std::string &source_id,
     int virt_id
@@ -182,7 +178,7 @@ bool DispatcherHaptics::stop_effect(
   return true;
 }
 
-ff_effect DispatcherHaptics::lua_to_ff_effect(sol::table t) {
+ff_effect ManagerHaptics::lua_to_ff_effect(sol::table t) {
   ff_effect eff{};
   eff.id = -1;
 

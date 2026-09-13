@@ -8,7 +8,7 @@
 #include <libevdev/libevdev.h>
 
 #include "device_declarations.h"
-#include "dispatcher_haptics.h"
+#include "manager_haptics.h"
 
 // Provide sensible max ranges for ABS axes
 // value, min, max, fuzz, flat, resolution
@@ -202,7 +202,7 @@ static libevdev_uinput *create_output_device(const OutputDecl &out) {
 
   int ufd = libevdev_uinput_get_fd(uidev);
 
-  DispatcherHaptics::instance().register_source(out.id, ufd, out.on_haptics);
+  ManagerHaptics::instance().register_source(out.id, ufd, out.on_haptics);
 
   std::printf(
       "Created uinput device: %s at %s\n", out.name.c_str(), libevdev_uinput_get_devnode(uidev)

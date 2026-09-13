@@ -18,5 +18,5 @@ class HapticSource {
     return const_cast<HapticSource *>(this)->get_effects();
   }
 
-  virtual void handle_source_event(sol::this_state ts, class DispatcherHaptics &dispatcher) = 0;
+  virtual void handle_source_event(sol::this_state ts, class ManagerHaptics &dispatcher) = 0;
 };

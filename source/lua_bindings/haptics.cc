@@ -7,12 +7,12 @@
 #include <unistd.h>
 
 #include "aelkey_state.h"
-#include "dispatcher_haptics.h"
+#include "manager_haptics.h"
 
 static sol::table haptics_create(sol::table tbl) {
-  auto &disp = DispatcherHaptics::instance();
+  auto &disp = ManagerHaptics::instance();
 
-  ff_effect eff = DispatcherHaptics::lua_to_ff_effect(tbl);
+  ff_effect eff = ManagerHaptics::lua_to_ff_effect(tbl);
 
   int virt_id = disp.create_persistent_effect(HAPTICS_SOURCE_CUSTOM, eff);
 
@@ -26,7 +26,7 @@ static void haptics_erase(sol::table tbl) {
   int id = tbl.get_or("id", -1);
 
   if (!source.empty() && id >= 0) {
-    DispatcherHaptics::instance().erase_persistent_effect(source, id);
+    ManagerHaptics::instance().erase_persistent_effect(source, id);
   }
 
   tbl["source"] = sol::nil;
@@ -34,7 +34,7 @@ static void haptics_erase(sol::table tbl) {
 }
 
 static void haptics_play(std::string sink_id, sol::table ev) {
-  auto &disp = DispatcherHaptics::instance();
+  auto &disp = ManagerHaptics::instance();
 
   std::string source = ev.get_or("source", std::string{});
   int id = ev.get_or("id", -1);
@@ -46,7 +46,7 @@ static void haptics_play(std::string sink_id, sol::table ev) {
   if (source.empty() || id < 0 || !disp.get_source(source) ||
       disp.get_source(source)->get_effects().count(id) == 0) {
     // one-shot
-    eff = DispatcherHaptics::lua_to_ff_effect(ev);
+    eff = ManagerHaptics::lua_to_ff_effect(ev);
     maybe_eff = &eff;
   }
 
@@ -57,7 +57,7 @@ static void haptics_stop(std::string sink_id, sol::table ev) {
   std::string source = ev.get_or("source", std::string{});
   int id = ev.get_or("id", -1);
 
-  DispatcherHaptics::instance().stop_effect(sink_id, source, id);
+  ManagerHaptics::instance().stop_effect(sink_id, source, id);
 }
 
 extern "C" int luaopen_aelkey_haptics(lua_State *L) {

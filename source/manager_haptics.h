@@ -15,12 +15,12 @@
 static constexpr const char *HAPTICS_SOURCE_CUSTOM = "_aelkey_haptics_custom_";
 static constexpr const char *HAPTICS_SOURCE_ONESHOT = "_aelkey_haptics_oneshot_";
 
-class DispatcherHaptics : public Singleton<DispatcherHaptics> {
-  friend class Singleton<DispatcherHaptics>;
+class ManagerHaptics : public Singleton<ManagerHaptics> {
+  friend class Singleton<ManagerHaptics>;
 
  protected:
-  DispatcherHaptics() = default;
-  ~DispatcherHaptics() = default;
+  ManagerHaptics() = default;
+  ~ManagerHaptics() = default;
 
  public:
   // High-level operations (Lua-free)

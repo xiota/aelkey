@@ -8,8 +8,8 @@
 #include <unistd.h>
 
 #include "aelkey_state.h"
-#include "dispatcher_haptics.h"
 #include "dispatcher_vulgate.h"
+#include "manager_haptics.h"
 
 HapticSourceUinput::HapticSourceUinput(std::string id, int fd, std::string callback)
     : id_(std::move(id)), fd_(fd), callback_(std::move(callback)) {
@@ -18,7 +18,7 @@ HapticSourceUinput::HapticSourceUinput(std::string id, int fd, std::string callb
     cb.native = [this]() {
       sol::state_view lua(AelkeyState::instance().lua_vm);
       sol::this_state ts(lua.lua_state());
-      handle_source_event(ts, DispatcherHaptics::instance());
+      handle_source_event(ts, ManagerHaptics::instance());
     };
     DispatcherVulgate::instance().register_device_fd(fd_, EPOLLIN, std::move(cb), id_);
   }
@@ -66,7 +66,7 @@ bool HapticSourceUinput::rebuild_effect(const ff_effect &src_eff, ff_effect &out
   return true;
 }
 
-bool HapticSourceUinput::handle_upload(DispatcherHaptics &dispatcher, int request_id) {
+bool HapticSourceUinput::handle_upload(ManagerHaptics &dispatcher, int request_id) {
   struct uinput_ff_upload up{};
   up.request_id = request_id;
 
@@ -96,7 +96,7 @@ bool HapticSourceUinput::handle_upload(DispatcherHaptics &dispatcher, int reques
   return true;
 }
 
-bool HapticSourceUinput::handle_erase(DispatcherHaptics &dispatcher, int request_id) {
+bool HapticSourceUinput::handle_erase(ManagerHaptics &dispatcher, int request_id) {
   struct uinput_ff_erase er{};
   er.request_id = request_id;
 
@@ -216,10 +216,7 @@ void HapticSourceUinput::handle_stop(sol::this_state ts, int virt_id) {
   }
 }
 
-void HapticSourceUinput::handle_source_event(
-    sol::this_state ts,
-    DispatcherHaptics &dispatcher
-) {
+void HapticSourceUinput::handle_source_event(sol::this_state ts, ManagerHaptics &dispatcher) {
   struct input_event ev{};
   ssize_t n = read(fd_, &ev, sizeof(ev));
   if (n < 0) {

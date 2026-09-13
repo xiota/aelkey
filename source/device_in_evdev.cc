@@ -7,9 +7,9 @@
 
 #include "aelkey_state.h"
 #include "backend_udev.h"
-#include "dispatcher_haptics.h"
 #include "dispatcher_vulgate.h"
 #include "manager_device_in.h"
+#include "manager_haptics.h"
 #include "utils/regex_match.h"
 #include "utils/signal.h"
 
@@ -173,7 +173,7 @@ bool DeviceInEvdev::attach(const std::string &devnode, InputDecl &decl) {
   }
 
   if (libevdev_has_event_type(idev, EV_FF)) {
-    DispatcherHaptics::instance().register_sink(decl.id, fd);
+    ManagerHaptics::instance().register_sink(decl.id, fd);
   }
 
   std::printf("Attached evdev: %s\n", libevdev_get_name(idev));
