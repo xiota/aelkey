@@ -1,49 +1,21 @@
+//
 #include "dispatcher_haptics.h"
 
 #include <cerrno>
 #include <cstdio>
 
-#include <sys/epoll.h>
-#include <sys/ioctl.h>
-#include <unistd.h>
+#include <sol/sol.hpp>
 
-#include "aelkey_state.h"
-
-void DispatcherHaptics::cleanup_sources() {
-  for (auto &[id, src] : sources_) {
-    if (src.fd >= 0) {
-      DispatcherVulgate::instance().unregister_device_fd(src.fd);
-      src.fd = -1;
-    }
-  }
-  sources_.clear();
-}
+#include "haptic_sink_evdev.h"
+#include "haptic_source_uinput.h"
 
 void DispatcherHaptics::register_source(
     const std::string &id,
     int uinput_fd,
     const std::string &callback
 ) {
-  // Always create or replace the logical haptics source bucket.
-  // A source is a persistent namespace for virtual effects and
-  // must exist independently of any physical device.
-  // This allows effects to be defined before sinks are available.
-  HapticsSourceCtx ctx;
-  ctx.id = id;
-  ctx.fd = uinput_fd;
-  ctx.callback = callback;
-  sources_[id] = std::move(ctx);
-
-  if (uinput_fd >= 0) {
-    DispatcherCb cb;
-    cb.native = [this, id]() {
-      auto it = sources_.find(id);
-      if (it != sources_.end()) {
-        handle_source_event(it->second);
-      }
-    };
-    DispatcherVulgate::instance().register_device_fd(uinput_fd, EPOLLIN, std::move(cb), id);
-  }
+  auto src = std::make_unique<HapticSourceUinput>(id, uinput_fd, callback);
+  sources_[id] = std::move(src);
 }
 
 void DispatcherHaptics::register_sink(const std::string &id, int evdev_fd) {
@@ -51,73 +23,53 @@ void DispatcherHaptics::register_sink(const std::string &id, int evdev_fd) {
     return;
   }
 
-  HapticsSinkCtx ctx;
-  ctx.id = id;
-  ctx.fd = evdev_fd;
-  sinks_[id] = std::move(ctx);
+  auto sink = std::make_unique<HapticSinkEvdev>(id, evdev_fd);
+  sinks_[id] = std::move(sink);
 }
 
 void DispatcherHaptics::propagate_erase_to_sinks(const std::string &source_id, int virt_id) {
   auto key = std::make_pair(source_id, virt_id);
 
   for (auto &[sink_id, sink] : sinks_) {
-    auto it = sink.slots.find(key);
-    if (it == sink.slots.end()) {
+    if (!sink) {
+      continue;
+    }
+    auto &slots = sink->get_slots();
+    auto it = slots.find(key);
+    if (it == slots.end()) {
       continue;
     }
 
     int real_id = it->second;
-
-    if (ioctl(sink.fd, EVIOCRMFF, real_id) < 0) {
-      perror("EVIOCRMFF");
-    }
-
-    sink.slots.erase(it);
+    sink->erase_effect(real_id);
+    slots.erase(it);
   }
 }
 
-int DispatcherHaptics::upload_effect_to_sink(
-    const std::string &sink_id,
-    ff_effect &eff,
-    int real_id
+void DispatcherHaptics::propagate_update_to_sinks(
+    const std::string &source_id,
+    int virt_id,
+    ff_effect &normalized
 ) {
-  auto &disp = DispatcherHaptics::instance();
-  HapticsSinkCtx *sink = disp.get_sink(sink_id);
-  if (!sink) {
-    return -1;
-  }
-
-  // Use the existing real ID if provided for an in-place update
-  eff.id = (real_id >= 0) ? real_id : -1;
-  int rc = ioctl(sink->fd, EVIOCSFF, &eff);
-
-  // Fallback if ENOSPC occurs or if in-place update fails
-  if (rc < 0 && (errno == ENOSPC || real_id >= 0)) {
-    if (errno == ENOSPC) {
-      for (const auto &[key_pair, r_id] : sink->slots) {
-        ioctl(sink->fd, EVIOCRMFF, r_id);
-      }
-      sink->slots.clear();
+  auto key = std::make_pair(source_id, virt_id);
+  for (auto &[sink_id, sink] : sinks_) {
+    if (!sink) {
+      continue;
     }
-
-    // Force a fresh allocation if the update failed
-    eff.id = -1;
-    rc = ioctl(sink->fd, EVIOCSFF, &eff);
+    auto &slots = sink->get_slots();
+    auto it = slots.find(key);
+    if (it != slots.end()) {
+      int real_id = it->second;
+      sink->upload_effect(normalized, real_id);
+    }
   }
-
-  if (rc < 0) {
-    perror("EVIOCSFF");
-    return -1;
-  }
-
-  return eff.id;
 }
 
 int DispatcherHaptics::create_persistent_effect(
     const std::string &source_id,
     ff_effect &eff_out
 ) {
-  HapticsSourceCtx *src = get_source(source_id);
+  HapticSource *src = get_source(source_id);
   if (!src) {
     register_source(source_id, -1, "");
     src = get_source(source_id);
@@ -129,19 +81,19 @@ int DispatcherHaptics::create_persistent_effect(
   }
 
   propagate_erase_to_sinks(source_id, eff_out.id);
-  src->effects[eff_out.id] = eff_out;
+  src->get_effects()[eff_out.id] = eff_out;
 
   return eff_out.id;
 }
 
 bool DispatcherHaptics::erase_persistent_effect(const std::string &source_id, int virt_id) {
-  HapticsSourceCtx *src = get_source(source_id);
+  HapticSource *src = get_source(source_id);
   if (!src) {
     return false;
   }
 
   propagate_erase_to_sinks(source_id, virt_id);
-  src->effects.erase(virt_id);
+  src->get_effects().erase(virt_id);
   return true;
 }
 
@@ -152,8 +104,8 @@ int DispatcherHaptics::play_effect(
     int magnitude,
     const ff_effect *maybe_eff
 ) {
-  HapticsSinkCtx *sink = get_sink(sink_id);
-  if (!sink || sink->fd < 0) {
+  HapticSink *sink = get_sink(sink_id);
+  if (!sink || sink->get_fd() < 0) {
     return -1;
   }
 
@@ -163,27 +115,29 @@ int DispatcherHaptics::play_effect(
 
   if (maybe_eff == nullptr) {
     auto key = std::make_pair(source_id, virt_id);
-    auto it_slot = sink->slots.find(key);
-    if (it_slot != sink->slots.end()) {
+    auto &slots = sink->get_slots();
+    auto it_slot = slots.find(key);
+    if (it_slot != slots.end()) {
       real_id = it_slot->second;
     } else {
-      HapticsSourceCtx *src = get_source(source_id);
+      HapticSource *src = get_source(source_id);
       if (!src) {
         return -1;
       }
 
-      auto it = src->effects.find(virt_id);
-      if (it == src->effects.end()) {
+      auto &effects = src->get_effects();
+      auto it = effects.find(virt_id);
+      if (it == effects.end()) {
         return -1;
       }
 
       ff_effect eff = it->second;
-      real_id = upload_effect_to_sink(sink_id, eff);
+      real_id = sink->upload_effect(eff);
       if (real_id < 0) {
         return -1;
       }
 
-      sink->slots[key] = real_id;
+      slots[key] = real_id;
     }
   } else {
     static int oneshot_counter = 0;
@@ -191,23 +145,16 @@ int DispatcherHaptics::play_effect(
     actual_virt = oneshot_counter++;
 
     ff_effect eff = *maybe_eff;
-    real_id = upload_effect_to_sink(sink_id, eff);
+    real_id = sink->upload_effect(eff);
     if (real_id < 0) {
       return -1;
     }
 
     auto key = std::make_pair(actual_source, actual_virt);
-    sink->slots[key] = real_id;
+    sink->get_slots()[key] = real_id;
   }
 
-  struct input_event ev{};
-  ev.type = EV_FF;
-  ev.code = real_id;
-  ev.value = magnitude;
-
-  if (write(sink->fd, &ev, sizeof(ev)) < 0) {
-    perror("write(EV_FF)");
-  }
+  sink->play_effect_real(real_id, magnitude);
 
   return real_id;
 }
@@ -217,27 +164,20 @@ bool DispatcherHaptics::stop_effect(
     const std::string &source_id,
     int virt_id
 ) {
-  HapticsSinkCtx *sink = get_sink(sink_id);
-  if (!sink || sink->fd < 0) {
+  HapticSink *sink = get_sink(sink_id);
+  if (!sink || sink->get_fd() < 0) {
     return false;
   }
 
   auto key = std::make_pair(source_id, virt_id);
-  auto it = sink->slots.find(key);
-  if (it == sink->slots.end()) {
+  auto &slots = sink->get_slots();
+  auto it = slots.find(key);
+  if (it == slots.end()) {
     return false;
   }
 
   int real_id = it->second;
-
-  struct input_event ev{};
-  ev.type = EV_FF;
-  ev.code = real_id;
-  ev.value = 0;
-
-  if (write(sink->fd, &ev, sizeof(ev)) < 0) {
-    perror("write(EV_FF)");
-  }
+  sink->stop_effect_real(real_id);
 
   return true;
 }
@@ -286,246 +226,4 @@ ff_effect DispatcherHaptics::lua_to_ff_effect(sol::table t) {
   }
 
   return eff;
-}
-
-bool DispatcherHaptics::rebuild_effect(const ff_effect &src_eff, ff_effect &out_eff) {
-  ff_effect eff{};
-  eff.id = -1;
-
-  eff.type = src_eff.type;
-  eff.direction = src_eff.direction;
-  eff.replay = src_eff.replay;
-  eff.trigger = src_eff.trigger;
-
-  switch (src_eff.type) {
-    case FF_RUMBLE:
-      eff.u.rumble = src_eff.u.rumble;
-      break;
-
-    case FF_PERIODIC:
-      eff.u.periodic = src_eff.u.periodic;
-      eff.u.periodic.envelope = src_eff.u.periodic.envelope;
-      break;
-
-    case FF_CONSTANT:
-      eff.u.constant = src_eff.u.constant;
-      eff.u.constant.envelope = src_eff.u.constant.envelope;
-      break;
-
-    default:
-      eff.type = FF_RUMBLE;
-      eff.u.rumble.strong_magnitude = 0x4000;
-      eff.u.rumble.weak_magnitude = 0x4000;
-      eff.replay.length = src_eff.replay.length ? src_eff.replay.length : 250;
-      break;
-  }
-
-  out_eff = eff;
-  return true;
-}
-
-bool DispatcherHaptics::handle_upload(HapticsSourceCtx &hctx, int request_id) {
-  int fd = hctx.fd;
-
-  struct uinput_ff_upload up{};
-  up.request_id = request_id;
-
-  if (ioctl(fd, UI_BEGIN_FF_UPLOAD, &up) < 0) {
-    perror("UI_BEGIN_FF_UPLOAD");
-    return false;
-  }
-
-  up.retval = 0;
-
-  if (ioctl(fd, UI_END_FF_UPLOAD, &up) < 0) {
-    perror("UI_END_FF_UPLOAD");
-    return false;
-  }
-
-  int virt_id = up.effect.id;
-
-  ff_effect normalized{};
-  if (!rebuild_effect(up.effect, normalized)) {
-    std::fprintf(stderr, "Haptics: failed to rebuild effect %d\n", virt_id);
-    return false;
-  }
-
-  hctx.effects[virt_id] = normalized;
-
-  // In-place update propagation to all sinks instead of erasing
-  auto key = std::make_pair(hctx.id, virt_id);
-  for (auto &[sink_id, sink] : sinks_) {
-    auto it = sink.slots.find(key);
-    if (it != sink.slots.end()) {
-      // Effect is already on this sink, update in-place with existing real_id
-      int real_id = it->second;
-      upload_effect_to_sink(sink_id, normalized, real_id);
-    }
-    // If it's not in the sink's slots yet, we do nothing here;
-    // it will be uploaded fresh the next time play_effect is called.
-  }
-
-  return true;
-}
-
-bool DispatcherHaptics::handle_erase(HapticsSourceCtx &hctx, int request_id) {
-  int fd = hctx.fd;
-
-  struct uinput_ff_erase er{};
-  er.request_id = request_id;
-
-  if (ioctl(fd, UI_BEGIN_FF_ERASE, &er) < 0) {
-    perror("UI_BEGIN_FF_ERASE");
-    return false;
-  }
-
-  int virt_id = er.effect_id;
-
-  hctx.effects.erase(virt_id);
-  propagate_erase_to_sinks(hctx.id, virt_id);
-
-  er.retval = 0;
-
-  if (ioctl(fd, UI_END_FF_ERASE, &er) < 0) {
-    perror("UI_END_FF_ERASE");
-    return false;
-  }
-
-  return true;
-}
-
-sol::table DispatcherHaptics::haptics_effect_to_lua(sol::state_view lua, const ff_effect &eff) {
-  sol::table t = lua.create_table();
-
-  t["id"] = eff.id;
-  t["length"] = eff.replay.length;
-  t["delay"] = eff.replay.delay;
-
-  switch (eff.type) {
-    case FF_RUMBLE:
-      t["type"] = "rumble";
-      t["strong"] = eff.u.rumble.strong_magnitude;
-      t["weak"] = eff.u.rumble.weak_magnitude;
-      break;
-
-    case FF_PERIODIC:
-      t["type"] = "periodic";
-      t["waveform"] = eff.u.periodic.waveform;
-      t["magnitude"] = eff.u.periodic.magnitude;
-      t["offset"] = eff.u.periodic.offset;
-      t["phase"] = eff.u.periodic.phase;
-      t["period"] = eff.u.periodic.period;
-      break;
-
-    case FF_CONSTANT:
-      t["type"] = "constant";
-      t["level"] = eff.u.constant.level;
-      break;
-
-    default:
-      break;
-  }
-
-  return t;
-}
-
-void DispatcherHaptics::handle_play(
-    sol::this_state ts,
-    HapticsSourceCtx &src,
-    int virt_id,
-    int magnitude
-) {
-  sol::state_view lua(ts);
-
-  if (src.callback.empty()) {
-    return;
-  }
-
-  sol::object cb = lua[src.callback];
-  if (!cb.is<sol::function>()) {
-    return;
-  }
-
-  sol::function f = cb.as<sol::function>();
-
-  sol::table ev = lua.create_table();
-  ev["source"] = src.id;
-  ev["type"] = "play";
-  ev["id"] = virt_id;
-  ev["value"] = magnitude;
-
-  auto it = src.effects.find(virt_id);
-  if (it != src.effects.end()) {
-    ev["effect"] = haptics_effect_to_lua(lua, it->second);
-  }
-
-  sol::protected_function pf = f;
-  sol::protected_function_result res = pf(ev);
-  if (!res.valid()) {
-    sol::error err = res;
-    std::fprintf(stderr, "Lua haptics callback error: %s\n", err.what());
-  }
-}
-
-void DispatcherHaptics::handle_stop(sol::this_state ts, HapticsSourceCtx &src, int virt_id) {
-  sol::state_view lua(ts);
-
-  if (src.callback.empty()) {
-    return;
-  }
-
-  sol::object cb = lua[src.callback];
-  if (!cb.is<sol::function>()) {
-    return;
-  }
-
-  sol::function f = cb.as<sol::function>();
-
-  sol::table ev = lua.create_table();
-  ev["source"] = src.id;
-  ev["type"] = "stop";
-  ev["id"] = virt_id;
-
-  sol::protected_function pf = f;
-  sol::protected_function_result res = pf(ev);
-  if (!res.valid()) {
-    sol::error err = res;
-    std::fprintf(stderr, "Lua haptics callback error: %s\n", err.what());
-  }
-}
-
-void DispatcherHaptics::handle_source_event(HapticsSourceCtx &src) {
-  int fd = src.fd;
-
-  struct input_event ev{};
-  ssize_t n = read(fd, &ev, sizeof(ev));
-  if (n < 0) {
-    if (errno == EAGAIN || errno == EWOULDBLOCK) {
-      return;
-    }
-    perror("read haptics");
-    return;
-  } else if (n == 0 || n != sizeof(ev)) {
-    return;
-  }
-
-  sol::state_view lua(AelkeyState::instance().lua_vm);
-  sol::this_state ts(lua.lua_state());
-
-  if (ev.type == EV_UINPUT) {
-    if (ev.code == UI_FF_UPLOAD) {
-      handle_upload(src, ev.value);
-    } else if (ev.code == UI_FF_ERASE) {
-      handle_erase(src, ev.value);
-    }
-  } else if (ev.type == EV_FF) {
-    int virt_id = ev.code;
-    int magnitude = ev.value;
-
-    if (magnitude > 0) {
-      handle_play(ts, src, virt_id, magnitude);
-    } else {
-      handle_stop(ts, src, virt_id);
-    }
-  }
 }

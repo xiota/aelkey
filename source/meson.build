@@ -36,6 +36,8 @@ src_files = files(
   'dispatcher.cc',
   'dispatcher_haptics.cc',
   'dispatcher_next.cc',
+  'haptic_sink_evdev.cc',
+  'haptic_source_uinput.cc',
   'manager_device_in.cc',
   'manager_device_out.cc',
   'router_device_state.cc',

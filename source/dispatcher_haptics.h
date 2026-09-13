@@ -1,46 +1,26 @@
 #pragma once
 
 #include <map>
+#include <memory>
 #include <string>
+#include <utility>
 
 #include <linux/input.h>
-#include <linux/uinput.h>
 #include <sol/sol.hpp>
 
-#include "aelkey_state.h"
-#include "device_declarations.h"
-#include "dispatcher_vulgate.h"
+#include "haptic_sink.h"
+#include "haptic_source.h"
 #include "singleton.h"
 
 static constexpr const char *HAPTICS_SOURCE_CUSTOM = "_aelkey_haptics_custom_";
 static constexpr const char *HAPTICS_SOURCE_ONESHOT = "_aelkey_haptics_oneshot_";
-
-struct HapticsSourceCtx {
-  std::string id;  // "virt_gamepad"
-  int fd = -1;     // uinput FD
-
-  std::string callback;
-
-  // virtual_id → ff_effect
-  std::map<int, ff_effect> effects;
-};
-
-struct HapticsSinkCtx {
-  std::string id;  // "gamepad"
-  int fd = -1;     // evdev FD
-
-  // key: (source_id, virt_id) → real_id
-  std::map<std::pair<std::string, int>, int> slots;
-};
 
 class DispatcherHaptics : public Singleton<DispatcherHaptics> {
   friend class Singleton<DispatcherHaptics>;
 
  protected:
   DispatcherHaptics() = default;
-  ~DispatcherHaptics() {
-    cleanup_sources();
-  }
+  ~DispatcherHaptics() = default;
 
  public:
   // High-level operations (Lua-free)
@@ -67,14 +47,14 @@ class DispatcherHaptics : public Singleton<DispatcherHaptics> {
   void register_sink(const std::string &id, int evdev_fd);
 
   // Lookup by id (for Lua API layer if needed)
-  HapticsSourceCtx *get_source(const std::string &id) {
+  HapticSource *get_source(const std::string &id) {
     auto it = sources_.find(id);
-    return (it != sources_.end()) ? &it->second : nullptr;
+    return (it != sources_.end()) ? it->second.get() : nullptr;
   }
 
-  HapticsSinkCtx *get_sink(const std::string &id) {
+  HapticSink *get_sink(const std::string &id) {
     auto it = sinks_.find(id);
-    return (it != sinks_.end()) ? &it->second : nullptr;
+    return (it != sinks_.end()) ? it->second.get() : nullptr;
   }
 
   bool is_haptics_supported(const std::string &id) {
@@ -82,14 +62,14 @@ class DispatcherHaptics : public Singleton<DispatcherHaptics> {
   }
 
   int get_source_slot(const std::string &sink_id, const std::string &source_id, int virt_id) {
-    const HapticsSinkCtx *sink = get_sink(sink_id);
+    HapticSink *sink = get_sink(sink_id);
     if (!sink) {
       return -1;
     }
 
     auto key = std::make_pair(source_id, virt_id);
-    auto it = sink->slots.find(key);
-    if (it == sink->slots.end()) {
+    auto it = sink->get_slots().find(key);
+    if (it == sink->get_slots().end()) {
       return -1;
     }
 
@@ -98,23 +78,13 @@ class DispatcherHaptics : public Singleton<DispatcherHaptics> {
 
   // Conversion helpers (shared with Lua API layer)
   static ff_effect lua_to_ff_effect(sol::table t);
-  static sol::table haptics_effect_to_lua(sol::state_view lua, const ff_effect &eff);
 
- private:
-  // Helpers
+  // Internal propagation helpers used by implementations
   void propagate_erase_to_sinks(const std::string &source_id, int virt_id);
-  static int
-  upload_effect_to_sink(const std::string &sink_id, ff_effect &eff, int real_id = -1);
-  static bool rebuild_effect(const ff_effect &src_eff, ff_effect &out_eff);
-
-  void cleanup_sources();
-  bool handle_upload(HapticsSourceCtx &hctx, int request_id);
-  bool handle_erase(HapticsSourceCtx &hctx, int request_id);
-  void handle_play(sol::this_state ts, HapticsSourceCtx &src, int virt_id, int magnitude);
-  void handle_stop(sol::this_state ts, HapticsSourceCtx &src, int virt_id);
-  void handle_source_event(HapticsSourceCtx &src);
+  void
+  propagate_update_to_sinks(const std::string &source_id, int virt_id, ff_effect &normalized);
 
  private:
-  std::map<std::string, HapticsSourceCtx> sources_;
-  std::map<std::string, HapticsSinkCtx> sinks_;
+  std::map<std::string, std::unique_ptr<HapticSource>> sources_;
+  std::map<std::string, std::unique_ptr<HapticSink>> sinks_;
 };

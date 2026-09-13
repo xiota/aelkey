@@ -44,7 +44,7 @@ static void haptics_play(std::string sink_id, sol::table ev) {
   ff_effect *maybe_eff = nullptr;
 
   if (source.empty() || id < 0 || !disp.get_source(source) ||
-      disp.get_source(source)->effects.count(id) == 0) {
+      disp.get_source(source)->get_effects().count(id) == 0) {
     // one-shot
     eff = DispatcherHaptics::lua_to_ff_effect(ev);
     maybe_eff = &eff;
