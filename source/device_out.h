@@ -11,11 +11,4 @@ class DeviceOut {
 
  public:
   virtual bool create(const OutputDecl &decl) = 0;
-
-  virtual int fd() const {
-    return fd_;
-  }
-
- protected:
-  int fd_ = -1;
 };

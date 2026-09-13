@@ -16,9 +16,6 @@ class HapticSourceUinput : public HapticSource {
   const std::string &get_id() const override {
     return id_;
   }
-  int get_fd() const override {
-    return fd_;
-  }
   const std::string &get_callback() const override {
     return callback_;
   }

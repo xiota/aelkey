@@ -11,7 +11,6 @@ class HapticSink {
   virtual ~HapticSink() = default;
 
   virtual const std::string &get_id() const = 0;
-  virtual int get_fd() const = 0;
   virtual std::map<std::pair<std::string, int>, int> &get_slots() = 0;
   const std::map<std::pair<std::string, int>, int> &get_slots() const {
     return const_cast<HapticSink *>(this)->get_slots();

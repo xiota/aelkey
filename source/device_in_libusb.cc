@@ -208,10 +208,6 @@ bool DeviceInLibUSB::detach(const std::string &id) {
   return true;
 }
 
-int DeviceInLibUSB::fd() const {
-  return -1;
-}
-
 bool DeviceInLibUSB::on_init() {
   if (libusb_) {
     return true;

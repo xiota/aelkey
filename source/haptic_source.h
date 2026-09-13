@@ -13,7 +13,6 @@ class HapticSource {
   virtual ~HapticSource() = default;
 
   virtual const std::string &get_id() const = 0;
-  virtual int get_fd() const = 0;
   virtual const std::string &get_callback() const = 0;
   virtual std::map<int, ff_effect> &get_effects() = 0;
   const std::map<int, ff_effect> &get_effects() const {

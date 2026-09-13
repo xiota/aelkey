@@ -34,10 +34,6 @@ class DeviceInEvdev : public DeviceIn, public Singleton<DeviceInEvdev> {
   bool attach(const std::string &devnode, InputDecl &decl) override;
   bool detach(const std::string &id) override;
 
-  int fd() const override {
-    return -1;
-  }
-
  private:
   void handle_evdev_event(int fd, const InputDecl &decl);
   bool try_evdev_grab(int fd, const InputDecl &decl);

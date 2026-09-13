@@ -22,10 +22,6 @@ class DeviceInHidraw : public DeviceIn, public Singleton<DeviceInHidraw> {
   bool attach(const std::string &devnode, InputDecl &decl) override;
   bool detach(const std::string &id) override;
 
-  int fd() const override {
-    return -1;
-  }
-
  private:
   int get_interface_num(const std::string &devnode);
   void handle_hidraw_event(int fd, const InputDecl &decl);

@@ -27,7 +27,6 @@ class DeviceInLibUSB : public DeviceIn, public Singleton<DeviceInLibUSB> {
   bool match(InputDecl &decl, std::string &devnode_out) override;
   bool attach(const std::string &devnode, InputDecl &decl) override;
   bool detach(const std::string &id) override;
-  int fd() const override;
 
   bool on_init() override;
 

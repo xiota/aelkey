@@ -15,11 +15,4 @@ class DeviceIn {
   virtual bool attach(const std::string &devnode, InputDecl &decl) = 0;
 
   virtual bool detach(const std::string &id) = 0;
-
-  virtual int fd() const {
-    return fd_;
-  }
-
- protected:
-  int fd_ = -1;
 };

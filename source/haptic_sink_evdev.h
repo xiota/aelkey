@@ -18,9 +18,6 @@ class HapticSinkEvdev : public HapticSink {
   const std::string &get_id() const override {
     return id_;
   }
-  int get_fd() const override {
-    return fd_;
-  }
   std::map<std::pair<std::string, int>, int> &get_slots() override {
     return slots_;
   }
