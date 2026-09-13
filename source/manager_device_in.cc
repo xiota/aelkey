@@ -8,7 +8,6 @@
 #include "device_in_libusb.h"
 #include "device_in_midi.h"
 #include "dispatcher_evdev.h"
-#include "dispatcher_gatt.h"
 #include "dispatcher_haptics.h"
 #include "dispatcher_hidraw.h"
 #include "dispatcher_libusb.h"
@@ -18,7 +17,6 @@
 ManagerDeviceIn::ManagerDeviceIn() {
   // Register dispatchers
   DispatcherEvdev::register_self();
-  DispatcherGATT::register_self();
   DispatcherHaptics::register_self();
   DispatcherHidraw::register_self();
   DispatcherLibUSB::register_self();

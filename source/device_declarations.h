@@ -2,6 +2,7 @@
 
 #include <optional>
 #include <string>
+#include <unordered_set>
 #include <vector>
 
 struct OutputCapability {
@@ -35,6 +36,7 @@ struct InputDecl {
 
   std::vector<int> services;
   std::vector<int> characteristics;
+  std::unordered_set<std::string> subbed_chars;
 
   std::string devnode;
 

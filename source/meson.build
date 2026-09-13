@@ -49,7 +49,7 @@ shared_library(
   src_files,
   include_directories: src_inc,
   dependencies: [
-    dbus_dep,
+    sdbus_cpp_dep,
     jack_dep,
     libevdev_dep,
     libudev_dep,

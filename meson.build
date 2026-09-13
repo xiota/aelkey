@@ -12,7 +12,7 @@ project(
 )
 
 # depends
-dbus_dep = dependency('dbus-1')
+sdbus_cpp_dep = dependency('sdbus-c++')
 jack_dep = dependency('jack')
 libevdev_dep = dependency('libevdev')
 libudev_dep = dependency('libudev')

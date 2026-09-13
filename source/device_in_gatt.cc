@@ -1,17 +1,41 @@
 #include "device_in_gatt.h"
 
-#include <cstring>
-#include <iostream>
+#include <cstdint>
+#include <cstdio>
 #include <string>
 #include <string_view>
+#include <vector>
 
-#include <dbus/dbus.h>
 #include <sol/sol.hpp>
 
 #include "aelkey_state.h"
 #include "backend_bluez.h"
-#include "dispatcher_gatt.h"
-#include "manager_device_in.h"
+#include "tick_scheduler.h"
+
+DeviceInGatt::~DeviceInGatt() {
+  if (tick_fd_ >= 0) {
+    TickScheduler::instance().unregister_fd(tick_fd_);
+    tick_fd_ = -1;
+  }
+}
+
+bool DeviceInGatt::on_init() {
+  auto &bluez = BackendBluez::instance();
+  if (!bluez.lazy_init()) {
+    return false;
+  }
+
+  tok_gatt_ = bluez.sig_gatt_value_.subscribe(
+      [this](const std::string &path, const std::vector<uint8_t> &data) {
+        queue_.enqueue(GattEvent{ path, data });
+        if (tick_fd_ >= 0) {
+          TickScheduler::instance().trigger(tick_fd_);
+        }
+      }
+  );
+
+  return true;
+}
 
 bool DeviceInGatt::match(InputDecl &decl, std::string &devnode_out) {
   if (!lazy_init()) {
@@ -35,6 +59,8 @@ bool DeviceInGatt::attach(const std::string &devnode, InputDecl &decl) {
   if (!lazy_init()) {
     return false;
   }
+
+  bool matched = false;
 
   if (devnode.empty()) {
     std::fprintf(stderr, "GATT: no GATT path in devnode for %s\n", decl.id.c_str());
@@ -62,35 +88,38 @@ bool DeviceInGatt::attach(const std::string &devnode, InputDecl &decl) {
       bluez.print_characteristic_inspect_line(ch);
 
       if (bluez.characteristic_supports_notify(ch)) {
-        std::string rule =
-            "type='signal',"
-            "interface='org.freedesktop.DBus.Properties',"
-            "member='PropertiesChanged',"
-            "path='" +
-            ch + "'";
-
-        bluez.add_match_rule(rule);
-        bluez.start_notify(ch);
+        if (bluez.start_notify(ch)) {
+          decl.subbed_chars.insert(ch);
+          matched = true;
+        }
       }
     }
   } else {
     bluez.print_characteristic_inspect_line(devnode);
-
-    std::string rule =
-        "type='signal',"
-        "interface='org.freedesktop.DBus.Properties',"
-        "member='PropertiesChanged',"
-        "path='" +
-        devnode + "'";
-
-    bluez.add_match_rule(rule);
-    bluez.start_notify(devnode);
+    if (bluez.start_notify(devnode)) {
+      decl.subbed_chars.insert(devnode);
+      matched = true;
+    }
   }
 
   gatt_paths_[decl.id] = gatt_path;
 
-  decl.devnode = devnode;
-  return true;
+  if (matched) {
+    decl.devnode = devnode;
+
+    if (tick_fd_ < 0) {
+      TickCb cb;
+      cb.native = [this]() { this->pump_messages(); };
+      cb.oneshot = false;
+
+      tick_fd_ = TickScheduler::instance().schedule(10000, cb);
+      if (tick_fd_ < 0) {
+        std::fprintf(stderr, "GATT: failed to schedule tick\n");
+      }
+    }
+  }
+
+  return matched;
 }
 
 bool DeviceInGatt::detach(const std::string &id) {
@@ -105,149 +134,49 @@ bool DeviceInGatt::detach(const std::string &id) {
   }
 
   InputDecl &decl = it->second;
-  if (!decl.devnode.empty()) {
-    BackendBluez::instance().stop_notify(decl.devnode);
+
+  auto &bluez = BackendBluez::instance();
+
+  std::vector<std::string> to_remove;
+
+  for (const auto &char_path : decl.subbed_chars) {
+    bluez.stop_notify(char_path);
+    to_remove.push_back(char_path);
   }
 
-  gatt_paths_.erase(id);
+  for (const auto &char_path : to_remove) {
+    decl.subbed_chars.erase(char_path);
+  }
 
+  if (!decl.devnode.empty()) {
+    bluez.disconnect_device(decl.devnode);
+    gatt_paths_.erase(id);
+    decl.devnode.clear();
+  }
   return true;
 }
 
-bool DeviceInGatt::on_init() {
-  auto &bluez = BackendBluez::instance();
-  if (!bluez.lazy_init()) {
-    return false;
+void DeviceInGatt::pump_messages() {
+  if (!lazy_init()) {
+    return;
   }
 
-  fd_ = bluez.fd();
-
-  std::string rule =
-      "type='signal',"
-      "sender='org.bluez',"
-      "interface='org.freedesktop.DBus.Properties',"
-      "member='PropertiesChanged'";
-  bluez.add_match_rule(rule);
-
-  return DispatcherGATT::instance().lazy_init();
-}
-
-static void process_one_message(DBusMessage *msg) {
   auto &state = AelkeyState::instance();
   sol::state_view lua(state.lua_vm);
 
-  const char *path = dbus_message_get_path(msg);
-  if (!path) {
-    return;
-  }
+  GattEvent ev;
+  while (queue_.try_dequeue(ev)) {
+    const char *path = ev.path.c_str();
 
-  DBusMessageIter args;
-  dbus_message_iter_init(msg, &args);
-
-  const char *iface = nullptr;
-  if (dbus_message_iter_get_arg_type(&args) == DBUS_TYPE_STRING) {
-    dbus_message_iter_get_basic(&args, &iface);
-  }
-
-  if (iface && strcmp(iface, "org.bluez.Device1") == 0) {
-    dbus_message_iter_next(&args);
-    if (dbus_message_iter_get_arg_type(&args) == DBUS_TYPE_ARRAY) {
-      DBusMessageIter dict;
-      dbus_message_iter_recurse(&args, &dict);
-
-      while (dbus_message_iter_get_arg_type(&dict) == DBUS_TYPE_DICT_ENTRY) {
-        DBusMessageIter entry;
-        dbus_message_iter_recurse(&dict, &entry);
-
-        const char *key = nullptr;
-        if (dbus_message_iter_get_arg_type(&entry) == DBUS_TYPE_STRING) {
-          dbus_message_iter_get_basic(&entry, &key);
-        }
-
-        dbus_message_iter_next(&entry);
-        if (key && strcmp(key, "ServicesResolved") == 0 &&
-            dbus_message_iter_get_arg_type(&entry) == DBUS_TYPE_VARIANT) {
-          DBusMessageIter variant;
-          dbus_message_iter_recurse(&entry, &variant);
-
-          if (dbus_message_iter_get_arg_type(&variant) == DBUS_TYPE_BOOLEAN) {
-            dbus_bool_t services_resolved = FALSE;
-            dbus_message_iter_get_basic(&variant, &services_resolved);
-
-            if (services_resolved) {
-              auto &devmgr = ManagerDeviceIn::instance();
-              for (auto &decl : state.input_decls) {
-                if (decl.type == "gatt") {
-                  // Skip if already attached
-                  if (!decl.devnode.empty()) {
-                    continue;
-                  }
-
-                  std::string devnode;
-                  if (devmgr.match(decl, devnode)) {
-                    if (devmgr.attach(devnode, decl)) {
-                      decl.devnode = devnode;
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-        dbus_message_iter_next(&dict);
+    for (auto &[_, decl] : state.input_map) {
+      if (decl.type != "gatt") {
+        continue;
       }
-    }
-    return;
-  }
 
-  if (!iface || strcmp(iface, "org.bluez.GattCharacteristic1") != 0) {
-    return;
-  }
-
-  std::vector<uint8_t> bytes;
-
-  dbus_message_iter_next(&args);
-  DBusMessageIter dict;
-  dbus_message_iter_recurse(&args, &dict);
-
-  while (dbus_message_iter_get_arg_type(&dict) == DBUS_TYPE_DICT_ENTRY) {
-    DBusMessageIter entry;
-    dbus_message_iter_recurse(&dict, &entry);
-
-    const char *key = nullptr;
-    if (dbus_message_iter_get_arg_type(&entry) == DBUS_TYPE_STRING) {
-      dbus_message_iter_get_basic(&entry, &key);
-    }
-
-    dbus_message_iter_next(&entry);
-    if (dbus_message_iter_get_arg_type(&entry) == DBUS_TYPE_VARIANT) {
-      DBusMessageIter variant;
-      dbus_message_iter_recurse(&entry, &variant);
-
-      if (key && strcmp(key, "Value") == 0) {
-        if (dbus_message_iter_get_arg_type(&variant) == DBUS_TYPE_ARRAY) {
-          DBusMessageIter array;
-          dbus_message_iter_recurse(&variant, &array);
-
-          while (dbus_message_iter_get_arg_type(&array) == DBUS_TYPE_BYTE) {
-            uint8_t b;
-            dbus_message_iter_get_basic(&array, &b);
-            bytes.push_back(b);
-            dbus_message_iter_next(&array);
-          }
-        }
+      if (decl.on_event.empty()) {
+        continue;
       }
-    }
 
-    dbus_message_iter_next(&dict);
-  }
-
-  for (auto &[_, decl] : state.input_map) {
-    if (decl.type != "gatt") {
-      continue;
-    }
-
-    if (!decl.on_event.empty()) {
       sol::object obj = lua[decl.on_event];
       if (!obj.is<sol::function>()) {
         continue;
@@ -259,8 +188,8 @@ static void process_one_message(DBusMessage *msg) {
       tbl["device"] = decl.id;
       tbl["path"] = path;
       tbl["data"] =
-          std::string_view(reinterpret_cast<const char *>(bytes.data()), bytes.size());
-      tbl["size"] = static_cast<int>(bytes.size());
+          std::string_view(reinterpret_cast<const char *>(ev.data.data()), ev.data.size());
+      tbl["size"] = static_cast<int>(ev.data.size());
       tbl["status"] = "ok";
 
       sol::protected_function pf = cb;
@@ -269,55 +198,8 @@ static void process_one_message(DBusMessage *msg) {
         sol::error err = res;
         std::fprintf(stderr, "Lua gatt_callback error: %s\n", err.what());
       }
-    }
 
-    break;
-  }
-}
-
-void DeviceInGatt::pump_messages() {
-  if (!lazy_init()) {
-    return;
-  }
-
-  DBusConnection *conn = BackendBluez::instance().connection();
-  if (!conn) {
-    return;
-  }
-
-  // Non-blocking read
-  dbus_connection_read_write(conn, 0);
-
-  // Process ALL pending messages
-  while (true) {
-    DBusMessage *msg = dbus_connection_pop_message(conn);
-    if (!msg) {
       break;
     }
-
-    process_one_message(msg);
-    dbus_message_unref(msg);
   }
-}
-
-bool DeviceInGatt::read_characteristic(
-    const std::string &char_path,
-    std::vector<uint8_t> &out_data
-) {
-  if (!lazy_init()) {
-    return false;
-  }
-  return BackendBluez::instance().read_characteristic(char_path, out_data);
-}
-
-bool DeviceInGatt::write_characteristic(
-    const std::string &char_path,
-    const uint8_t *data,
-    size_t len,
-    bool with_resp
-) {
-  if (!lazy_init()) {
-    return false;
-  }
-  return BackendBluez::instance().write_characteristic(char_path, data, len, with_resp);
 }

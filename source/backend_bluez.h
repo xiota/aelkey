@@ -2,12 +2,14 @@
 
 #include <cstdint>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
-#include <dbus/dbus.h>
+#include <sdbus-c++/sdbus-c++.h>
 
 #include "device_declarations.h"
 #include "singleton.h"
+#include "utils/signal.h"
 
 enum class GattPathType { Device, Service, Characteristic };
 
@@ -16,21 +18,15 @@ class BackendBluez : public Singleton<BackendBluez> {
 
  private:
   BackendBluez() = default;
-  ~BackendBluez();
+  ~BackendBluez() = default;
 
- public:
   bool ensure_client();
 
-  DBusConnection *connection() const {
-    return conn_;
-  }
-
-  int fd() const {
-    return fd_;
-  }
+ public:
+  void shutdown();
 
   // --- D-Bus / BlueZ operations ---
-  void start_notify(const std::string &char_path);
+  bool start_notify(const std::string &char_path);
   void stop_notify(const std::string &char_path);
 
   bool read_characteristic(const std::string &char_path, std::vector<uint8_t> &out_data);
@@ -43,7 +39,7 @@ class BackendBluez : public Singleton<BackendBluez> {
 
   bool characteristic_supports_notify(const std::string &char_path);
 
-  void add_match_rule(const std::string &rule);
+  bool disconnect_device(const std::string &path);
 
   // --- Path resolution & inspection ---
   static GattPathType classify_gatt_path(const std::string &path);
@@ -56,24 +52,34 @@ class BackendBluez : public Singleton<BackendBluez> {
   std::string
   resolve_gatt_paths(const InputDecl &decl, std::vector<std::string> *found_characteristics);
 
-  DBusMessage *get_managed_objects();
+  // Signal: path, value bytes
+  AelkeyUtil::Signal<void(const std::string &, const std::vector<uint8_t> &)> sig_gatt_value_;
 
  private:
   bool on_init() override;
 
-  std::vector<std::string> get_matching_devices(const InputDecl &decl, DBusMessageIter &array);
+  using ManagedObjects =
+      std::map<sdbus::ObjectPath, std::map<std::string, std::map<std::string, sdbus::Variant>>>;
+
+  ManagedObjects get_managed_objects();
+
+  std::vector<std::string>
+  get_matching_devices(const InputDecl &decl, const ManagedObjects &objs);
   std::vector<std::string> get_matching_services(
       const InputDecl &decl,
       const std::vector<std::string> &candidate_devices,
-      DBusMessageIter &array
+      const ManagedObjects &objs
   );
   std::vector<std::string> get_matching_characteristics(
       const InputDecl &decl,
       const std::vector<std::string> &candidate_services,
-      DBusMessageIter &array
+      const ManagedObjects &objs
   );
 
+  void on_device_properties_changed(sdbus::Message &msg);
+  void on_properties_changed(sdbus::Message &msg);
+
  private:
-  DBusConnection *conn_ = nullptr;
-  int fd_ = -1;
+  std::unique_ptr<sdbus::IConnection> conn_;
+  std::unordered_map<std::string, sdbus::Slot> match_slots_;
 };

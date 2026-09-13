@@ -5,20 +5,17 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <exception>
+#include <map>
+#include <memory>
 #include <string>
 #include <vector>
 
-#include <dbus/dbus.h>
+#include <sdbus-c++/sdbus-c++.h>
 
-#include "device_declarations.h"
+#include "aelkey_state.h"
+#include "manager_device_in.h"
 #include "utils/regex_match.h"
-
-BackendBluez::~BackendBluez() {
-  if (conn_) {
-    dbus_connection_unref(conn_);
-    conn_ = nullptr;
-  }
-}
 
 bool BackendBluez::on_init() {
   return ensure_client();
@@ -29,59 +26,168 @@ bool BackendBluez::ensure_client() {
     return true;
   }
 
-  conn_ = dbus_bus_get(DBUS_BUS_SYSTEM, nullptr);
-  if (!conn_) {
+  try {
+    conn_ = sdbus::createSystemBusConnection();
+    conn_->enterEventLoopAsync();
+
+    std::string rule =
+        "type='signal',"
+        "sender='org.bluez',"
+        "interface='org.freedesktop.DBus.Properties',"
+        "member='PropertiesChanged',"
+        "arg0='org.bluez.Device1'";
+
+    sdbus::Slot slot = conn_->addMatch(
+        rule,
+        [this](sdbus::Message msg) { on_device_properties_changed(msg); },
+        sdbus::return_slot
+    );
+    match_slots_["aelkey_bluez_device_monitor"] = std::move(slot);
+
+    return true;
+  } catch (const sdbus::Error &e) {
+    std::fprintf(
+        stderr,
+        "BackendBluez: failed to setup system bus connection (%s: %s)\n",
+        e.getName().c_str(),
+        e.getMessage().c_str()
+    );
+    conn_.reset();  // Ensure conn_ remains clean/null on failure
+    return false;
+  } catch (const std::exception &e) {
+    std::fprintf(
+        stderr, "BackendBluez: unexpected error setting up connection: %s\n", e.what()
+    );
+    conn_.reset();
+    return false;
+  }
+}
+
+void BackendBluez::shutdown() {
+  match_slots_.clear();
+  if (conn_) {
+    conn_.reset();
+  }
+}
+
+bool BackendBluez::disconnect_device(const std::string &path) {
+  if (!ensure_client()) {
     return false;
   }
 
-  dbus_connection_set_exit_on_disconnect(conn_, false);
+  const std::string device_path = derive_device_path_from_char_path(path);
 
-  if (!dbus_connection_get_unix_fd(conn_, &fd_)) {
-    fd_ = -1;
-    conn_ = nullptr;
+  try {
+    auto proxy = sdbus::createProxy(
+        *conn_, sdbus::ServiceName{ "org.bluez" }, sdbus::ObjectPath{ device_path }
+    );
+
+    proxy->callMethod("Disconnect").onInterface("org.bluez.Device1");
+    return true;
+  } catch (const sdbus::Error &e) {
+    std::fprintf(
+        stderr,
+        "BackendBluez: failed to disconnect device on %s (%s: %s)\n",
+        device_path.c_str(),
+        e.getName().c_str(),
+        e.getMessage().c_str()
+    );
+    return false;
+  } catch (const std::exception &e) {
+    std::fprintf(
+        stderr,
+        "BackendBluez: unexpected error starting notify on %s: %s\n",
+        device_path.c_str(),
+        e.what()
+    );
     return false;
   }
-
-  return true;
 }
 
-void BackendBluez::add_match_rule(const std::string &rule) {
-  if (!ensure_client()) {
-    return;
+void BackendBluez::on_properties_changed(sdbus::Message &msg) {
+  try {
+    std::string iface;
+    std::map<std::string, sdbus::Variant> changed;
+    std::vector<std::string> invalidated;
+
+    msg >> iface >> changed >> invalidated;
+
+    if (iface != "org.bluez.GattCharacteristic1") {
+      return;
+    }
+
+    auto it = changed.find("Value");
+    if (it == changed.end()) {
+      return;
+    }
+
+    std::vector<uint8_t> bytes = it->second.get<std::vector<uint8_t>>();
+
+    std::string path = msg.getPath();
+    sig_gatt_value_.emit(path, bytes);
+  } catch (const sdbus::Error &e) {
+    std::fprintf(
+        stderr,
+        "BackendBluez: D-Bus error in handle_properties_changed (%s: %s)\n",
+        e.getName().c_str(),
+        e.getMessage().c_str()
+    );
+  } catch (const std::exception &e) {
+    std::fprintf(
+        stderr, "BackendBluez: Exception in handle_properties_changed: %s\n", e.what()
+    );
   }
-  dbus_bus_add_match(conn_, rule.c_str(), nullptr);
-  dbus_connection_flush(conn_);
 }
 
-void BackendBluez::start_notify(const std::string &char_path) {
-  if (!ensure_client()) {
-    return;
-  }
+void BackendBluez::on_device_properties_changed(sdbus::Message &msg) {
+  try {
+    std::string iface;
+    std::map<std::string, sdbus::Variant> changed;
+    std::vector<std::string> invalidated;
 
-  DBusMessage *msg = dbus_message_new_method_call(
-      "org.bluez", char_path.c_str(), "org.bluez.GattCharacteristic1", "StartNotify"
-  );
+    msg >> iface >> changed >> invalidated;
 
-  DBusMessage *reply = dbus_connection_send_with_reply_and_block(conn_, msg, -1, nullptr);
-  dbus_message_unref(msg);
-  if (reply) {
-    dbus_message_unref(reply);
-  }
-}
+    if (iface != "org.bluez.Device1") {
+      return;
+    }
 
-void BackendBluez::stop_notify(const std::string &char_path) {
-  if (!ensure_client()) {
-    return;
-  }
+    auto it = changed.find("ServicesResolved");
+    if (it == changed.end()) {
+      return;
+    }
 
-  DBusMessage *msg = dbus_message_new_method_call(
-      "org.bluez", char_path.c_str(), "org.bluez.GattCharacteristic1", "StopNotify"
-  );
+    bool resolved = it->second.get<bool>();
 
-  DBusMessage *reply = dbus_connection_send_with_reply_and_block(conn_, msg, -1, nullptr);
-  dbus_message_unref(msg);
-  if (reply) {
-    dbus_message_unref(reply);
+    if (resolved) {
+      auto &state = AelkeyState::instance();
+      for (auto &decl : state.input_decls) {
+        if (decl.type == "gatt") {
+          // Skip if already attached
+          if (!decl.devnode.empty()) {
+            continue;
+          }
+
+          auto &devmgr = ManagerDeviceIn::instance();
+          std::string devnode;
+          if (devmgr.match(decl, devnode)) {
+            if (devmgr.attach(devnode, decl)) {
+              decl.devnode = devnode;
+            }
+          }
+        }
+      }
+    }
+  } catch (const sdbus::Error &e) {
+    std::fprintf(
+        stderr,
+        "BackendBluez: D-Bus error in handle_properties_changed (%s: %s)\n",
+        e.getName().c_str(),
+        e.getMessage().c_str()
+    );
+  } catch (const std::exception &e) {
+    std::fprintf(
+        stderr, "BackendBluez: Exception in handle_properties_changed: %s\n", e.what()
+    );
   }
 }
 
@@ -104,191 +210,111 @@ std::string BackendBluez::derive_device_path_from_char_path(const std::string &c
   return char_path.substr(0, pos);
 }
 
-DBusMessage *BackendBluez::get_managed_objects() {
+BackendBluez::ManagedObjects BackendBluez::get_managed_objects() {
   if (!ensure_client()) {
-    return nullptr;
+    return {};
   }
 
-  DBusMessage *msg = dbus_message_new_method_call(
-      "org.bluez", "/", "org.freedesktop.DBus.ObjectManager", "GetManagedObjects"
-  );
+  try {
+    auto proxy =
+        sdbus::createProxy(*conn_, sdbus::ServiceName{ "org.bluez" }, sdbus::ObjectPath{ "/" });
 
-  DBusMessage *resp = dbus_connection_send_with_reply_and_block(conn_, msg, -1, nullptr);
-  dbus_message_unref(msg);
-  return resp;
+    ManagedObjects objs;
+    proxy->callMethod("GetManagedObjects")
+        .onInterface("org.freedesktop.DBus.ObjectManager")
+        .storeResultsTo(objs);
+
+    return objs;
+  } catch (const sdbus::Error &e) {
+    std::fprintf(
+        stderr,
+        "BackendBluez: failed to get managed objects (%s: %s)\n",
+        e.getName().c_str(),
+        e.getMessage().c_str()
+    );
+    return {};
+  } catch (const std::exception &e) {
+    std::fprintf(
+        stderr, "BackendBluez: unexpected error getting managed objects: %s\n", e.what()
+    );
+    return {};
+  }
 }
 
 std::string BackendBluez::get_characteristic_uuid(const std::string &path) {
-  DBusMessage *msg = get_managed_objects();
-  if (!msg) {
-    return "";
+  if (!ensure_client()) {
+    return {};
   }
 
-  DBusMessageIter it;
-  dbus_message_iter_init(msg, &it);
+  try {
+    auto proxy = sdbus::createProxy(
+        *conn_, sdbus::ServiceName{ "org.bluez" }, sdbus::ObjectPath{ path }
+    );
 
-  if (dbus_message_iter_get_arg_type(&it) != DBUS_TYPE_ARRAY) {
-    dbus_message_unref(msg);
-    return "";
+    sdbus::Variant v;
+    proxy->callMethod("Get")
+        .onInterface("org.freedesktop.DBus.Properties")
+        .withArguments(std::string("org.bluez.GattCharacteristic1"), std::string("UUID"))
+        .storeResultsTo(v);
+
+    return v.get<std::string>();
+
+  } catch (const sdbus::Error &e) {
+    std::fprintf(
+        stderr,
+        "BackendBluez: failed to get characteristic UUID for %s (%s: %s)\n",
+        path.c_str(),
+        e.getName().c_str(),
+        e.getMessage().c_str()
+    );
+    return {};
+  } catch (const std::exception &e) {
+    std::fprintf(
+        stderr,
+        "BackendBluez: unexpected error getting characteristic UUID for %s: %s\n",
+        path.c_str(),
+        e.what()
+    );
+    return {};
   }
-
-  DBusMessageIter dict;
-  dbus_message_iter_recurse(&it, &dict);
-
-  while (dbus_message_iter_get_arg_type(&dict) == DBUS_TYPE_DICT_ENTRY) {
-    DBusMessageIter entry;
-    dbus_message_iter_recurse(&dict, &entry);
-
-    const char *object_path = nullptr;
-    dbus_message_iter_get_basic(&entry, &object_path);
-
-    dbus_message_iter_next(&entry);
-
-    if (dbus_message_iter_get_arg_type(&entry) != DBUS_TYPE_ARRAY) {
-      dbus_message_iter_next(&dict);
-      continue;
-    }
-
-    DBusMessageIter iface_dict;
-    dbus_message_iter_recurse(&entry, &iface_dict);
-
-    if (object_path && path == object_path) {
-      while (dbus_message_iter_get_arg_type(&iface_dict) == DBUS_TYPE_DICT_ENTRY) {
-        DBusMessageIter iface_entry;
-        dbus_message_iter_recurse(&iface_dict, &iface_entry);
-
-        const char *iface_name = nullptr;
-        dbus_message_iter_get_basic(&iface_entry, &iface_name);
-
-        dbus_message_iter_next(&iface_entry);
-
-        if (!iface_name || strcmp(iface_name, "org.bluez.GattCharacteristic1") != 0) {
-          dbus_message_iter_next(&iface_dict);
-          continue;
-        }
-
-        if (dbus_message_iter_get_arg_type(&iface_entry) != DBUS_TYPE_ARRAY) {
-          dbus_message_iter_next(&iface_dict);
-          continue;
-        }
-
-        DBusMessageIter props_dict;
-        dbus_message_iter_recurse(&iface_entry, &props_dict);
-
-        while (dbus_message_iter_get_arg_type(&props_dict) == DBUS_TYPE_DICT_ENTRY) {
-          DBusMessageIter prop_entry;
-          dbus_message_iter_recurse(&props_dict, &prop_entry);
-
-          const char *prop_name = nullptr;
-          dbus_message_iter_get_basic(&prop_entry, &prop_name);
-
-          dbus_message_iter_next(&prop_entry);
-
-          if (!prop_name || strcmp(prop_name, "UUID") != 0) {
-            dbus_message_iter_next(&props_dict);
-            continue;
-          }
-
-          if (dbus_message_iter_get_arg_type(&prop_entry) != DBUS_TYPE_VARIANT) {
-            dbus_message_iter_next(&props_dict);
-            continue;
-          }
-
-          DBusMessageIter variant;
-          dbus_message_iter_recurse(&prop_entry, &variant);
-
-          const char *uuid = nullptr;
-          dbus_message_iter_get_basic(&variant, &uuid);
-
-          std::string result = uuid ? uuid : "";
-          dbus_message_unref(msg);
-          return result;
-        }
-
-        dbus_message_iter_next(&iface_dict);
-      }
-    }
-
-    dbus_message_iter_next(&dict);
-  }
-
-  dbus_message_unref(msg);
-  return "";
 }
 
 std::vector<std::string> BackendBluez::get_characteristic_flags(const std::string &path) {
-  std::vector<std::string> out;
-
-  DBusMessage *msg = get_managed_objects();
-  if (!msg) {
-    return out;
+  if (!ensure_client()) {
+    return {};
   }
 
-  DBusMessageIter it, dict;
-  dbus_message_iter_init(msg, &it);
-  dbus_message_iter_recurse(&it, &dict);
+  try {
+    auto proxy = sdbus::createProxy(
+        *conn_, sdbus::ServiceName{ "org.bluez" }, sdbus::ObjectPath{ path }
+    );
 
-  while (dbus_message_iter_get_arg_type(&dict) != DBUS_TYPE_INVALID) {
-    DBusMessageIter entry, iface_dict;
-    const char *object_path = nullptr;
+    sdbus::Variant v;
+    proxy->callMethod("Get")
+        .onInterface("org.freedesktop.DBus.Properties")
+        .withArguments(std::string("org.bluez.GattCharacteristic1"), std::string("Flags"))
+        .storeResultsTo(v);
 
-    dbus_message_iter_recurse(&dict, &entry);
-    dbus_message_iter_get_basic(&entry, &object_path);
-    dbus_message_iter_next(&entry);
-    dbus_message_iter_recurse(&entry, &iface_dict);
+    return v.get<std::vector<std::string>>();
 
-    if (object_path && path == object_path) {
-      while (dbus_message_iter_get_arg_type(&iface_dict) != DBUS_TYPE_INVALID) {
-        DBusMessageIter props_dict;
-        const char *iface_name = nullptr;
-
-        dbus_message_iter_recurse(&iface_dict, &props_dict);
-        dbus_message_iter_get_basic(&props_dict, &iface_name);
-        dbus_message_iter_next(&props_dict);
-
-        if (iface_name && strcmp(iface_name, "org.bluez.GattCharacteristic1") == 0) {
-          DBusMessageIter prop_entry;
-          dbus_message_iter_recurse(&props_dict, &prop_entry);
-
-          while (dbus_message_iter_get_arg_type(&prop_entry) != DBUS_TYPE_INVALID) {
-            DBusMessageIter prop, variant;
-            const char *prop_name = nullptr;
-
-            dbus_message_iter_recurse(&prop_entry, &prop);
-            dbus_message_iter_get_basic(&prop, &prop_name);
-            dbus_message_iter_next(&prop);
-            dbus_message_iter_recurse(&prop, &variant);
-
-            if (prop_name && strcmp(prop_name, "Flags") == 0) {
-              DBusMessageIter array;
-              dbus_message_iter_recurse(&variant, &array);
-
-              while (dbus_message_iter_get_arg_type(&array) == DBUS_TYPE_STRING) {
-                const char *flag = nullptr;
-                dbus_message_iter_get_basic(&array, &flag);
-                if (flag) {
-                  out.emplace_back(flag);
-                }
-                dbus_message_iter_next(&array);
-              }
-
-              dbus_message_unref(msg);
-              return out;
-            }
-
-            dbus_message_iter_next(&prop_entry);
-          }
-        }
-
-        dbus_message_iter_next(&iface_dict);
-      }
-    }
-
-    dbus_message_iter_next(&dict);
+  } catch (const sdbus::Error &e) {
+    std::fprintf(
+        stderr,
+        "BackendBluez: failed to get characteristic flags for %s (%s: %s)\n",
+        path.c_str(),
+        e.getName().c_str(),
+        e.getMessage().c_str()
+    );
+    return {};
+  } catch (const std::exception &e) {
+    std::fprintf(
+        stderr,
+        "BackendBluez: unexpected error getting characteristic flags for %s: %s\n",
+        path.c_str(),
+        e.what()
+    );
+    return {};
   }
-
-  dbus_message_unref(msg);
-  return out;
 }
 
 void BackendBluez::print_characteristic_inspect_line(const std::string &ch) {
@@ -331,105 +357,46 @@ void BackendBluez::print_characteristic_inspect_line(const std::string &ch) {
 }
 
 bool BackendBluez::characteristic_supports_notify(const std::string &char_path) {
-  if (!ensure_client()) {
-    return false;
-  }
+  const auto flags = get_characteristic_flags(char_path);
 
-  DBusMessage *msg;
-  DBusMessage *reply;
-  DBusMessageIter args;
-
-  msg = dbus_message_new_method_call(
-      "org.bluez", char_path.c_str(), "org.freedesktop.DBus.Properties", "Get"
-  );
-
-  const char *iface = "org.bluez.GattCharacteristic1";
-  const char *prop = "Flags";
-
-  dbus_message_append_args(
-      msg, DBUS_TYPE_STRING, &iface, DBUS_TYPE_STRING, &prop, DBUS_TYPE_INVALID
-  );
-
-  reply = dbus_connection_send_with_reply_and_block(conn_, msg, -1, nullptr);
-  dbus_message_unref(msg);
-
-  if (!reply) {
-    return false;
-  }
-
-  dbus_message_iter_init(reply, &args);
-
-  DBusMessageIter variant, array;
-  dbus_message_iter_recurse(&args, &variant);
-  dbus_message_iter_recurse(&variant, &array);
-
-  bool supports = false;
-
-  while (dbus_message_iter_get_arg_type(&array) == DBUS_TYPE_STRING) {
-    const char *flag;
-    dbus_message_iter_get_basic(&array, &flag);
-
-    if (strcmp(flag, "notify") == 0) {
-      supports = true;
-      break;
+  for (const auto &flag : flags) {
+    if (flag == "notify" || flag == "indicate") {
+      return true;
     }
-
-    dbus_message_iter_next(&array);
   }
 
-  dbus_message_unref(reply);
-  return supports;
+  return false;
 }
 
 std::string BackendBluez::resolve_gatt_paths(
     const InputDecl &decl,
     std::vector<std::string> *found_characteristics
 ) {
-  DBusMessage *resp = get_managed_objects();
-  if (!resp) {
-    return {};
-  }
+  auto objs = get_managed_objects();
 
-  DBusMessageIter iter, dict;
-
-  dbus_message_iter_init(resp, &iter);
-  dbus_message_iter_recurse(&iter, &dict);
-
-  auto devices = get_matching_devices(decl, dict);
+  auto devices = get_matching_devices(decl, objs);
   if (devices.empty()) {
-    dbus_message_unref(resp);
     return {};
   }
 
   if (decl.services.empty() && !found_characteristics) {
-    dbus_message_unref(resp);
     return devices[0];
   }
 
-  dbus_message_iter_init(resp, &iter);
-  dbus_message_iter_recurse(&iter, &dict);
-
-  auto services = get_matching_services(decl, devices, dict);
+  auto services = get_matching_services(decl, devices, objs);
   if (services.empty()) {
-    dbus_message_unref(resp);
     return {};
   }
 
   if (decl.characteristics.empty() && !found_characteristics) {
-    dbus_message_unref(resp);
     return services[0];
   }
 
-  dbus_message_iter_init(resp, &iter);
-  dbus_message_iter_recurse(&iter, &dict);
-
-  auto characteristics = get_matching_characteristics(decl, services, dict);
+  auto characteristics = get_matching_characteristics(decl, services, objs);
 
   if (found_characteristics) {
     *found_characteristics = characteristics;
   }
-
-  dbus_message_unref(resp);
 
   if (decl.services.empty()) {
     return devices[0];
@@ -440,7 +407,9 @@ std::string BackendBluez::resolve_gatt_paths(
   }
 
   if (characteristics.empty()) {
-    std::fprintf(stderr, "GATT match: no matching characteristic found\n");
+    std::fprintf(
+        stderr, "BackendBluez: failed to resolve GATT path: no matching characteristic found\n"
+    );
     return {};
   }
 
@@ -448,65 +417,45 @@ std::string BackendBluez::resolve_gatt_paths(
 }
 
 std::vector<std::string>
-BackendBluez::get_matching_devices(const InputDecl &decl, DBusMessageIter &array) {
+BackendBluez::get_matching_devices(const InputDecl &decl, const ManagedObjects &objs) {
   std::vector<std::string> result;
 
-  DBusMessageIter it = array;
+  for (const auto &[object_path, ifaces] : objs) {
+    auto devIt = ifaces.find("org.bluez.Device1");
+    if (devIt == ifaces.end()) {
+      continue;
+    }
 
-  while (dbus_message_iter_get_arg_type(&it) != DBUS_TYPE_INVALID) {
-    DBusMessageIter entry, iface_dict;
-    const char *object_path = nullptr;
-
-    dbus_message_iter_recurse(&it, &entry);
-    dbus_message_iter_get_basic(&entry, &object_path);
-    dbus_message_iter_next(&entry);
-    dbus_message_iter_recurse(&entry, &iface_dict);
-
-    bool is_device = false;
+    bool is_device = true;
     std::string name, alias, address;
 
-    while (dbus_message_iter_get_arg_type(&iface_dict) != DBUS_TYPE_INVALID) {
-      DBusMessageIter props;
-      const char *iface_name = nullptr;
-
-      dbus_message_iter_recurse(&iface_dict, &props);
-      dbus_message_iter_get_basic(&props, &iface_name);
-      dbus_message_iter_next(&props);
-
-      if (iface_name && strcmp(iface_name, "org.bluez.Device1") == 0) {
-        is_device = true;
-
-        DBusMessageIter prop_dict;
-        dbus_message_iter_recurse(&props, &prop_dict);
-
-        while (dbus_message_iter_get_arg_type(&prop_dict) != DBUS_TYPE_INVALID) {
-          DBusMessageIter prop_entry, var;
-          const char *key = nullptr;
-
-          dbus_message_iter_recurse(&prop_dict, &prop_entry);
-          dbus_message_iter_get_basic(&prop_entry, &key);
-          dbus_message_iter_next(&prop_entry);
-          dbus_message_iter_recurse(&prop_entry, &var);
-
-          if (strcmp(key, "Name") == 0) {
-            const char *v = nullptr;
-            dbus_message_iter_get_basic(&var, &v);
-            name = v ? v : "";
-          } else if (strcmp(key, "Alias") == 0) {
-            const char *v = nullptr;
-            dbus_message_iter_get_basic(&var, &v);
-            alias = v ? v : "";
-          } else if (strcmp(key, "Address") == 0) {
-            const char *v = nullptr;
-            dbus_message_iter_get_basic(&var, &v);
-            address = v ? v : "";
-          }
-
-          dbus_message_iter_next(&prop_dict);
+    for (const auto &[key, val] : devIt->second) {
+      try {
+        if (key == "Name") {
+          name = val.get<std::string>();
+        } else if (key == "Alias") {
+          alias = val.get<std::string>();
+        } else if (key == "Address") {
+          address = val.get<std::string>();
         }
+      } catch (const sdbus::Error &e) {
+        std::fprintf(
+            stderr,
+            "BackendBluez: failed to extract device property '%s' for %s (%s: %s)\n",
+            key.c_str(),
+            object_path.c_str(),
+            e.getName().c_str(),
+            e.getMessage().c_str()
+        );
+      } catch (const std::exception &e) {
+        std::fprintf(
+            stderr,
+            "BackendBluez: unexpected error extracting property '%s' for %s: %s\n",
+            key.c_str(),
+            object_path.c_str(),
+            e.what()
+        );
       }
-
-      dbus_message_iter_next(&iface_dict);
     }
 
     if (is_device) {
@@ -526,8 +475,6 @@ BackendBluez::get_matching_devices(const InputDecl &decl, DBusMessageIter &array
         result.push_back(object_path);
       }
     }
-
-    dbus_message_iter_next(&it);
   }
 
   return result;
@@ -536,50 +483,35 @@ BackendBluez::get_matching_devices(const InputDecl &decl, DBusMessageIter &array
 std::vector<std::string> BackendBluez::get_matching_services(
     const InputDecl &decl,
     const std::vector<std::string> &candidate_devices,
-    DBusMessageIter &array
+    const ManagedObjects &objs
 ) {
   std::vector<std::string> result;
 
   for (const auto &dev_path : candidate_devices) {
-    DBusMessageIter it = array;
-
-    while (dbus_message_iter_get_arg_type(&it) != DBUS_TYPE_INVALID) {
-      DBusMessageIter entry, iface_dict;
-      const char *object_path = nullptr;
-
-      dbus_message_iter_recurse(&it, &entry);
-      dbus_message_iter_get_basic(&entry, &object_path);
-      dbus_message_iter_next(&entry);
-      dbus_message_iter_recurse(&entry, &iface_dict);
-
-      while (dbus_message_iter_get_arg_type(&iface_dict) != DBUS_TYPE_INVALID) {
-        DBusMessageIter props;
-        const char *iface_name = nullptr;
-
-        dbus_message_iter_recurse(&iface_dict, &props);
-        dbus_message_iter_get_basic(&props, &iface_name);
-        dbus_message_iter_next(&props);
-
-        if (iface_name && strcmp(iface_name, "org.bluez.GattService1") == 0 &&
-            strstr(object_path, dev_path.c_str()) == object_path) {
-          const char *p = strstr(object_path, "service");
-          if (p) {
-            int handle = strtoul(p + 7, nullptr, 16);
-            if (decl.services.empty()) {
-              result.push_back(object_path);
-            } else {
-              if (std::find(decl.services.begin(), decl.services.end(), handle) !=
-                  decl.services.end()) {
-                result.push_back(object_path);
-              }
-            }
-          }
-        }
-
-        dbus_message_iter_next(&iface_dict);
+    for (const auto &[object_path, ifaces] : objs) {
+      auto svcIt = ifaces.find("org.bluez.GattService1");
+      if (svcIt == ifaces.end()) {
+        continue;
       }
 
-      dbus_message_iter_next(&it);
+      if (object_path.rfind(dev_path, 0) != 0) {
+        continue;
+      }
+
+      const char *p = std::strstr(object_path.c_str(), "service");
+      if (!p) {
+        continue;
+      }
+
+      int handle = std::strtoul(p + 7, nullptr, 16);
+      if (decl.services.empty()) {
+        result.push_back(object_path);
+      } else {
+        if (std::find(decl.services.begin(), decl.services.end(), handle) !=
+            decl.services.end()) {
+          result.push_back(object_path);
+        }
+      }
     }
   }
 
@@ -589,50 +521,35 @@ std::vector<std::string> BackendBluez::get_matching_services(
 std::vector<std::string> BackendBluez::get_matching_characteristics(
     const InputDecl &decl,
     const std::vector<std::string> &candidate_services,
-    DBusMessageIter &array
+    const ManagedObjects &objs
 ) {
   std::vector<std::string> result;
 
   for (const auto &svc_path : candidate_services) {
-    DBusMessageIter it = array;
-
-    while (dbus_message_iter_get_arg_type(&it) != DBUS_TYPE_INVALID) {
-      DBusMessageIter entry, iface_dict;
-      const char *object_path = nullptr;
-
-      dbus_message_iter_recurse(&it, &entry);
-      dbus_message_iter_get_basic(&entry, &object_path);
-      dbus_message_iter_next(&entry);
-      dbus_message_iter_recurse(&entry, &iface_dict);
-
-      while (dbus_message_iter_get_arg_type(&iface_dict) != DBUS_TYPE_INVALID) {
-        DBusMessageIter props;
-        const char *iface_name = nullptr;
-
-        dbus_message_iter_recurse(&iface_dict, &props);
-        dbus_message_iter_get_basic(&props, &iface_name);
-        dbus_message_iter_next(&props);
-
-        if (iface_name && strcmp(iface_name, "org.bluez.GattCharacteristic1") == 0 &&
-            strstr(object_path, svc_path.c_str()) == object_path) {
-          const char *p = strstr(object_path, "char");
-          if (p) {
-            int handle = strtoul(p + 4, nullptr, 16);
-            if (decl.characteristics.empty()) {
-              result.push_back(object_path);
-            } else {
-              if (std::find(decl.characteristics.begin(), decl.characteristics.end(), handle) !=
-                  decl.characteristics.end()) {
-                result.push_back(object_path);
-              }
-            }
-          }
-        }
-
-        dbus_message_iter_next(&iface_dict);
+    for (const auto &[object_path, ifaces] : objs) {
+      auto chrIt = ifaces.find("org.bluez.GattCharacteristic1");
+      if (chrIt == ifaces.end()) {
+        continue;
       }
 
-      dbus_message_iter_next(&it);
+      if (object_path.rfind(svc_path, 0) != 0) {
+        continue;
+      }
+
+      const char *p = std::strstr(object_path.c_str(), "char");
+      if (!p) {
+        continue;
+      }
+
+      int handle = std::strtoul(p + 4, nullptr, 16);
+      if (decl.characteristics.empty()) {
+        result.push_back(object_path);
+      } else {
+        if (std::find(decl.characteristics.begin(), decl.characteristics.end(), handle) !=
+            decl.characteristics.end()) {
+          result.push_back(object_path);
+        }
+      }
     }
   }
 
@@ -643,46 +560,43 @@ bool BackendBluez::read_characteristic(
     const std::string &char_path,
     std::vector<uint8_t> &out_data
 ) {
-  out_data.clear();
-
   if (!ensure_client()) {
     return false;
   }
 
-  DBusMessage *msg = dbus_message_new_method_call(
-      "org.bluez", char_path.c_str(), "org.bluez.GattCharacteristic1", "ReadValue"
-  );
+  out_data.clear();
 
-  DBusMessageIter args;
-  dbus_message_iter_init_append(msg, &args);
-  DBusMessageIter dict;
-  dbus_message_iter_open_container(&args, DBUS_TYPE_ARRAY, "{sv}", &dict);
-  dbus_message_iter_close_container(&args, &dict);
+  try {
+    auto proxy = sdbus::createProxy(
+        *conn_, sdbus::ServiceName{ "org.bluez" }, sdbus::ObjectPath{ char_path }
+    );
 
-  DBusMessage *reply = dbus_connection_send_with_reply_and_block(conn_, msg, -1, nullptr);
-  dbus_message_unref(msg);
+    std::map<std::string, sdbus::Variant> options;
 
-  if (!reply) {
+    proxy->callMethod("ReadValue")
+        .onInterface("org.bluez.GattCharacteristic1")
+        .withArguments(options)
+        .storeResultsTo(out_data);
+
+    return true;
+  } catch (const sdbus::Error &e) {
+    std::fprintf(
+        stderr,
+        "BackendBluez: failed to read characteristic %s (%s: %s)\n",
+        char_path.c_str(),
+        e.getName().c_str(),
+        e.getMessage().c_str()
+    );
+    return false;
+  } catch (const std::exception &e) {
+    std::fprintf(
+        stderr,
+        "BackendBluez: unexpected error reading characteristic %s: %s\n",
+        char_path.c_str(),
+        e.what()
+    );
     return false;
   }
-
-  DBusMessageIter iter;
-  dbus_message_iter_init(reply, &iter);
-
-  if (dbus_message_iter_get_arg_type(&iter) == DBUS_TYPE_ARRAY) {
-    DBusMessageIter array;
-    dbus_message_iter_recurse(&iter, &array);
-
-    while (dbus_message_iter_get_arg_type(&array) == DBUS_TYPE_BYTE) {
-      uint8_t b;
-      dbus_message_iter_get_basic(&array, &b);
-      out_data.push_back(b);
-      dbus_message_iter_next(&array);
-    }
-  }
-
-  dbus_message_unref(reply);
-  return true;
 }
 
 bool BackendBluez::write_characteristic(
@@ -695,50 +609,114 @@ bool BackendBluez::write_characteristic(
     return false;
   }
 
-  DBusMessage *msg = dbus_message_new_method_call(
-      "org.bluez", char_path.c_str(), "org.bluez.GattCharacteristic1", "WriteValue"
-  );
+  try {
+    auto proxy = sdbus::createProxy(
+        *conn_, sdbus::ServiceName{ "org.bluez" }, sdbus::ObjectPath{ char_path }
+    );
 
-  DBusMessageIter args;
-  dbus_message_iter_init_append(msg, &args);
+    std::vector<uint8_t> bytes(data, data + len);
 
-  DBusMessageIter array;
-  dbus_message_iter_open_container(&args, DBUS_TYPE_ARRAY, "y", &array);
-  for (size_t i = 0; i < len; ++i) {
-    uint8_t b = data[i];
-    dbus_message_iter_append_basic(&array, DBUS_TYPE_BYTE, &b);
+    std::map<std::string, sdbus::Variant> options;
+    if (with_resp) {
+      options["type"] = sdbus::Variant{ "request" };
+    }
+
+    proxy->callMethod("WriteValue")
+        .onInterface("org.bluez.GattCharacteristic1")
+        .withArguments(bytes, options);
+
+    return true;
+  } catch (const sdbus::Error &e) {
+    std::fprintf(
+        stderr,
+        "BackendBluez: failed to write characteristic %s (%s: %s)\n",
+        char_path.c_str(),
+        e.getName().c_str(),
+        e.getMessage().c_str()
+    );
+    return false;
+  } catch (const std::exception &e) {
+    std::fprintf(
+        stderr,
+        "BackendBluez: unexpected error writing characteristic %s: %s\n",
+        char_path.c_str(),
+        e.what()
+    );
+    return false;
   }
-  dbus_message_iter_close_container(&args, &array);
+}
 
-  DBusMessageIter opts;
-  dbus_message_iter_open_container(&args, DBUS_TYPE_ARRAY, "{sv}", &opts);
-
-  if (with_resp) {
-    DBusMessageIter dict_entry;
-    dbus_message_iter_open_container(&opts, DBUS_TYPE_DICT_ENTRY, nullptr, &dict_entry);
-
-    const char *key = "type";
-    dbus_message_iter_append_basic(&dict_entry, DBUS_TYPE_STRING, &key);
-
-    DBusMessageIter variant;
-    dbus_message_iter_open_container(&dict_entry, DBUS_TYPE_VARIANT, "s", &variant);
-
-    const char *val = "request";
-    dbus_message_iter_append_basic(&variant, DBUS_TYPE_STRING, &val);
-
-    dbus_message_iter_close_container(&dict_entry, &variant);
-    dbus_message_iter_close_container(&opts, &dict_entry);
-  }
-
-  dbus_message_iter_close_container(&args, &opts);
-
-  DBusMessage *reply = dbus_connection_send_with_reply_and_block(conn_, msg, -1, nullptr);
-  dbus_message_unref(msg);
-
-  if (!reply) {
+bool BackendBluez::start_notify(const std::string &char_path) {
+  if (!ensure_client()) {
     return false;
   }
 
-  dbus_message_unref(reply);
-  return true;
+  try {
+    auto proxy = sdbus::createProxy(
+        *conn_, sdbus::ServiceName{ "org.bluez" }, sdbus::ObjectPath{ char_path }
+    );
+
+    std::string rule =
+        "type='signal',"
+        "interface='org.freedesktop.DBus.Properties',"
+        "member='PropertiesChanged',"
+        "arg0='org.bluez.GattCharacteristic1',"
+        "path='" +
+        char_path + "'";
+
+    sdbus::Slot slot = conn_->addMatch(
+        rule, [this](sdbus::Message msg) { on_properties_changed(msg); }, sdbus::return_slot
+    );
+    match_slots_[char_path] = std::move(slot);
+
+    proxy->callMethod("StartNotify").onInterface("org.bluez.GattCharacteristic1");
+    return true;
+  } catch (const sdbus::Error &e) {
+    std::fprintf(
+        stderr,
+        "BackendBluez: failed to start notify on %s (%s: %s)\n",
+        char_path.c_str(),
+        e.getName().c_str(),
+        e.getMessage().c_str()
+    );
+    return false;
+  } catch (const std::exception &e) {
+    std::fprintf(
+        stderr,
+        "BackendBluez: unexpected error starting notify on %s: %s\n",
+        char_path.c_str(),
+        e.what()
+    );
+    return false;
+  }
+}
+
+void BackendBluez::stop_notify(const std::string &char_path) {
+  if (!ensure_client()) {
+    return;
+  }
+
+  try {
+    auto proxy = sdbus::createProxy(
+        *conn_, sdbus::ServiceName{ "org.bluez" }, sdbus::ObjectPath{ char_path }
+    );
+
+    proxy->callMethod("StopNotify").onInterface("org.bluez.GattCharacteristic1");
+    match_slots_.erase(char_path);
+  } catch (const sdbus::Error &e) {
+    std::fprintf(
+        stderr,
+        "BackendBluez: failed to stop notify on %s (%s: %s)\n",
+        char_path.c_str(),
+        e.getName().c_str(),
+        e.getMessage().c_str()
+    );
+  } catch (const std::exception &e) {
+    std::fprintf(
+        stderr,
+        "BackendBluez: unexpected error stopping notify on %s: %s\n",
+        char_path.c_str(),
+        e.what()
+    );
+  }
 }

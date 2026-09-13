@@ -13,6 +13,7 @@
 #include <sol/sol.hpp>
 
 #include "aelkey_state.h"
+#include "backend_bluez.h"
 #include "device_declarations.h"
 #include "dispatcher.h"
 #include "lua_bindings/core.h"
@@ -80,6 +81,8 @@ void loop_cleanup() {
     // mutates aelkey_state.input_map
     ManagerDeviceIn::instance().detach(id);
   }
+
+  BackendBluez::instance().shutdown();
 
   // Tear down global monitoring state
   if (state.epfd >= 0) {
