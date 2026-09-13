@@ -27,7 +27,7 @@ class DeviceInEvdev : public DeviceIn, public Singleton<DeviceInEvdev> {
 
  protected:
   DeviceInEvdev();
-  ~DeviceInEvdev() = default;
+  ~DeviceInEvdev();
 
  public:
   bool match(InputDecl &decl, std::string &devnode_out) override;

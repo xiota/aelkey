@@ -26,8 +26,6 @@ struct DispatcherCb {
 // Polymorphic base class for all next-gen dispatchers
 class DispatcherBase {
  public:
-  virtual ~DispatcherBase();
-
   virtual bool lazy_init() = 0;
   virtual const char *type() const = 0;
 

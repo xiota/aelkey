@@ -11,14 +11,6 @@
 #include "aelkey_state.h"
 #include "dispatcher_vulgate.h"
 
-DeviceOutUhid::~DeviceOutUhid() {
-  for (auto &[id, ctx] : devices_) {
-    if (ctx.fd >= 0) {
-      DispatcherVulgate::instance().unregister_device_fd(ctx.fd);
-    }
-  }
-}
-
 bool DeviceOutUhid::create(const OutputDecl &decl) {
   int fd = open("/dev/uhid", O_RDWR | O_CLOEXEC | O_NONBLOCK);
   if (fd < 0) {

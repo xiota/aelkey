@@ -8,9 +8,6 @@
 #include "dispatcher_vulgate.h"
 
 BackendUdev::~BackendUdev() {
-  if (mon_fd_ >= 0) {
-    DispatcherVulgate::instance().unregister_device_fd(mon_fd_);
-  }
   if (mon_) {
     udev_monitor_unref(mon_);
     mon_ = nullptr;

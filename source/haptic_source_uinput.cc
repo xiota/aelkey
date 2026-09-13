@@ -23,12 +23,6 @@ HapticSourceUinput::HapticSourceUinput(std::string id, int fd, std::string callb
   }
 }
 
-HapticSourceUinput::~HapticSourceUinput() {
-  if (fd_ >= 0) {
-    DispatcherVulgate::instance().unregister_device_fd(fd_);
-  }
-}
-
 bool HapticSourceUinput::rebuild_effect(const ff_effect &src_eff, ff_effect &out_eff) {
   ff_effect eff{};
   eff.id = -1;

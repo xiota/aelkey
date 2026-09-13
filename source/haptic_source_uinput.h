@@ -11,7 +11,7 @@
 class HapticSourceUinput : public HapticSource {
  public:
   HapticSourceUinput(std::string id, int fd, std::string callback);
-  ~HapticSourceUinput() override;
+  ~HapticSourceUinput() = default;
 
   const std::string &get_id() const override {
     return id_;

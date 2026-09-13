@@ -21,7 +21,7 @@ class DeviceOutUhid : public DeviceOut, public Singleton<DeviceOutUhid> {
 
  private:
   DeviceOutUhid() = default;
-  ~DeviceOutUhid();
+  ~DeviceOutUhid() = default;
 
   void handle_uhid_event(int fd, const std::string &id, const std::string &on_report);
 

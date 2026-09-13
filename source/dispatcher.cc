@@ -6,18 +6,12 @@
 
 #include "aelkey_state.h"
 
-DispatcherBase::~DispatcherBase() {
-  cleanup_fds();
-}
-
 EpollPayload *DispatcherBase::get_payload(int fd) const {
   auto it = pollfds_.find(fd);
   return (it != pollfds_.end()) ? const_cast<EpollPayload *>(&it->second) : nullptr;
 }
 
 void DispatcherBase::register_fd(int fd, uint32_t events) {
-  auto &state = AelkeyState::instance();
-
   EpollPayload payload;
   payload.dispatcher = this;
   payload.fd = fd;
@@ -28,17 +22,22 @@ void DispatcherBase::register_fd(int fd, uint32_t events) {
   ev.events = events;
   ev.data.ptr = &it->second;
 
-  if (epoll_ctl(state.epfd, EPOLL_CTL_ADD, fd, &ev) < 0) {
-    perror("epoll_ctl ADD");
-    pollfds_.erase(it);
-    return;
+  auto &state = AelkeyState::instance();
+  if (state.epfd >= 0) {
+    if (epoll_ctl(state.epfd, EPOLL_CTL_ADD, fd, &ev) < 0) {
+      perror("epoll_ctl ADD");
+      pollfds_.erase(it);
+      return;
+    }
   }
 }
 
 void DispatcherBase::unregister_fd(int fd) {
   auto &state = AelkeyState::instance();
 
-  epoll_ctl(state.epfd, EPOLL_CTL_DEL, fd, nullptr);
+  if (state.epfd >= 0) {
+    epoll_ctl(state.epfd, EPOLL_CTL_DEL, fd, nullptr);
+  }
 
   auto it = pollfds_.find(fd);
   if (it != pollfds_.end()) {
@@ -51,7 +50,9 @@ void DispatcherBase::cleanup_fds() {
   auto &state = AelkeyState::instance();
 
   for (auto &[fd, payload] : pollfds_) {
-    epoll_ctl(state.epfd, EPOLL_CTL_DEL, fd, nullptr);
+    if (state.epfd >= 0) {
+      epoll_ctl(state.epfd, EPOLL_CTL_DEL, fd, nullptr);
+    }
     on_unregister(fd);
   }
   pollfds_.clear();

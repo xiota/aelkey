@@ -6,11 +6,10 @@
 
 #include <libudev.h>
 #include <libusb-1.0/libusb.h>
+#include <sol/sol.hpp>
 #include <sys/epoll.h>
 #include <sys/timerfd.h>
 #include <unistd.h>
-
-#include <sol/sol.hpp>
 
 #include "aelkey_state.h"
 #include "backend_bluez.h"
@@ -44,7 +43,7 @@ sol::object loop_start(sol::this_state ts) {
   constexpr int MAX_EVENTS = 64;
   struct epoll_event events[MAX_EVENTS];
 
-  while (!state.loop_should_stop) {
+  while (!state.loop_should_stop && state.loop_running) {
     int n = epoll_wait(state.epfd, events, MAX_EVENTS, -1);  // block until event
 
     for (int i = 0; i < n; ++i) {
@@ -55,17 +54,20 @@ sol::object loop_start(sol::this_state ts) {
     }
 
     ManagerDeviceIn::instance().dispatcher_flush_deferred();
+
+    if (state.loop_should_stop) {
+      state.loop_running = false;
+    }
   }
 
   loop_cleanup();
-
-  state.loop_running = false;
 
   return sol::make_object(lua, true);
 }
 
 void loop_cleanup() {
   auto &state = AelkeyState::instance();
+  auto &devmgr = ManagerDeviceIn::instance();
 
   // Detach all devices
   std::vector<std::string> ids;
@@ -76,7 +78,11 @@ void loop_cleanup() {
   }
   for (const auto &id : ids) {
     // mutates aelkey_state.input_map
-    ManagerDeviceIn::instance().detach(id);
+    devmgr.detach(id);
+  }
+
+  for (int i = 0; i < 3; ++i) {
+    devmgr.dispatcher_flush_deferred();
   }
 
   BackendBluez::instance().shutdown();

@@ -13,6 +13,18 @@
 #include "utils/regex_match.h"
 #include "utils/signal.h"
 
+DeviceInEvdev::~DeviceInEvdev() {
+  for (auto &[fd, st] : devs_) {
+    if (st.idev) {
+      libevdev_grab(st.idev, LIBEVDEV_UNGRAB);
+      libevdev_free(st.idev);
+    }
+    close(fd);
+  }
+  devs_.clear();
+  device_ids_.clear();
+}
+
 DeviceInEvdev::DeviceInEvdev() {
   tok_udev_event_ =
       BackendUdev::instance().sig_udev_event_.subscribe([this](const UdevEvent &ev) {
