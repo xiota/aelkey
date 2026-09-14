@@ -21,6 +21,7 @@ src_files = files(
   'aelkey_state.cc',
   'backend_bluez.cc',
   'backend_jack.cc',
+  'backend_libusb.cc',
   'backend_udev.cc',
   'device_in_audio.cc',
   'device_in_evdev.cc',

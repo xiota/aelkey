@@ -7,7 +7,7 @@
 
 #include <sol/sol.hpp>
 
-#include "device_in_libusb.h"
+#include "backend_libusb.h"
 
 // bulk_transfer{device, endpoint, size, [timeout]}
 // Returns {device, data, size, status}
@@ -25,7 +25,7 @@ static sol::object usb_bulk_transfer(sol::this_state ts, sol::table opts) {
   sol::optional<std::string> data_opt = opts.get<sol::optional<std::string>>("data");
   std::string out_data = data_opt.value_or(std::string());
 
-  auto &backend = DeviceInLibUsb::instance();
+  auto &backend = BackendLibUsb::instance();
   auto result = backend.bulk_transfer(dev_id, endpoint, size, timeout, is_in, out_data);
 
   sol::table t = lua.create_table();
@@ -55,7 +55,7 @@ static sol::object usb_control_transfer(sol::this_state ts, sol::table opts) {
   sol::optional<std::string> data_opt = opts.get<sol::optional<std::string>>("data");
   std::string out_data = data_opt.value_or(std::string());
 
-  auto &backend = DeviceInLibUsb::instance();
+  auto &backend = BackendLibUsb::instance();
   auto result = backend.control_transfer(
       dev_id, request_type, request, value, index, length, timeout, is_in, out_data
   );
@@ -84,7 +84,7 @@ static sol::object usb_interrupt_transfer(sol::this_state ts, sol::table opts) {
   sol::optional<std::string> data_opt = opts.get<sol::optional<std::string>>("data");
   std::string out_data = data_opt.value_or(std::string());
 
-  auto &backend = DeviceInLibUsb::instance();
+  auto &backend = BackendLibUsb::instance();
   auto result = backend.interrupt_transfer(dev_id, endpoint, size, timeout, is_in, out_data);
 
   sol::table t = lua.create_table();
@@ -107,7 +107,7 @@ static sol::object usb_submit_transfer(sol::this_state ts, sol::table opts) {
   int size = opts.get<int>("size");
   int timeout = opts.get_or("timeout", 0);
 
-  auto &backend = DeviceInLibUsb::instance();
+  auto &backend = BackendLibUsb::instance();
   auto sr = backend.submit_transfer(dev_id, endpoint, type_str, size, timeout);
 
   sol::state_view lua_view(L);
@@ -125,11 +125,11 @@ static sol::object usb_submit_transfer(sol::this_state ts, sol::table opts) {
   t["_xfer"] = sol::light(sr.handle);
 
   t.set_function("cancel", [h = sr.handle]() {
-    return DeviceInLibUsb::instance().cancel_transfer(h);
+    return BackendLibUsb::instance().cancel_transfer(h);
   });
 
   t.set_function("resubmit", [h = sr.handle]() {
-    return DeviceInLibUsb::instance().resubmit_transfer(h);
+    return BackendLibUsb::instance().resubmit_transfer(h);
   });
 
   t["device"] = dev_id;
@@ -148,7 +148,7 @@ static sol::object usb_clear_halt(sol::this_state ts, sol::table opts) {
   std::string dev_id = opts.get<std::string>("device");
   int endpoint = opts.get<int>("endpoint");
 
-  auto &backend = DeviceInLibUsb::instance();
+  auto &backend = BackendLibUsb::instance();
   auto status = backend.clear_halt(dev_id, endpoint);
 
   sol::table t = lua.create_table();
@@ -165,7 +165,7 @@ static sol::object usb_reset_device(sol::this_state ts, sol::table opts) {
 
   std::string dev_id = opts.get<std::string>("device");
 
-  auto &backend = DeviceInLibUsb::instance();
+  auto &backend = BackendLibUsb::instance();
   auto status = backend.reset_device(dev_id);
 
   sol::table t = lua.create_table();
@@ -183,7 +183,7 @@ static sol::object usb_set_configuration(sol::this_state ts, sol::table opts) {
   std::string dev_id = opts.get<std::string>("device");
   int config = opts.get<int>("config");
 
-  auto &backend = DeviceInLibUsb::instance();
+  auto &backend = BackendLibUsb::instance();
   auto status = backend.set_configuration(dev_id, config);
 
   sol::table t = lua.create_table();
@@ -202,7 +202,7 @@ static sol::object usb_set_interface_alt_setting(sol::this_state ts, sol::table 
   int interface_number = opts.get<int>("interface");
   int alt_setting = opts.get<int>("alt");
 
-  auto &backend = DeviceInLibUsb::instance();
+  auto &backend = BackendLibUsb::instance();
   auto status = backend.set_interface_alt_setting(dev_id, interface_number, alt_setting);
 
   sol::table t = lua.create_table();
