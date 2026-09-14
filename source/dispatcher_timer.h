@@ -45,11 +45,11 @@ class DispatcherTimer : public Dispatcher<DispatcherTimer> {
     return true;
   }
 
-  // Schedule a timer with the given callback.
-  // - ms: delay/interval in milliseconds
+  // Schedule a timer with the given callback using nanoseconds.
+  // - ns: delay/interval in nanoseconds
   // - cb: callback descriptor (Lua function, global name, or native)
   // Returns timerfd on success, -1 on failure.
-  int schedule(int ms, DispatcherCb cb) {
+  int schedule_ns(long long ns, DispatcherCb cb) {
     int fd = timerfd_create(CLOCK_MONOTONIC, TFD_NONBLOCK);
     if (fd < 0) {
       perror("timerfd_create");
@@ -57,8 +57,8 @@ class DispatcherTimer : public Dispatcher<DispatcherTimer> {
     }
 
     struct itimerspec spec{};
-    spec.it_value.tv_sec = ms / 1000;
-    spec.it_value.tv_nsec = (ms % 1000) * 1000000;
+    spec.it_value.tv_sec = ns / 1000000000LL;
+    spec.it_value.tv_nsec = ns % 1000000000LL;
 
     if (cb.oneshot) {
       spec.it_interval.tv_sec = 0;
@@ -76,6 +76,11 @@ class DispatcherTimer : public Dispatcher<DispatcherTimer> {
     register_fd(fd, EPOLLIN);
     set_callback(fd, std::move(cb));
     return fd;
+  }
+
+  // Overload for milliseconds.
+  int schedule(int ms, DispatcherCb cb) {
+    return schedule_ns(static_cast<long long>(ms) * 1000000LL, std::move(cb));
   }
 
   // Expire timerfd and preserve current recurring interval.
