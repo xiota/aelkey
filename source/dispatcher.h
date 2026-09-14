@@ -8,9 +8,9 @@
 
 #include <sol/sol.hpp>
 
+#include "aelkey_state.h"
 #include "singleton.h"
 
-class AelkeyState;
 class EpollPayload;
 
 struct DispatcherCb {
@@ -77,6 +77,8 @@ class DispatcherBase {
 
   int cycle_ = 0;
   std::vector<int> deferred_unregs_[3];
+
+  AelkeyUtil::Signal<void(void)>::Connection tok_epoll_cycle_;
 };
 
 // CRTP dispatcher class
@@ -86,7 +88,14 @@ class Dispatcher : public DispatcherBase, public Singleton<Derived> {
 
  public:
   bool lazy_init() override {
-    return Singleton<Derived>::lazy_init();
+    bool success = Singleton<Derived>::lazy_init();
+
+    if (success && !tok_epoll_cycle_.connected()) {
+      tok_epoll_cycle_ =
+          AelkeyState::instance().subscribe_epoll_cycle([this]() { this->flush_deferred(); });
+    }
+
+    return success;
   }
 
  protected:

@@ -7,14 +7,8 @@
 #include "device_in_hidraw.h"
 #include "device_in_libusb.h"
 #include "device_in_midi.h"
-#include "dispatcher_event.h"
-#include "dispatcher_timer.h"
 
 ManagerDeviceIn::ManagerDeviceIn() {
-  // Register dispatchers
-  dispatchers_["event"] = &DispatcherEvent::instance();
-  dispatchers_["timer"] = &DispatcherTimer::instance();
-
   // Register backends
   backends_["audio"] = &DeviceInAudio::instance();
   backends_["evdev"] = &DeviceInEvdev::instance();
@@ -27,22 +21,6 @@ ManagerDeviceIn::ManagerDeviceIn() {
 DeviceIn *ManagerDeviceIn::backend_for_type(const std::string &type) {
   auto it = backends_.find(type);
   return (it != backends_.end()) ? it->second : nullptr;
-}
-
-bool ManagerDeviceIn::init_dispatcher_for_type(const std::string &type) {
-  auto it = dispatchers_.find(type);
-  DispatcherBase *dispatcher = (it != dispatchers_.end()) ? it->second : nullptr;
-
-  if (dispatcher != nullptr) {
-    return dispatcher->lazy_init();
-  }
-  return true;
-}
-
-void ManagerDeviceIn::dispatcher_flush_deferred() {
-  for (auto &[type, dispatcher] : dispatchers_) {
-    dispatcher->flush_deferred();
-  }
 }
 
 bool ManagerDeviceIn::match(InputDecl &decl, std::string &devnode_out) {
@@ -60,11 +38,6 @@ bool ManagerDeviceIn::match(InputDecl &decl, std::string &devnode_out) {
 bool ManagerDeviceIn::attach(const std::string &devnode, InputDecl &decl) {
   auto &state = AelkeyState::instance();
   if (state.input_map.contains(decl.id)) {
-    return false;
-  }
-
-  bool success = init_dispatcher_for_type(decl.type);
-  if (!success) {
     return false;
   }
 

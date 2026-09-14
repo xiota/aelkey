@@ -10,6 +10,7 @@
 
 #include "device_declarations.h"
 #include "singleton.h"
+#include "utils/signal.h"
 
 class AelkeyState : public Singleton<AelkeyState> {
   friend class Singleton<AelkeyState>;
@@ -48,6 +49,15 @@ class AelkeyState : public Singleton<AelkeyState> {
     return active_tasks_.load(std::memory_order_relaxed) <= 0;
   }
 
+  // epoll cycle signal
+  auto subscribe_epoll_cycle(AelkeyUtil::Signal<void(void)>::Callback cb) {
+    return sig_epoll_cycle_.subscribe(std::move(cb));
+  }
+
+  void notify_epoll_cycle() {
+    sig_epoll_cycle_.emit();
+  }
+
  public:
   lua_State *lua_vm = nullptr;
 
@@ -61,4 +71,7 @@ class AelkeyState : public Singleton<AelkeyState> {
 
   std::vector<InputDecl> input_decls;
   std::vector<OutputDecl> output_decls;
+
+ private:
+  AelkeyUtil::Signal<void(void)> sig_epoll_cycle_;
 };

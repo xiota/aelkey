@@ -13,8 +13,6 @@
 class DeviceIn;
 class DispatcherBase;
 
-bool init_dispatcher_for_type(const std::string &type);
-
 class ManagerDeviceIn : public Singleton<ManagerDeviceIn> {
   friend class Singleton<ManagerDeviceIn>;
 
@@ -25,9 +23,6 @@ class ManagerDeviceIn : public Singleton<ManagerDeviceIn> {
  public:
   DeviceIn *backend_for_type(const std::string &type);
 
-  bool init_dispatcher_for_type(const std::string &type);
-  void dispatcher_flush_deferred();
-
   bool match(InputDecl &decl, std::string &devnode_out);
   bool attach(const std::string &devnode, InputDecl &decl);
   std::optional<InputDecl> detach(const std::string &dev_id);
@@ -37,5 +32,4 @@ class ManagerDeviceIn : public Singleton<ManagerDeviceIn> {
 
  private:
   std::map<std::string, DeviceIn *> backends_;
-  std::map<std::string, DispatcherBase *> dispatchers_;
 };

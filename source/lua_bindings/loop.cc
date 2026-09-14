@@ -54,7 +54,7 @@ sol::object loop_start(sol::this_state ts) {
       }
     }
 
-    ManagerDeviceIn::instance().dispatcher_flush_deferred();
+    state.notify_epoll_cycle();
 
     if (state.loop_should_stop && state.is_safe_to_stop()) {
       loop_stop_now = true;
@@ -85,7 +85,7 @@ void loop_cleanup() {
   }
 
   for (int i = 0; i < 3; ++i) {
-    devmgr.dispatcher_flush_deferred();
+    state.notify_epoll_cycle();
   }
 
   BackendBluez::instance().shutdown();
