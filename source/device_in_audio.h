@@ -18,11 +18,13 @@ class DeviceInAudio : public DeviceIn, public Singleton<DeviceInAudio> {
 
  protected:
   DeviceInAudio() = default;
-  ~DeviceInAudio();
+  ~DeviceInAudio() = default;
 
   bool on_init() override;
 
  public:
+  void shutdown();
+
   bool match(InputDecl &decl, std::string &devnode_out) override;
   bool attach(const std::string &devnode, InputDecl &decl) override;
   bool detach(const std::string &id) override;
@@ -44,15 +46,18 @@ class DeviceInAudio : public DeviceIn, public Singleton<DeviceInAudio> {
   moodycamel::ReaderWriterQueue<AudioEvent> queue_;
 
   // key = id
-  std::map<std::string, jack_port_t *> input_ports_;
+  std::map<std::string, JackPortRAII> input_ports_;
   std::map<std::string, InputDecl> input_decls_;
 
   int dispatch_fd_ = -1;
 
   // key = callback name
   std::map<std::string, std::vector<AudioEvent>> batches_;
-  AelkeyUtil::Signal<void(jack_nframes_t)>::Connection tok_jack_process_;
 
   std::vector<JackPortEvent> pending_hotplug_;
+
+  // tokens
   AelkeyUtil::Signal<void(const JackPortEvent &)>::Connection tok_jack_hotplug_;
+  AelkeyUtil::Signal<void(jack_nframes_t)>::Connection tok_jack_process_;
+  AelkeyUtil::Signal<void(void)>::Connection tok_jack_shutdown_;
 };

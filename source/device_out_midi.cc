@@ -12,22 +12,19 @@
 
 bool DeviceOutMidi::on_init() {
   auto &jack = BackendJack::instance();
-  tok_jack_process_ =
-      jack.sig_jack_process_.subscribe([this](jack_nframes_t nframes) { process(nframes); });
 
-  tok_jack_hotplug_ = jack.sig_jack_hotplug_.subscribe([this](const JackPortEvent &ev) {
-    on_hotplug_event(ev);
-  });
+  tok_jack_process_ =
+      jack.subscribe_process([this](jack_nframes_t nframes) { this->process(nframes); });
+
+  tok_jack_hotplug_ =
+      jack.subscribe_hotplug([this](const JackPortEvent &ev) { this->on_hotplug_event(ev); });
+
+  tok_jack_shutdown_ = jack.subscribe_shutdown([this]() { this->shutdown(); });
 
   return true;
 }
 
-DeviceOutMidi::~DeviceOutMidi() {
-  auto &jack = BackendJack::instance();
-
-  for (auto &kv : output_ports_) {
-    jack.destroy_port(kv.second);
-  }
+void DeviceOutMidi::shutdown() {
   output_ports_.clear();
   output_decls_.clear();
 }
@@ -40,25 +37,14 @@ bool DeviceOutMidi::create(const OutputDecl &decl) {
   // No sanitization — use exactly what user provided
   std::string port_name = decl.port.empty() ? decl.id : decl.port;
 
-  // Reuse existing port if name matches
-  for (const auto &kv : output_ports_) {
-    auto existing_name = BackendJack::instance().port_name(kv.second);
-    if (existing_name == port_name) {
-      output_ports_[decl.id] = kv.second;
-      output_decls_[decl.id] = decl;
-      return true;
-    }
-  }
-
   auto &jack = BackendJack::instance();
   jack_port_t *out = jack.create_port(port_name, JACK_DEFAULT_MIDI_TYPE, JackPortIsOutput);
-
   if (!out) {
     std::fprintf(stderr, "MIDI OUT: failed to register output port '%s'\n", port_name.c_str());
     return false;
   }
 
-  output_ports_[decl.id] = out;
+  output_ports_[decl.id] = JackPortRAII(out);
   output_decls_[decl.id] = decl;
 
   // Auto-connect if user provided a pattern
@@ -83,6 +69,11 @@ bool DeviceOutMidi::create(const OutputDecl &decl) {
 }
 
 bool DeviceOutMidi::send(const std::string &id, const uint8_t *data, size_t len) {
+  auto &jack = BackendJack::instance();
+  if (jack.is_shutdown()) {
+    return false;
+  }
+
   auto it = output_ports_.find(id);
   if (it == output_ports_.end()) {
     return false;
@@ -105,7 +96,6 @@ bool DeviceOutMidi::destroy(const std::string &id) {
     return false;
   }
 
-  BackendJack::instance().destroy_port(it->second);
   output_ports_.erase(it);
 
   auto it2 = output_decls_.find(id);
@@ -118,6 +108,7 @@ bool DeviceOutMidi::destroy(const std::string &id) {
 
 void DeviceOutMidi::process(jack_nframes_t nframes) {
   auto &jack = BackendJack::instance();
+  jack.is_shutdown();
 
   // Clear all output buffers
   for (auto &kv : output_ports_) {
@@ -158,11 +149,14 @@ void DeviceOutMidi::on_hotplug_event(const JackPortEvent &ev) {
   cb.native = [this]() { this->process_hotplug_events(); };
   cb.oneshot = true;
 
-  DispatcherTimer::instance().schedule(4, cb);
+  DispatcherTimer::instance().schedule(1, cb);
 }
 
 void DeviceOutMidi::process_hotplug_events() {
   auto &jack = BackendJack::instance();
+  if (jack.is_shutdown()) {
+    return;
+  }
 
   // For each OutputDecl
   for (auto &[id, decl] : output_decls_) {

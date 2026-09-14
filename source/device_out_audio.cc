@@ -13,22 +13,19 @@
 
 bool DeviceOutAudio::on_init() {
   auto &jack = BackendJack::instance();
-  tok_jack_process_ =
-      jack.sig_jack_process_.subscribe([this](jack_nframes_t nframes) { process(nframes); });
 
-  tok_jack_hotplug_ = jack.sig_jack_hotplug_.subscribe([this](const JackPortEvent &ev) {
-    on_hotplug_event(ev);
-  });
+  tok_jack_process_ =
+      jack.subscribe_process([this](jack_nframes_t nframes) { this->process(nframes); });
+
+  tok_jack_hotplug_ =
+      jack.subscribe_hotplug([this](const JackPortEvent &ev) { this->on_hotplug_event(ev); });
+
+  tok_jack_shutdown_ = jack.subscribe_shutdown([this]() { this->shutdown(); });
 
   return true;
 }
 
-DeviceOutAudio::~DeviceOutAudio() {
-  auto &jack = BackendJack::instance();
-
-  for (auto &kv : output_ports_) {
-    jack.destroy_port(kv.second);
-  }
+void DeviceOutAudio::shutdown() {
   output_ports_.clear();
   output_decls_.clear();
 }
@@ -41,15 +38,6 @@ bool DeviceOutAudio::create(const OutputDecl &decl) {
   // No sanitization — use exactly what user provided
   std::string port_name = decl.port.empty() ? decl.id : decl.port;
 
-  // Reuse existing port if name matches
-  for (const auto &kv : output_ports_) {
-    auto existing_name = BackendJack::instance().port_name(kv.second);
-    if (existing_name == port_name) {
-      output_ports_[decl.id] = kv.second;
-      return true;
-    }
-  }
-
   auto &jack = BackendJack::instance();
   jack_port_t *out = jack.create_port(port_name, JACK_DEFAULT_AUDIO_TYPE, JackPortIsOutput);
 
@@ -58,7 +46,7 @@ bool DeviceOutAudio::create(const OutputDecl &decl) {
     return false;
   }
 
-  output_ports_[decl.id] = out;
+  output_ports_[decl.id] = JackPortRAII(out);
   output_decls_[decl.id] = decl;
 
   // Auto-connect if user provided a pattern
@@ -85,6 +73,11 @@ bool DeviceOutAudio::create(const OutputDecl &decl) {
 }
 
 bool DeviceOutAudio::send(const std::string &id, const float *samples, size_t frames) {
+  auto &jack = BackendJack::instance();
+  if (jack.is_shutdown()) {
+    return false;
+  }
+
   auto it = output_ports_.find(id);
   if (it == output_ports_.end()) {
     return false;
@@ -124,6 +117,7 @@ bool DeviceOutAudio::destroy(const std::string &id) {
 
 void DeviceOutAudio::process(jack_nframes_t nframes) {
   auto &jack = BackendJack::instance();
+  jack.is_shutdown();
 
   // Clear all output buffers initially (silence by default)
   for (auto &kv : output_ports_) {
@@ -176,11 +170,14 @@ void DeviceOutAudio::on_hotplug_event(const JackPortEvent &ev) {
   cb.native = [this]() { this->process_hotplug_events(); };
   cb.oneshot = true;
 
-  DispatcherTimer::instance().schedule(4, cb);
+  DispatcherTimer::instance().schedule(1, cb);
 }
 
 void DeviceOutAudio::process_hotplug_events() {
   auto &jack = BackendJack::instance();
+  if (jack.is_shutdown()) {
+    return;
+  }
 
   // For each OutputDecl
   for (auto &[id, decl] : output_decls_) {

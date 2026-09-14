@@ -17,11 +17,13 @@ class DeviceOutAudio : public DeviceOut, public Singleton<DeviceOutAudio> {
 
  protected:
   DeviceOutAudio() = default;
-  ~DeviceOutAudio();
+  ~DeviceOutAudio() = default;
 
   bool on_init() override;
 
  public:
+  void shutdown();
+
   bool create(const OutputDecl &decl) override;
 
   // Send 'frames' samples of mono audio for the given output id.
@@ -40,11 +42,13 @@ class DeviceOutAudio : public DeviceOut, public Singleton<DeviceOutAudio> {
   moodycamel::ReaderWriterQueue<AudioEvent> queue_;
 
   // key = id
-  std::map<std::string, jack_port_t *> output_ports_;
+  std::map<std::string, JackPortRAII> output_ports_;
   std::map<std::string, OutputDecl> output_decls_;
 
   std::vector<JackPortEvent> pending_hotplug_;
-  AelkeyUtil::Signal<void(const JackPortEvent &)>::Connection tok_jack_hotplug_;
 
+  // tokens
+  AelkeyUtil::Signal<void(const JackPortEvent &)>::Connection tok_jack_hotplug_;
   AelkeyUtil::Signal<void(jack_nframes_t)>::Connection tok_jack_process_;
+  AelkeyUtil::Signal<void(void)>::Connection tok_jack_shutdown_;
 };

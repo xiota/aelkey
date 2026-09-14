@@ -1,7 +1,9 @@
 #include "backend_jack.h"
 
 #include <algorithm>
+#include <atomic>
 #include <cstdio>
+#include <cstdlib>
 #include <string>
 #include <utility>
 #include <vector>
@@ -10,10 +12,24 @@
 #include <jack/midiport.h>
 #include <unistd.h>
 
+#include "aelkey_state.h"
 #include "utils/signal.h"
 
-BackendJack::~BackendJack() {
+bool BackendJack::on_init() {
+  ensure_client();
   if (client_) {
+    tok_shutdown_ = AelkeyState::instance().subscribe_shutdown([this]() { this->shutdown(); });
+    return true;
+  }
+  return false;
+}
+
+void BackendJack::shutdown() {
+  notify_shutdown();
+
+  if (client_) {
+    jack_deactivate(client_);
+    jack_set_process_callback(client_, nullptr, nullptr);
     jack_client_close(client_);
     client_ = nullptr;
   }
@@ -201,8 +217,18 @@ jack_midi_data_t *BackendJack::midi_event_reserve(void *buf, jack_nframes_t time
 }
 
 int BackendJack::process_cb(jack_nframes_t nframes, void *arg) {
-  auto *self = static_cast<BackendJack *>(arg);
-  return self->process(nframes);
+  static std::atomic<bool> s_shutdown_requested{ false };
+
+  if (!s_shutdown_requested.load(std::memory_order_relaxed)) {
+    auto &state = AelkeyState::instance();
+    if (!state.loop_running || state.loop_should_stop) {
+      s_shutdown_requested.store(true, std::memory_order_release);
+    }
+    auto *self = static_cast<BackendJack *>(arg);
+    return self->process(nframes);
+  }
+
+  return 0;
 }
 
 int BackendJack::process(jack_nframes_t nframes) {

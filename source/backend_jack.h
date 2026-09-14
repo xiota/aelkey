@@ -7,6 +7,8 @@
 #include <jack/jack.h>
 #include <jack/midiport.h>
 
+#include "aelkey_state.h"
+#include "dispatcher_timer.h"
 #include "singleton.h"
 #include "utils/signal.h"
 
@@ -35,9 +37,11 @@ class BackendJack : public Singleton<BackendJack> {
 
  private:
   BackendJack() = default;
-  ~BackendJack();
+  ~BackendJack() = default;
 
  public:
+  void shutdown();
+
   // Ensure JACK client exists and is active
   bool ensure_client();
 
@@ -74,11 +78,39 @@ class BackendJack : public Singleton<BackendJack> {
   void midi_clear_buffer(void *buf);
   jack_midi_data_t *midi_event_reserve(void *buf, jack_nframes_t time, size_t size);
 
- public:
-  AelkeyUtil::Signal<void(jack_nframes_t)> sig_jack_process_;
-  AelkeyUtil::Signal<void(const JackPortEvent &)> sig_jack_hotplug_;
+  // Signals
+  auto subscribe_process(AelkeyUtil::Signal<void(jack_nframes_t)>::Callback cb) {
+    return sig_jack_process_.subscribe(std::move(cb));
+  }
+
+  auto subscribe_hotplug(AelkeyUtil::Signal<void(const JackPortEvent &)>::Callback cb) {
+    return sig_jack_hotplug_.subscribe(std::move(cb));
+  }
+
+  auto subscribe_shutdown(AelkeyUtil::Signal<void(void)>::Callback cb) {
+    return sig_jack_shutdown_.subscribe(std::move(cb));
+  }
+
+  void notify_shutdown() {
+    sig_jack_shutdown_.emit();
+  }
+
+  bool is_shutdown() {
+    auto &state = AelkeyState::instance();
+    if (!state.loop_running || state.loop_should_stop) {
+      DispatcherCb cb;
+      cb.native = [this]() { this->notify_shutdown(); };
+      cb.oneshot = true;
+
+      DispatcherTimer::instance().schedule_ns(1, cb);
+      return true;
+    }
+    return false;
+  }
 
  private:
+  bool on_init() override;
+
   static int process_cb(jack_nframes_t nframes, void *arg);
   int process(jack_nframes_t nframes);
 
@@ -88,4 +120,53 @@ class BackendJack : public Singleton<BackendJack> {
  private:
   jack_client_t *client_ = nullptr;
   std::string client_name_;
+
+  // tokens
+  AelkeyUtil::Signal<void(void)>::Connection tok_shutdown_;
+
+  // signals
+  AelkeyUtil::Signal<void(jack_nframes_t)> sig_jack_process_;
+  AelkeyUtil::Signal<void(const JackPortEvent &)> sig_jack_hotplug_;
+  AelkeyUtil::Signal<void(void)> sig_jack_shutdown_;
+};
+
+struct JackPortRAII {
+  jack_port_t *port = nullptr;
+
+  JackPortRAII() = default;
+  explicit JackPortRAII(jack_port_t *p) : port(p) {
+    if (port) {
+      AelkeyState::instance().increment_active_tasks();
+    }
+  }
+
+  ~JackPortRAII() {
+    if (port) {
+      BackendJack::instance().destroy_port(port);
+      AelkeyState::instance().decrement_active_tasks();
+    }
+  }
+
+  JackPortRAII(const JackPortRAII &) = delete;
+  JackPortRAII &operator=(const JackPortRAII &) = delete;
+  JackPortRAII(JackPortRAII &&) noexcept = default;
+
+  JackPortRAII &operator=(JackPortRAII &&other) noexcept {
+    if (this != &other) {
+      if (port) {
+        BackendJack::instance().destroy_port(port);
+        AelkeyState::instance().decrement_active_tasks();
+      }
+      port = other.port;
+      other.port = nullptr;
+    }
+    return *this;
+  }
+
+  operator jack_port_t *() const {
+    return port;
+  }
+  jack_port_t *operator->() const {
+    return port;
+  }
 };

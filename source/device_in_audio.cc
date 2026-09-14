@@ -14,26 +14,23 @@
 #include "utils/signal.h"
 #include "utils/time.h"
 
-DeviceInAudio::~DeviceInAudio() {
-  auto &jack = BackendJack::instance();
-  for (auto &kv : input_ports_) {
-    jack.destroy_port(kv.second);
-  }
-
-  input_ports_.clear();
-  input_decls_.clear();
-}
-
 bool DeviceInAudio::on_init() {
   auto &jack = BackendJack::instance();
-  tok_jack_process_ =
-      jack.sig_jack_process_.subscribe([this](jack_nframes_t nframes) { process(nframes); });
 
-  tok_jack_hotplug_ = jack.sig_jack_hotplug_.subscribe([this](const JackPortEvent &ev) {
-    on_hotplug_event(ev);
-  });
+  tok_jack_process_ =
+      jack.subscribe_process([this](jack_nframes_t nframes) { this->process(nframes); });
+
+  tok_jack_hotplug_ =
+      jack.subscribe_hotplug([this](const JackPortEvent &ev) { this->on_hotplug_event(ev); });
+
+  tok_jack_shutdown_ = jack.subscribe_shutdown([this]() { this->shutdown(); });
 
   return true;
+}
+
+void DeviceInAudio::shutdown() {
+  input_ports_.clear();
+  input_decls_.clear();
 }
 
 bool DeviceInAudio::match(InputDecl &decl, std::string &devnode_out) {
@@ -82,7 +79,7 @@ bool DeviceInAudio::attach(const std::string &devnode, InputDecl &decl) {
     }
   }
 
-  input_ports_[decl.id] = in;
+  input_ports_[decl.id] = JackPortRAII(in);
   input_decls_[decl.id] = decl;
 
   decl.devnode = devnode;  // unused
@@ -126,6 +123,9 @@ bool DeviceInAudio::detach(const std::string &id) {
 
 void DeviceInAudio::process(jack_nframes_t nframes) {
   auto &jack = BackendJack::instance();
+  if (jack.is_shutdown()) {
+    return;
+  }
 
   bool queued = false;
 
@@ -194,6 +194,9 @@ void DeviceInAudio::dispatch_batch_to_lua(
 }
 
 void DeviceInAudio::pump_messages() {
+  auto &jack = BackendJack::instance();
+  jack.is_shutdown();
+
   AudioEvent ev;
   while (queue_.try_dequeue(ev)) {
     // Look up InputDecl to find callback name
@@ -235,11 +238,14 @@ void DeviceInAudio::on_hotplug_event(const JackPortEvent &ev) {
   cb.native = [this]() { this->process_hotplug_events(); };
   cb.oneshot = true;
 
-  DispatcherTimer::instance().schedule(4, cb);
+  DispatcherTimer::instance().schedule(1, cb);
 }
 
 void DeviceInAudio::process_hotplug_events() {
   auto &jack = BackendJack::instance();
+  if (jack.is_shutdown()) {
+    return;
+  }
 
   // For each InputDecl
   for (auto &[id, decl] : input_decls_) {
