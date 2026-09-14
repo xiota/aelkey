@@ -20,7 +20,7 @@ ManagerDeviceIn::ManagerDeviceIn() {
   backends_["evdev"] = &DeviceInEvdev::instance();
   backends_["gatt"] = &DeviceInGatt::instance();
   backends_["hidraw"] = &DeviceInHidraw::instance();
-  backends_["libusb"] = &DeviceInLibUSB::instance();
+  backends_["libusb"] = &DeviceInLibUsb::instance();
   backends_["midi"] = &DeviceInMidi::instance();
 }
 

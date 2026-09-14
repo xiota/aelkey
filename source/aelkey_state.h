@@ -42,6 +42,7 @@ class AelkeyState : public Singleton<AelkeyState> {
 
   bool loop_running = false;
   bool loop_should_stop = false;
+  bool loop_safe_to_stop = true;
 
   std::vector<InputDecl> input_decls;
   std::vector<OutputDecl> output_decls;

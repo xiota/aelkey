@@ -43,7 +43,8 @@ sol::object loop_start(sol::this_state ts) {
   constexpr int MAX_EVENTS = 64;
   struct epoll_event events[MAX_EVENTS];
 
-  while (!state.loop_should_stop && state.loop_running) {
+  bool loop_stop_now = false;
+  while (!loop_stop_now) {
     int n = epoll_wait(state.epfd, events, MAX_EVENTS, -1);  // block until event
 
     for (int i = 0; i < n; ++i) {
@@ -55,10 +56,12 @@ sol::object loop_start(sol::this_state ts) {
 
     ManagerDeviceIn::instance().dispatcher_flush_deferred();
 
-    if (state.loop_should_stop) {
-      state.loop_running = false;
+    if (state.loop_should_stop and state.loop_safe_to_stop) {
+      loop_stop_now = true;
     }
   }
+
+  state.loop_running = false;
 
   loop_cleanup();
 
