@@ -66,9 +66,11 @@ class Signal<R(Args...)> {
       }
     }
 
-    bool connected() const noexcept {
+    [[nodiscard]] bool connected() const noexcept {
       return active_;
     }
+
+    auto operator<=>(const Connection &) const = default;
 
    private:
     std::shared_ptr<SignalData> data_;
@@ -82,7 +84,7 @@ class Signal<R(Args...)> {
   Signal(Signal &&) = default;
   Signal &operator=(Signal &&) = default;
 
-  Connection subscribe(Callback cb) {
+  [[nodiscard]] Connection subscribe(Callback cb) {
     std::lock_guard<std::mutex> lock(data_->mtx);
     auto it = data_->callbacks.insert(data_->callbacks.end(), std::move(cb));
     return Connection(data_, it);
@@ -101,6 +103,7 @@ class Signal<R(Args...)> {
       }
     } else {
       std::vector<R> results;
+      results.reserve(local.size());
       for (auto &cb : local) {
         results.push_back(cb(args...));
       }
