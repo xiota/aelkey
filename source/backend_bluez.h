@@ -7,6 +7,7 @@
 
 #include <sdbus-c++/sdbus-c++.h>
 
+#include "aelkey_state.h"
 #include "device_declarations.h"
 #include "singleton.h"
 
@@ -83,4 +84,6 @@ class BackendBluez : public Singleton<BackendBluez> {
   std::unique_ptr<sdbus::IConnection> conn_;
   std::unordered_set<std::string> acquired_devs_;
   sdbus::Slot monitor_;
+
+  AelkeyUtil::Signal<void(void)>::Connection tok_shutdown_;
 };

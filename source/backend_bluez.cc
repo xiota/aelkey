@@ -18,7 +18,12 @@
 #include "utils/regex_match.h"
 
 bool BackendBluez::on_init() {
-  return ensure_client();
+  ensure_client();
+  if (conn_) {
+    tok_shutdown_ = AelkeyState::instance().subscribe_shutdown([this]() { this->shutdown(); });
+    return true;
+  }
+  return false;
 }
 
 bool BackendBluez::ensure_client() {

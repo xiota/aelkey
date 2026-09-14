@@ -58,6 +58,15 @@ class AelkeyState : public Singleton<AelkeyState> {
     sig_epoll_cycle_.emit();
   }
 
+  // shutdown signal
+  auto subscribe_shutdown(AelkeyUtil::Signal<void(void)>::Callback cb) {
+    return sig_shutdown_.subscribe(std::move(cb));
+  }
+
+  void notify_shutdown() {
+    sig_shutdown_.emit();
+  }
+
  public:
   lua_State *lua_vm = nullptr;
 
@@ -74,4 +83,5 @@ class AelkeyState : public Singleton<AelkeyState> {
 
  private:
   AelkeyUtil::Signal<void(void)> sig_epoll_cycle_;
+  AelkeyUtil::Signal<void(void)> sig_shutdown_;
 };

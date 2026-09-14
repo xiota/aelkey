@@ -12,7 +12,6 @@
 #include <unistd.h>
 
 #include "aelkey_state.h"
-#include "backend_bluez.h"
 #include "device_declarations.h"
 #include "dispatcher.h"
 #include "lua_bindings/core.h"
@@ -72,6 +71,8 @@ void loop_cleanup() {
   auto &state = AelkeyState::instance();
   auto &devmgr = ManagerDeviceIn::instance();
 
+  state.notify_shutdown();
+
   // Detach all devices
   std::vector<std::string> ids;
   ids.reserve(state.input_map.size());
@@ -87,8 +88,6 @@ void loop_cleanup() {
   for (int i = 0; i < 3; ++i) {
     state.notify_epoll_cycle();
   }
-
-  BackendBluez::instance().shutdown();
 
   // Tear down global monitoring state
   if (state.epfd >= 0) {
