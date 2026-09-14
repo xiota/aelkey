@@ -4,10 +4,10 @@
 
 #include "aelkey_state.h"
 #include "device_declarations.h"
-#include "manager_device_in.h"
+#include "manager_device.h"
 
 RouterDeviceState::RouterDeviceState() {
-  tok_state_changed_ = ManagerDeviceIn::instance().sig_state_changed_.subscribe(
+  tok_state_changed_ = ManagerDevice::instance().sig_state_changed_.subscribe(
       [this](const InputDecl &decl, const char *state) { notify_state_change(decl, state); }
   );
 }

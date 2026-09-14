@@ -9,7 +9,7 @@
 #include "aelkey_state.h"
 #include "backend_udev.h"
 #include "dispatcher_vulgate.h"
-#include "manager_device_in.h"
+#include "manager_device.h"
 #include "utils/regex_match.h"
 #include "utils/signal.h"
 
@@ -37,13 +37,11 @@ DeviceInHidraw::DeviceInHidraw() {
               continue;
             }
 
-            if (ManagerDeviceIn::instance().attach(matched, decl)) {
+            if (ManagerDevice::instance().attach_input(matched, decl)) {
               break;
             }
           }
-        }
-
-        else if (ev.action == "remove") {
+        } else if (ev.action == "remove") {
           for (auto &decl : state.input_decls) {
             if (decl.type != "hidraw") {
               continue;
@@ -53,7 +51,7 @@ DeviceInHidraw::DeviceInHidraw() {
               continue;
             }
 
-            if (ManagerDeviceIn::instance().detach(decl.id)) {
+            if (ManagerDevice::instance().detach_output(decl.id)) {
               break;
             }
           }

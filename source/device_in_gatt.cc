@@ -12,7 +12,7 @@
 #include "aelkey_state.h"
 #include "backend_bluez.h"
 #include "dispatcher_vulgate.h"
-#include "manager_device_in.h"
+#include "manager_device.h"
 
 bool DeviceInGatt::on_init() {
   auto &bluez = BackendBluez::instance();

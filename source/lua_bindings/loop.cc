@@ -15,7 +15,7 @@
 #include "device_declarations.h"
 #include "dispatcher.h"
 #include "lua_bindings/core.h"
-#include "manager_device_in.h"
+#include "manager_device.h"
 #include "router_watch_list.h"
 #include "signal_handler.h"
 
@@ -69,7 +69,7 @@ sol::object loop_start(sol::this_state ts) {
 
 void loop_cleanup() {
   auto &state = AelkeyState::instance();
-  auto &devmgr = ManagerDeviceIn::instance();
+  auto &devmgr = ManagerDevice::instance();
 
   state.notify_shutdown();
 
@@ -82,7 +82,7 @@ void loop_cleanup() {
   }
   for (const auto &id : ids) {
     // mutates aelkey_state.input_map
-    devmgr.detach(id);
+    devmgr.detach_output(id);
   }
 
   for (int i = 0; i < 3; ++i) {

@@ -8,7 +8,7 @@
 #include "aelkey_state.h"
 #include "backend_udev.h"
 #include "dispatcher_vulgate.h"
-#include "manager_device_in.h"
+#include "manager_device.h"
 #include "manager_haptics.h"
 #include "utils/regex_match.h"
 #include "utils/signal.h"
@@ -42,7 +42,7 @@ DeviceInEvdev::DeviceInEvdev() {
 
             std::string matched;
             if (match(decl, matched) && matched == ev.devnode) {
-              if (ManagerDeviceIn::instance().attach(matched, decl)) {
+              if (ManagerDevice::instance().attach_input(matched, decl)) {
                 break;
               }
             }
@@ -54,7 +54,7 @@ DeviceInEvdev::DeviceInEvdev() {
               continue;
             }
             if (decl.devnode == ev.devnode) {
-              if (ManagerDeviceIn::instance().detach(decl.id)) {
+              if (ManagerDevice::instance().detach_output(decl.id)) {
                 break;
               }
             }

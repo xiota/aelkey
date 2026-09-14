@@ -7,7 +7,7 @@
 #include "aelkey_state.h"
 #include "device_declarations.h"
 #include "device_out_uinput.h"
-#include "manager_device_in.h"
+#include "manager_device.h"
 #include "router_device_state.h"
 
 // Lua: open_device([dev_id])
@@ -49,12 +49,14 @@ sol::object core_open_device(sol::this_state ts, sol::optional<std::string> dev_
       continue;
     }
 
+    auto &devmgr = ManagerDevice::instance();
+
     std::string devnode;
-    if (!ManagerDeviceIn::instance().match(decl, devnode)) {
+    if (!devmgr.match_input(decl, devnode)) {
       continue;
     }
 
-    if (ManagerDeviceIn::instance().attach(devnode, decl)) {
+    if (devmgr.attach_input(devnode, decl)) {
       ok = true;
     }
     break;
@@ -68,7 +70,7 @@ sol::object core_open_device(sol::this_state ts, sol::optional<std::string> dev_
 sol::object core_close_device(sol::this_state ts, const std::string &dev_id) {
   sol::state_view lua(ts);
 
-  auto removed = ManagerDeviceIn::instance().detach(dev_id);
+  auto removed = ManagerDevice::instance().detach_output(dev_id);
   bool ok = removed && !removed->id.empty();
 
   return sol::make_object(lua, ok);

@@ -14,7 +14,7 @@
 #include <sdbus-c++/sdbus-c++.h>
 
 #include "aelkey_state.h"
-#include "manager_device_in.h"
+#include "manager_device.h"
 #include "utils/regex_match.h"
 
 bool BackendBluez::on_init() {
@@ -177,10 +177,10 @@ void BackendBluez::on_device_properties_changed(sdbus::Message &msg) {
             continue;
           }
 
-          auto &devmgr = ManagerDeviceIn::instance();
+          auto &devmgr = ManagerDevice::instance();
           std::string devnode;
-          if (devmgr.match(decl, devnode)) {
-            if (devmgr.attach(devnode, decl)) {
+          if (devmgr.match_input(decl, devnode)) {
+            if (devmgr.attach_input(devnode, decl)) {
               decl.devnode = devnode;
             }
           }

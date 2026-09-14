@@ -15,7 +15,7 @@
 #include "backend_udev.h"
 #include "device_declarations.h"
 #include "dispatcher_event.h"
-#include "manager_device_in.h"
+#include "manager_device.h"
 #include "utils/signal.h"
 
 // Map libusb_transfer_type enum → string
@@ -111,11 +111,10 @@ DeviceInLibUsb::DeviceInLibUsb() {
               continue;
             }
 
-            if (ManagerDeviceIn::instance().attach(inst_node, decl)) {
+            if (ManagerDevice::instance().attach_input(inst_node, decl)) {
               break;
             }
           }
-
         } else if (ev.action == "remove") {
           for (auto &decl : state.input_decls) {
             if (decl.type != "libusb") {
@@ -125,7 +124,7 @@ DeviceInLibUsb::DeviceInLibUsb() {
             if (decl.devnode != inst_node) {
               continue;
             }
-            if (ManagerDeviceIn::instance().detach(decl.id)) {
+            if (ManagerDevice::instance().detach_output(decl.id)) {
               break;
             }
           }
@@ -323,7 +322,7 @@ void DeviceInLibUsb::pump_messages() {
       }
 
       case LIBUSB_TRANSFER_NO_DEVICE: {
-        ManagerDeviceIn::instance().detach(decl.id);
+        ManagerDevice::instance().detach_output(decl.id);
         backend.remove_raii(ev.transfer);
         break;
       }
@@ -339,7 +338,7 @@ void DeviceInLibUsb::pump_messages() {
           rc = libusb_get_device_descriptor(libusb_get_device(handle), &desc);
         }
         if (rc != 0) {
-          ManagerDeviceIn::instance().detach(decl.id);
+          ManagerDevice::instance().detach_output(decl.id);
         }
 
         backend.remove_raii(ev.transfer);

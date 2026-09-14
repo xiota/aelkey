@@ -5,8 +5,7 @@
 
 #include "device_parser.h"
 #include "lua_bindings/loop.h"
-#include "manager_device_in.h"
-#include "manager_device_out.h"
+#include "manager_device.h"
 
 bool AelkeyState::on_init() {
   // initialize epoll
@@ -23,14 +22,14 @@ bool AelkeyState::on_init() {
 }
 
 void AelkeyState::attach_inputs_from_decls() {
-  auto &devmgr = ManagerDeviceIn::instance();
+  auto &devmgr = ManagerDevice::instance();
   for (auto &decl : input_decls) {
     std::string devnode;
-    if (!devmgr.match(decl, devnode)) {
+    if (!devmgr.match_input(decl, devnode)) {
       continue;
     }
 
-    if (devmgr.attach(devnode, decl)) {
+    if (devmgr.attach_input(devnode, decl)) {
       if (decl.type != "libusb") {
         decl.devnode = devnode;
       }
@@ -39,9 +38,9 @@ void AelkeyState::attach_inputs_from_decls() {
 }
 
 void AelkeyState::create_outputs_from_decls() {
-  auto &devmgr = ManagerDeviceOut::instance();
+  auto &devmgr = ManagerDevice::instance();
   for (auto &decl : output_decls) {
-    devmgr.create(decl);
+    devmgr.create_output(decl);
   }
 }
 

@@ -8,7 +8,7 @@
 #include "aelkey_state.h"
 #include "backend_udev.h"
 #include "device_declarations.h"
-#include "manager_device_in.h"
+#include "manager_device.h"
 
 RouterWatchList::RouterWatchList() {
   tok_udev_event_ =
@@ -86,7 +86,7 @@ void RouterWatchList::enumerate_now(std::string devnode) {
   for (auto &[entry_id, list] : watch_map_) {
     for (auto &decl : list) {
       std::string matched;
-      if (ManagerDeviceIn::instance().match(decl, matched)) {
+      if (ManagerDevice::instance().match_input(decl, matched)) {
         if (!devnode.empty()) {
           if (matched == devnode) {
             active_map_[matched] = { entry_id, decl };
