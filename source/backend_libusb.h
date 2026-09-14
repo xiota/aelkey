@@ -2,11 +2,12 @@
 
 #include <map>
 #include <string>
-#include <unordered_set>
+#include <unordered_map>
 #include <vector>
 
 #include <libusb-1.0/libusb.h>
 
+#include "aelkey_state.h"
 #include "singleton.h"
 #include "utils/signal.h"
 
@@ -14,6 +15,10 @@ struct TransferRAII {
   libusb_transfer *xfer = nullptr;
   unsigned char *buffer = nullptr;
   std::string device_id;
+
+  TransferRAII() {
+    AelkeyState::instance().increment_active_tasks();
+  }
 
   ~TransferRAII() {
     if (buffer) {
@@ -24,7 +29,13 @@ struct TransferRAII {
       libusb_free_transfer(xfer);
       xfer = nullptr;
     }
+    AelkeyState::instance().decrement_active_tasks();
   }
+
+  TransferRAII(const TransferRAII &) = delete;
+  TransferRAII &operator=(const TransferRAII &) = delete;
+  TransferRAII(TransferRAII &&) noexcept = default;
+  TransferRAII &operator=(TransferRAII &&) noexcept = default;
 };
 
 struct UsbEvent {
@@ -130,5 +141,5 @@ class BackendLibUsb : public Singleton<BackendLibUsb> {
  private:
   libusb_context *libusb_ = nullptr;
   std::map<std::string, libusb_device_handle *> devices_;
-  std::unordered_set<TransferRAII *> active_transfers_;
+  std::unordered_map<libusb_transfer *, std::unique_ptr<TransferRAII>> active_transfers_;
 };

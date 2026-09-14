@@ -1,5 +1,6 @@
 #pragma once
 
+#include <atomic>
 #include <map>
 #include <string>
 #include <vector>
@@ -34,6 +35,19 @@ class AelkeyState : public Singleton<AelkeyState> {
   // Parse global "outputs" table from the given Lua state
   void parse_outputs_from_lua(sol::this_state ts);
 
+  // Task counter methods for safe loop shutdown tracking
+  void increment_active_tasks() {
+    active_tasks_.fetch_add(1, std::memory_order_relaxed);
+  }
+
+  void decrement_active_tasks() {
+    active_tasks_.fetch_sub(1, std::memory_order_relaxed);
+  }
+
+  bool is_safe_to_stop() const {
+    return active_tasks_.load(std::memory_order_relaxed) <= 0;
+  }
+
  public:
   lua_State *lua_vm = nullptr;
 
@@ -42,7 +56,8 @@ class AelkeyState : public Singleton<AelkeyState> {
 
   bool loop_running = false;
   bool loop_should_stop = false;
-  bool loop_safe_to_stop = true;
+
+  std::atomic<int> active_tasks_{ 0 };
 
   std::vector<InputDecl> input_decls;
   std::vector<OutputDecl> output_decls;

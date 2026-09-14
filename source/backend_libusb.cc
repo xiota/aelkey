@@ -10,9 +10,6 @@
 #include "utils/signal.h"
 
 BackendLibUsb::~BackendLibUsb() {
-  for (auto *meta : active_transfers_) {
-    delete meta;
-  }
   active_transfers_.clear();
 
   for (auto &[id, handle] : devices_) {
@@ -26,7 +23,6 @@ BackendLibUsb::~BackendLibUsb() {
     libusb_exit(libusb_);
     libusb_ = nullptr;
   }
-  AelkeyState::instance().loop_safe_to_stop = true;
 }
 
 bool BackendLibUsb::ensure_context() {
@@ -392,19 +388,17 @@ UsbSubmitResult BackendLibUsb::submit_transfer(
     type = LIBUSB_TRANSFER_TYPE_ISOCHRONOUS;
   }
 
-  auto *meta = new TransferRAII;
+  auto meta = std::make_unique<TransferRAII>();
   meta->device_id = device;
 
   meta->xfer = libusb_alloc_transfer(0);
   if (!meta->xfer) {
-    delete meta;
     sr.status = libusb_error_name(LIBUSB_ERROR_NO_MEM);
     return sr;
   }
 
   meta->buffer = static_cast<unsigned char *>(std::malloc(size));
   if (!meta->buffer) {
-    delete meta;
     sr.status = libusb_error_name(LIBUSB_ERROR_NO_MEM);
     return sr;
   }
@@ -418,19 +412,17 @@ UsbSubmitResult BackendLibUsb::submit_transfer(
   xfer->buffer = meta->buffer;
   xfer->length = size;
 
-  xfer->user_data = meta;
+  xfer->user_data = meta.get();
   xfer->callback = on_transfer_complete;
 
   int status = libusb_submit_transfer(xfer);
   if (status != 0) {
-    delete meta;
     sr.status = libusb_error_name(status);
     sr.handle = nullptr;
     return sr;
   }
 
-  AelkeyState::instance().loop_safe_to_stop = false;
-  active_transfers_.insert(meta);
+  active_transfers_[xfer] = std::move(meta);
 
   sr.handle = xfer;
   sr.status = "ok";
@@ -461,25 +453,15 @@ bool BackendLibUsb::resubmit_transfer(libusb_transfer *handle) {
   int rc = libusb_submit_transfer(xfer);
   if (rc != 0) {
     remove_raii(xfer);
-  } else {
-    auto *meta = static_cast<TransferRAII *>(xfer->user_data);
-    active_transfers_.insert(meta);
-    AelkeyState::instance().loop_safe_to_stop = false;
   }
   return rc == 0;
 }
 
 void BackendLibUsb::remove_raii(libusb_transfer *xfer) {
-  if (!xfer || !xfer->user_data) {
+  if (!xfer) {
     return;
   }
-  auto *meta = static_cast<TransferRAII *>(xfer->user_data);
-  active_transfers_.erase(meta);
-  delete meta;
-
-  if (active_transfers_.size() == 0) {
-    AelkeyState::instance().loop_safe_to_stop = true;
-  }
+  active_transfers_.erase(xfer);
 }
 
 std::string BackendLibUsb::clear_halt(const std::string &device, int endpoint) {

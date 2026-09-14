@@ -56,7 +56,7 @@ sol::object loop_start(sol::this_state ts) {
 
     ManagerDeviceIn::instance().dispatcher_flush_deferred();
 
-    if (state.loop_should_stop and state.loop_safe_to_stop) {
+    if (state.loop_should_stop && state.is_safe_to_stop()) {
       loop_stop_now = true;
     }
   }
