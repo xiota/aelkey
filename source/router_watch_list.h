@@ -8,7 +8,24 @@
 #include "backend_udev.h"
 #include "device_declarations.h"
 #include "singleton.h"
+#include "utils/lua_helpers.h"
 #include "utils/signal.h"
+
+struct WatchListPayload {
+  std::string ref;
+  std::string id;
+  std::string type;
+  std::string state;
+
+  sol::table to_lua(sol::state_view lua) const {
+    sol::table t = lua.create_table();
+    AelkeyUtil::lua_set_field(t, "ref", ref);
+    AelkeyUtil::lua_set_field(t, "id", id);
+    AelkeyUtil::lua_set_field(t, "type", type);
+    AelkeyUtil::lua_set_field(t, "state", state);
+    return t;
+  }
+};
 
 class RouterWatchList : public Singleton<RouterWatchList> {
   friend class Singleton<RouterWatchList>;

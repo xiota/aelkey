@@ -167,20 +167,19 @@ void DeviceInMidi::dispatch_batch_to_lua(
 
   sol::function cb = obj.as<sol::function>();
 
-  sol::table list = lua.create_table();
+  sol::table list = lua.create_table(events.size(), 0);
   int idx = 1;
 
-  for (auto &ev : events) {
-    sol::table e = lua.create_table();
+  for (const auto &ev : events) {
+    MidiEventPayload payload{
+      .device = ev.id,
+      .data = std::string_view(reinterpret_cast<const char *>(ev.data.data()), ev.data.size()),
+      .size = static_cast<int>(ev.data.size()),
+      .status = "ok",
+      .timestamp = ev.timestamp_us,
+    };
 
-    e["device"] = ev.id;
-    e["timestamp"] = ev.timestamp_us;
-    e["data"] =
-        std::string_view(reinterpret_cast<const char *>(ev.data.data()), ev.data.size());
-    e["size"] = static_cast<int>(ev.data.size());
-    e["status"] = "ok";
-
-    list[idx++] = e;
+    list[idx++] = payload.to_lua(lua);
   }
 
   sol::protected_function pf = cb;

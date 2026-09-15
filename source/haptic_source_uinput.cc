@@ -3,6 +3,7 @@
 #include <cerrno>
 #include <cstdio>
 #include <linux/uinput.h>
+#include <sol/sol.hpp>
 #include <sys/epoll.h>
 #include <sys/ioctl.h>
 #include <unistd.h>
@@ -143,6 +144,9 @@ HapticSourceUinput::haptics_effect_to_lua(sol::state_view lua, const ff_effect &
       break;
 
     default:
+      t = lua.create_table();
+      t["id"] = eff.id;
+      t["type"] = "unknown";
       break;
   }
 

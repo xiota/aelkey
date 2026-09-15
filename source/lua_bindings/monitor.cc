@@ -4,7 +4,6 @@
 
 #include "aelkey_state.h"
 #include "device_declarations.h"
-#include "device_parser.h"
 #include "lua_scripts.h"
 #include "router_watch_list.h"
 
@@ -44,7 +43,7 @@ monitor_watch(sol::this_state ts, const std::string &ref, sol::table decls_tbl) 
     }
 
     sol::table t = entry.as<sol::table>();
-    InputDecl decl = DeviceParser::parse_input(t);
+    auto decl = InputDecl::from_lua(t);
 
     // Only allow udev-visible types
     if (decl.type == "evdev" || decl.type == "hidraw" || decl.type == "libusb") {

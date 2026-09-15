@@ -6,9 +6,11 @@
 #include <vector>
 
 #include <libusb-1.0/libusb.h>
+#include <sol/sol.hpp>
 
 #include "aelkey_state.h"
 #include "singleton.h"
+#include "utils/lua_helpers.h"
 #include "utils/signal.h"
 
 struct TransferRAII {
@@ -48,6 +50,15 @@ struct UsbSyncResult {
   std::string status;
   std::vector<char> data;
   int size = 0;
+
+  sol::table to_lua(sol::state_view lua) const {
+    sol::table t = lua.create_table();
+    AelkeyUtil::lua_set_field(t, "device", device);
+    AelkeyUtil::lua_set_field(t, "status", status);
+    AelkeyUtil::lua_set_field(t, "size", size);
+    AelkeyUtil::lua_set_field(t, "data", std::string(data.data(), size));
+    return t;
+  }
 };
 
 struct UsbSubmitResult {

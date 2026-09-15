@@ -12,6 +12,7 @@
 #include "manager_device.h"
 #include "utils/regex_match.h"
 #include "utils/signal.h"
+#include "utils/time.h"
 
 DeviceInHidraw::DeviceInHidraw() {
   tok_udev_event_ =
@@ -263,18 +264,23 @@ void DeviceInHidraw::handle_hidraw_event(int fd, const InputDecl &decl) {
 
   sol::function cb = obj.as<sol::function>();
 
-  sol::table tbl = lua.create_table();
-  tbl["device"] = decl.id;
+  HidrawEventPayload payload;
+  payload.device = decl.id;
+  payload.data = {};
+  payload.size = 0;
+  payload.timestamp = AelkeyUtil::now("us");
 
   if (r > 0) {
-    tbl["data"] = std::string_view(reinterpret_cast<const char *>(buf), r);
-    tbl["size"] = static_cast<int>(r);
-    tbl["status"] = "ok";
+    payload.data = std::string_view(reinterpret_cast<const char *>(buf), r);
+    payload.size = static_cast<int>(r);
+    payload.status = "ok";
   } else if (r == 0) {
-    tbl["status"] = "disconnect";
+    payload.status = "disconnect";
   } else {
-    tbl["status"] = strerror(errno);
+    payload.status = strerror(errno);
   }
+
+  sol::table tbl = payload.to_lua(lua);
 
   sol::protected_function pf = cb;
   sol::protected_function_result res = pf(tbl);

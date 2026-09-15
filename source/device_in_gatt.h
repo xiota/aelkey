@@ -7,14 +7,37 @@
 #include <string>
 #include <vector>
 
+#include <sol/sol.hpp>
+
 #include "backend_bluez.h"
 #include "device_declarations.h"
 #include "device_in.h"
 #include "singleton.h"
+#include "utils/lua_helpers.h"
 
 struct GattEvent {
   std::string path;
   std::vector<uint8_t> data;
+};
+
+struct GattEventPayload {
+  std::string device;
+  std::string path;
+  std::string_view data;
+  int size;
+  std::string status;
+  uint64_t timestamp;
+
+  sol::table to_lua(sol::state_view lua) const {
+    sol::table t = lua.create_table();
+    AelkeyUtil::lua_set_field(t, "device", device);
+    AelkeyUtil::lua_set_field(t, "path", path);
+    AelkeyUtil::lua_set_field(t, "data", data);
+    AelkeyUtil::lua_set_field(t, "size", size);
+    AelkeyUtil::lua_set_field(t, "status", status);
+    AelkeyUtil::lua_set_field(t, "timestamp", timestamp);
+    return t;
+  }
 };
 
 class DeviceInGatt : public DeviceIn, public Singleton<DeviceInGatt> {

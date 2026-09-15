@@ -13,6 +13,8 @@
 #include "backend_bluez.h"
 #include "dispatcher_vulgate.h"
 #include "manager_device.h"
+#include "utils/lua_helpers.h"
+#include "utils/time.h"
 
 bool DeviceInGatt::on_init() {
   auto &bluez = BackendBluez::instance();
@@ -152,12 +154,17 @@ void DeviceInGatt::handle_gatt_event(
   }
 
   sol::function cb = obj.as<sol::function>();
-  sol::table tbl = lua.create_table();
-  tbl["device"] = decl.id;
-  tbl["path"] = path;
-  tbl["data"] = std::string_view(reinterpret_cast<const char *>(buffer.data()), buffer.size());
-  tbl["size"] = static_cast<int>(buffer.size());
-  tbl["status"] = "ok";
+
+  GattEventPayload payload{
+    .device = decl.id,
+    .path = path,
+    .data = std::string_view(reinterpret_cast<const char *>(buffer.data()), buffer.size()),
+    .size = static_cast<int>(buffer.size()),
+    .status = "ok",
+    .timestamp = AelkeyUtil::now("us"),
+  };
+
+  sol::table tbl = payload.to_lua(lua);
 
   sol::protected_function pf = cb;
   sol::protected_function_result res = pf(tbl);

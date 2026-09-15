@@ -89,16 +89,5 @@ sol::object core_get_device_info(sol::this_state ts, const std::string &dev_id) 
 
   const InputDecl &decl = it->second;
 
-  sol::table tbl = lua.create_table();
-  tbl["id"] = decl.id;
-  tbl["type"] = decl.type;
-  tbl["vendor"] = decl.vendor;
-  tbl["product"] = decl.product;
-  tbl["bus"] = decl.bus;
-  tbl["name"] = decl.name;
-  tbl["phys"] = decl.phys;
-  tbl["uniq"] = decl.uniq;
-  tbl["grab"] = decl.grab;
-
-  return tbl;
+  return decl.to_lua(lua);
 }

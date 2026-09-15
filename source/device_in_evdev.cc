@@ -252,48 +252,48 @@ void DeviceInEvdev::handle_evdev_event(int fd, const InputDecl &decl) {
   struct input_event ev;
   while (true) {
     int rc = libevdev_next_event(idev, LIBEVDEV_READ_FLAG_NORMAL, &ev);
-    if (rc == 0) {
-      frame.push_back(ev);
+    if (rc == -EAGAIN || rc == LIBEVDEV_READ_STATUS_SYNC) {
+      break;
+    }
+    if (rc != 0) {
+      break;
+    }
 
-      if (ev.type == EV_SYN && ev.code == SYN_REPORT) {
-        if (!decl.on_event.empty()) {
-          sol::object obj = lua[decl.on_event];
-          if (obj.is<sol::function>()) {
-            sol::function cb = obj.as<sol::function>();
+    frame.push_back(ev);
 
-            sol::table events_tbl = lua.create_table();
-            int idx = 1;
-            for (const auto &e : frame) {
-              sol::table evt = lua.create_table();
+    if (ev.type == EV_SYN && ev.code == SYN_REPORT) {
+      if (!decl.on_event.empty()) {
+        sol::object obj = lua[decl.on_event];
+        if (obj.is<sol::function>()) {
+          sol::function cb = obj.as<sol::function>();
 
-              evt["device"] = decl.id;
+          sol::table events_tbl = lua.create_table(frame.size(), 0);
+          int idx = 1;
 
-              const char *tname = libevdev_event_type_get_name(e.type);
-              const char *cname = libevdev_event_code_get_name(e.type, e.code);
+          for (const auto &e : frame) {
+            const char *tname = libevdev_event_type_get_name(e.type);
+            const char *cname = libevdev_event_code_get_name(e.type, e.code);
 
-              evt["type"] = tname ? tname : "";
-              evt["code"] = cname ? cname : "";
-              evt["value"] = e.value;
-              evt["sec"] = static_cast<int>(e.time.tv_sec);
-              evt["usec"] = static_cast<int>(e.time.tv_usec);
+            EvdevEventPayload payload{
+              .device = decl.id,
+              .type = tname ? tname : "",
+              .code = cname ? cname : "",
+              .value = e.value,
+              .timestamp = (static_cast<uint64_t>(e.time.tv_sec) * 1000000ULL) + e.time.tv_usec,
+            };
 
-              events_tbl[idx++] = evt;
-            }
+            events_tbl[idx++] = payload.to_lua(lua);
+          }
 
-            sol::protected_function pf = cb;
-            sol::protected_function_result res = pf(events_tbl);
-            if (!res.valid()) {
-              sol::error err = res;
-              std::fprintf(stderr, "Lua event callback error: %s\n", err.what());
-            }
+          sol::protected_function pf = cb;
+          sol::protected_function_result res = pf(events_tbl);
+          if (!res.valid()) {
+            sol::error err = res;
+            std::fprintf(stderr, "Lua event callback error: %s\n", err.what());
           }
         }
-        frame.clear();
       }
-    } else if (rc == -EAGAIN || rc == LIBEVDEV_READ_STATUS_SYNC) {
-      break;
-    } else {
-      break;
+      frame.clear();
     }
   }
 }

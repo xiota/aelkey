@@ -54,11 +54,14 @@ void RouterWatchList::notify_watch(
 
   sol::function cb = obj.as<sol::function>();
 
-  sol::table tbl = lua.create_table();
-  tbl["ref"] = entry_id;
-  tbl["id"] = decl.id;
-  tbl["type"] = decl.type;
-  tbl["state"] = state ? state : "";
+  WatchListPayload payload{
+    .ref = entry_id,
+    .id = decl.id,
+    .type = decl.type,
+    .state = state ? state : "",
+  };
+
+  sol::table tbl = payload.to_lua(lua);
 
   sol::protected_function pf = cb;
   sol::protected_function_result result = pf(tbl);

@@ -8,6 +8,20 @@
 #include <sol/sol.hpp>
 
 #include "backend_libusb.h"
+#include "utils/lua_helpers.h"
+
+// Helper struct and rules for commands returning {device, status}
+struct UsbStatusResult {
+  std::string device;
+  std::string status;
+
+  sol::table to_lua(sol::state_view lua) const {
+    sol::table t = lua.create_table();
+    AelkeyUtil::lua_set_field(t, "device", device);
+    AelkeyUtil::lua_set_field(t, "status", status);
+    return t;
+  }
+};
 
 // bulk_transfer{device, endpoint, size, [timeout]}
 // Returns {device, data, size, status}
@@ -28,12 +42,7 @@ static sol::object usb_bulk_transfer(sol::this_state ts, sol::table opts) {
   auto &backend = BackendLibUsb::instance();
   auto result = backend.bulk_transfer(dev_id, endpoint, size, timeout, is_in, out_data);
 
-  sol::table t = lua.create_table();
-  t["device"] = result.device;
-  t["data"] = std::string_view(result.data.data(), result.data.size());
-  t["size"] = result.size;
-  t["status"] = result.status;
-  return t;
+  return result.to_lua(lua);
 }
 
 // control_transfer{device, request_type, request, value, index, length, [timeout]}
@@ -60,12 +69,7 @@ static sol::object usb_control_transfer(sol::this_state ts, sol::table opts) {
       dev_id, request_type, request, value, index, length, timeout, is_in, out_data
   );
 
-  sol::table t = lua.create_table();
-  t["device"] = result.device;
-  t["data"] = std::string_view(result.data.data(), result.data.size());
-  t["size"] = result.size;
-  t["status"] = result.status;
-  return t;
+  return result.to_lua(lua);
 }
 
 // interrupt_transfer{device, endpoint, size, [timeout]}
@@ -87,12 +91,7 @@ static sol::object usb_interrupt_transfer(sol::this_state ts, sol::table opts) {
   auto &backend = BackendLibUsb::instance();
   auto result = backend.interrupt_transfer(dev_id, endpoint, size, timeout, is_in, out_data);
 
-  sol::table t = lua.create_table();
-  t["device"] = result.device;
-  t["data"] = std::string_view(result.data.data(), result.data.size());
-  t["size"] = result.size;
-  t["status"] = result.status;
-  return t;
+  return result.to_lua(lua);
 }
 
 // submit_transfer{device, endpoint, type, size, [timeout]}
@@ -151,10 +150,12 @@ static sol::object usb_clear_halt(sol::this_state ts, sol::table opts) {
   auto &backend = BackendLibUsb::instance();
   auto status = backend.clear_halt(dev_id, endpoint);
 
-  sol::table t = lua.create_table();
-  t["device"] = dev_id;
-  t["status"] = status;
-  return t;
+  UsbStatusResult result{
+    .device = dev_id,
+    .status = status,
+  };
+
+  return result.to_lua(lua);
 }
 
 // reset_device{device}
@@ -168,10 +169,12 @@ static sol::object usb_reset_device(sol::this_state ts, sol::table opts) {
   auto &backend = BackendLibUsb::instance();
   auto status = backend.reset_device(dev_id);
 
-  sol::table t = lua.create_table();
-  t["device"] = dev_id;
-  t["status"] = status;
-  return t;
+  UsbStatusResult result{
+    .device = dev_id,
+    .status = status,
+  };
+
+  return result.to_lua(lua);
 }
 
 // set_configuration{device, config}
@@ -186,10 +189,12 @@ static sol::object usb_set_configuration(sol::this_state ts, sol::table opts) {
   auto &backend = BackendLibUsb::instance();
   auto status = backend.set_configuration(dev_id, config);
 
-  sol::table t = lua.create_table();
-  t["device"] = dev_id;
-  t["status"] = status;
-  return t;
+  UsbStatusResult result{
+    .device = dev_id,
+    .status = status,
+  };
+
+  return result.to_lua(lua);
 }
 
 // set_interface_alt_setting{device, interface, alt}
@@ -205,10 +210,12 @@ static sol::object usb_set_interface_alt_setting(sol::this_state ts, sol::table 
   auto &backend = BackendLibUsb::instance();
   auto status = backend.set_interface_alt_setting(dev_id, interface_number, alt_setting);
 
-  sol::table t = lua.create_table();
-  t["device"] = dev_id;
-  t["status"] = status;
-  return t;
+  UsbStatusResult result{
+    .device = dev_id,
+    .status = status,
+  };
+
+  return result.to_lua(lua);
 }
 
 extern "C" int luaopen_aelkey_usb(lua_State *L) {

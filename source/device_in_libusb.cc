@@ -16,7 +16,9 @@
 #include "device_declarations.h"
 #include "dispatcher_event.h"
 #include "manager_device.h"
+#include "utils/lua_helpers.h"
 #include "utils/signal.h"
+#include "utils/time.h"
 
 // Map libusb_transfer_type enum → string
 static const char *transfer_type_to_string(uint8_t type) {
@@ -294,15 +296,19 @@ void DeviceInLibUsb::pump_messages() {
 
     sol::function cb = cb_obj.as<sol::function>();
 
-    sol::table e = lua.create_table();
-    e["device"] = decl.id;
-    e["data"] = std::string_view(
-        reinterpret_cast<const char *>(ev.transfer->buffer), ev.transfer->actual_length
-    );
-    e["size"] = static_cast<int>(ev.transfer->actual_length);
-    e["endpoint"] = static_cast<int>(ev.transfer->endpoint);
-    e["transfer"] = transfer_type_to_string(ev.transfer->type);
-    e["status"] = transfer_status_to_string(ev.transfer->status);
+    UsbEventPayload payload{
+      .device = decl.id,
+      .data = std::string_view(
+          reinterpret_cast<const char *>(ev.transfer->buffer), ev.transfer->actual_length
+      ),
+      .size = static_cast<int>(ev.transfer->actual_length),
+      .endpoint = static_cast<int>(ev.transfer->endpoint),
+      .transfer = transfer_type_to_string(ev.transfer->type),
+      .status = transfer_status_to_string(ev.transfer->status),
+      .timestamp = AelkeyUtil::now("us"),
+    };
+
+    sol::table e = payload.to_lua(lua);
 
     sol::protected_function pf = cb;
     sol::protected_function_result res = pf(e);

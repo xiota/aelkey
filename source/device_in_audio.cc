@@ -10,6 +10,7 @@
 #include "dispatcher.h"
 #include "dispatcher_event.h"
 #include "dispatcher_timer.h"
+#include "utils/lua_helpers.h"
 #include "utils/regex_match.h"
 #include "utils/signal.h"
 #include "utils/time.h"
@@ -167,21 +168,20 @@ void DeviceInAudio::dispatch_batch_to_lua(
 
   sol::function cb = obj.as<sol::function>();
 
-  sol::table list = lua.create_table();
+  sol::table list = lua.create_table(events.size(), 0);
   int idx = 1;
 
-  for (auto &ev : events) {
-    sol::table e = lua.create_table();
+  for (const auto &ev : events) {
+    AudioEventPayload payload{
+      .device = ev.id,
+      .data = std::string_view(reinterpret_cast<const char *>(ev.data.data()), ev.data.size()),
+      .size = static_cast<int>(ev.data.size()),
+      .frames = static_cast<int>(ev.frames),
+      .status = "ok",
+      .timestamp = ev.timestamp_us,
+    };
 
-    e["device"] = ev.id;
-    e["timestamp"] = ev.timestamp_us;
-    e["data"] =
-        std::string_view(reinterpret_cast<const char *>(ev.data.data()), ev.data.size());
-    e["size"] = static_cast<int>(ev.data.size());
-    e["frames"] = static_cast<int>(ev.frames);
-    e["status"] = "ok";
-
-    list[idx++] = e;
+    list[idx++] = payload.to_lua(lua);
   }
 
   sol::protected_function pf = cb;
@@ -189,7 +189,7 @@ void DeviceInAudio::dispatch_batch_to_lua(
 
   if (!res.valid()) {
     sol::error err = res;
-    std::fprintf(stderr, "Lua AUDIO batch callback error: %s\n", err.what());
+    std::fprintf(stderr, "Lua AUDIO batch callback error: %s\n%s", err.what(), "\n");
   }
 }
 

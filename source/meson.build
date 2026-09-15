@@ -33,7 +33,6 @@ src_files = files(
   'device_out_midi.cc',
   'device_out_uhid.cc',
   'device_out_uinput.cc',
-  'device_parser.cc',
   'dispatcher.cc',
   'haptic_sink_evdev.cc',
   'haptic_source_uinput.cc',

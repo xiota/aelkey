@@ -3,7 +3,6 @@
 #include <sol/sol.hpp>
 #include <sys/epoll.h>
 
-#include "device_parser.h"
 #include "lua_bindings/loop.h"
 #include "manager_device.h"
 
@@ -58,7 +57,7 @@ void AelkeyState::parse_inputs_from_lua(sol::this_state ts) {
 
   inputs.for_each([&](sol::object /*k*/, sol::object v) {
     if (v.is<sol::table>()) {
-      InputDecl decl = DeviceParser::parse_input(v.as<sol::table>());
+      auto decl = InputDecl::from_lua(v.as<sol::table>());
       if (!decl.id.empty()) {
         input_decls.push_back(decl);
       }
@@ -80,7 +79,7 @@ void AelkeyState::parse_outputs_from_lua(sol::this_state ts) {
 
   outputs.for_each([&](sol::object /*k*/, sol::object v) {
     if (v.is<sol::table>()) {
-      OutputDecl decl = DeviceParser::parse_output(v.as<sol::table>());
+      auto decl = OutputDecl::from_lua(v.as<sol::table>());
       if (!decl.id.empty()) {
         output_decls.push_back(decl);
       }
